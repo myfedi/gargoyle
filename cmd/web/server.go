@@ -5,6 +5,7 @@ import (
 	"os"
 
 	infra "github.com/myfedi/gargoyle/infrastructure"
+	"github.com/myfedi/gargoyle/infrastructure/db"
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers"
 
 	"github.com/gofiber/fiber/v2"
@@ -40,7 +41,11 @@ func main() {
 		}
 	}
 
-	println("working on host ", host)
+	/// set up adapters and other dependencies
+	_ = db.NewSqliteStore(db.SqliteStoreConfig{
+		Debug:      config.Debug,
+		SqlitePath: config.Sqlite.Uri,
+	})
 
 	// sets up the go-fiber server
 	app := fiber.New()

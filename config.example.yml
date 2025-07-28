@@ -1,3 +1,6 @@
-domain: https://example.org
+debug: false
+domain: example.org
 port: 80
 tls: true
+sqlite:
+  uri: "file::memory:?cache=shared"

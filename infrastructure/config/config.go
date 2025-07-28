@@ -7,10 +7,16 @@ import (
 	"github.com/spf13/viper"
 )
 
+type SqliteConfig struct {
+	Uri string `mapstructure:"uri"`
+}
+
 type Config struct {
-	Domain string `mapstructure:"domain"`
-	Port   int    `mapstructure:"port"`
-	Tls    bool   `mapstructure:"tls"`
+	Debug  bool          `mapstructure:"debug"`
+	Domain string        `mapstructure:"domain"`
+	Port   int           `mapstructure:"port"`
+	Tls    bool          `mapstructure:"tls"`
+	Sqlite *SqliteConfig `mapstructure:"sqlite"`
 }
 
 // NewConfig creates a new Config instance by reading the configuration file.
@@ -36,6 +42,10 @@ func NewConfig(configFile string) (*Config, error) {
 
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	// defaults
+	viper.SetDefault("debug", false)
+
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
 	}
@@ -67,5 +77,16 @@ func verifyConfig(cfg *Config) error {
 	if cfg.Port <= 0 || cfg.Port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")
 	}
+
+	// verify database config
+	if cfg.Sqlite != nil {
+		if cfg.Sqlite.Uri == "" {
+			return fmt.Errorf("missing sqlite uri")
+		}
+	} else {
+		// we don't support any other databases just yet
+		return fmt.Errorf("no database configured")
+	}
+
 	return nil
 }
