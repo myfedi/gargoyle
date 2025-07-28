@@ -2,8 +2,11 @@ module github.com/myfedi/gargoyle
 
 go 1.24.5
 
+require github.com/stretchr/testify v1.10.0
+
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
@@ -14,6 +17,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.28 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
@@ -51,6 +55,7 @@ require (
 	github.com/uptrace/bun/dialect/sqlitedialect v1.2.15
 	github.com/uptrace/bun/driver/sqliteshim v1.2.15
 	github.com/uptrace/bun/extra/bundebug v1.2.15
+	golang.org/x/crypto v0.40.0
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	sourcery.dny.nu/pana v0.1.1
