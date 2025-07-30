@@ -11,7 +11,6 @@ import (
 	"github.com/myfedi/gargoyle/adapters/gcrypto"
 	pw "github.com/myfedi/gargoyle/adapters/password"
 	"github.com/myfedi/gargoyle/adapters/repos"
-	"github.com/myfedi/gargoyle/domain/models/domainerrors"
 	"github.com/myfedi/gargoyle/domain/usecases/users"
 	"github.com/myfedi/gargoyle/infrastructure/config"
 	"github.com/myfedi/gargoyle/infrastructure/db"
@@ -97,7 +96,7 @@ func main() {
 						Username: validUsername,
 						Password: password,
 					})
-					if domainErr, ok := err.(*domainerrors.DomainError); ok && !domainerrors.IsNil(domainErr) {
+					if err != nil {
 						return err
 					}
 
