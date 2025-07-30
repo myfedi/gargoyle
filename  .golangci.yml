@@ -3,6 +3,7 @@ linters-settings:
     list-type: whitelist
     packages:
       - "github.com/myfedi/gargoyle/domain"
+      - "time"
     packages-with-error-message:
       "fmt": "don't leak implementation details into domain module"
     include-go-root: false

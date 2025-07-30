@@ -33,6 +33,8 @@ func NewSqliteStore(cfg SqliteStoreConfig) SqliteStore {
 		bun.AddQueryHook(bundebug.NewQueryHook(bundebug.WithVerbose(true)))
 	}
 
+	bun.Exec("PRAGMA foreign_keys = ON")
+
 	return SqliteStore{
 		Sqlite: sqlite,
 		Bun:    bun,

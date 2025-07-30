@@ -14,7 +14,7 @@ func NewBCryptPasswordHasher() BcryptPasswordHasher {
 // make sure we adhere to the port interface
 var _ ports.PasswordHashProvider = &BcryptPasswordHasher{}
 
-func (e *BcryptPasswordHasher) HashPassword(password string) (string, error) {
+func (e BcryptPasswordHasher) HashPassword(password string) (string, error) {
 	encryptedPassword, err := bcrypt.GenerateFromPassword(
 		[]byte(password),
 		bcrypt.DefaultCost,
@@ -26,7 +26,7 @@ func (e *BcryptPasswordHasher) HashPassword(password string) (string, error) {
 	return string(encryptedPassword), nil
 }
 
-func (e *BcryptPasswordHasher) CompareHashAndPassword(hash string, password string) error {
+func (e BcryptPasswordHasher) CompareHashAndPassword(hash string, password string) error {
 	return bcrypt.CompareHashAndPassword(
 		[]byte(hash),
 		[]byte(password),

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/myfedi/gargoyle/adapters/repos"
 	infra "github.com/myfedi/gargoyle/infrastructure"
 	"github.com/myfedi/gargoyle/infrastructure/db"
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers"
@@ -42,10 +43,13 @@ func main() {
 	}
 
 	/// set up adapters and other dependencies
-	_ = db.NewSqliteStore(db.SqliteStoreConfig{
+	sqlite := db.NewSqliteStore(db.SqliteStoreConfig{
 		Debug:      config.Debug,
 		SqlitePath: config.Sqlite.Uri,
 	})
+
+	usersRepo := repos.NewUsersRepo(sqlite.Bun)
+	_ = repos.NewAccountsRepo(sqlite.Bun)
 
 	// sets up the go-fiber server
 	app := fiber.New()
@@ -56,7 +60,7 @@ func main() {
 	webfingerHandler := handlers.NewWebfingerWebHandler(handlers.WebfingerWebHandlerConfig{
 		Domain:    config.Domain,
 		Host:      host,
-		UsersRepo: &mock.MockUsersRepository{},
+		UsersRepo: usersRepo,
 	})
 	webfingerHandler.SetupWebfinger(app)
 
@@ -68,8 +72,8 @@ func main() {
 
 	// set up nodeinfo handler and dependencies
 	nodeInfoHandler := handlers.NewNodeInfoWebHandler(handlers.NodeInfoHandlerConfig{
-		// FIXME: replace with actual repo adapters
-		UsersRepo:     &mock.MockUsersRepository{},
+		// TODO(christian): replace with actual repo adapters
+		UsersRepo:     usersRepo,
 		PostsRepo:     &mock.MockPostsRepository{},
 		CommentsRepo:  &mock.MockCommentsRepository{},
 		Host:          host,
