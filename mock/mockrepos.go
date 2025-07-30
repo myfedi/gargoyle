@@ -2,23 +2,9 @@ package mock
 
 // TODO(christian): move this to testing later on, when we have proper adapters
 
-import "github.com/myfedi/gargoyle/domain/ports/repos"
-
-// == users repo
-
-type MockUsersRepository struct {
-	UsersCount int
-}
-
-func (m *MockUsersRepository) GetUsersCount() (int, error) {
-	return m.UsersCount, nil
-}
-
-func (m *MockUsersRepository) UserWithUsernameExists(username string) (bool, error) {
-	return username == "alice", nil
-}
-
-var _ repos.UsersRepository = &MockUsersRepository{}
+import (
+	"github.com/myfedi/gargoyle/domain/ports/repos"
+)
 
 // == posts repo
 

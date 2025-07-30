@@ -29,18 +29,7 @@ func main() {
 	}
 
 	// building the host for discovery endpoints
-	var host string
-	if config.Tls {
-		host = fmt.Sprintf("https://%s", config.Domain)
-		if config.Port != 443 {
-			host += fmt.Sprintf(":%d", config.Port)
-		}
-	} else {
-		host = fmt.Sprintf("http://%s", config.Domain)
-		if config.Port != 80 {
-			host += fmt.Sprintf(":%d", config.Port)
-		}
-	}
+	host := config.Host()
 
 	/// set up adapters and other dependencies
 	sqlite := db.NewSqliteStore(db.SqliteStoreConfig{

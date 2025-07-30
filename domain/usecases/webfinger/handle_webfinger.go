@@ -71,7 +71,7 @@ func (h *WebfingerHandler) HandleWebfinger(resource string) (string, *errors.Dom
 		return "", errors.New(errors.ErrBadRequest, fmt.Sprintf("domain mismatch, expected '%s', got '%s'", h.cfg.Domain, domain))
 	}
 
-	exists, err := h.cfg.UsersRepo.UserWithUsernameExists(username)
+	exists, err := h.cfg.UsersRepo.UserWithUsernameExists(nil, username)
 	if err != nil {
 		return "", errors.NewErr(errors.ErrInternal, err)
 	}

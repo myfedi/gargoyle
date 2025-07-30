@@ -12,13 +12,13 @@ type Account struct {
 	Domain                *string
 	DisplayName           *string
 	Summary               *string
-	URI                   *string
+	URI                   string
 	URL                   *string
-	InboxURI              *string
+	InboxURI              string
 	OutboxURI             *string
-	FollowingURI          *string
-	FollowersURI          *string
-	FeaturedCollectionURI *string
+	FollowingURI          string
+	FollowersURI          string
+	FeaturedCollectionURI string
 	PrivateKey            *string // non-nil for local users only
 	PublicKey             string
 	ActorType             ActorType

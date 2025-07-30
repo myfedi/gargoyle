@@ -10,8 +10,9 @@ type User struct {
 	ID           string    `bun:"type:CHAR(26),pk,nullzero,notnull,unique"`
 	CreatedAt    time.Time `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 	UpdatedAt    time.Time `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
+	Username     string    `bun:",nullzero,notnull,unique"`
 	PasswordHash string    `bun:",nullzero,notnull"`
-	Email        string    `bun:",nullzero,unique"`
+	Email        string    `bun:",nullzero,notnull,unique"`
 	Admin        bool      `bun:",nullzero,notnull,default:false"`
 }
 
@@ -20,6 +21,7 @@ func (u User) ToModel() models.User {
 		ID:           u.ID,
 		CreatedAt:    u.CreatedAt,
 		UpdatedAt:    u.UpdatedAt,
+		Username:     u.Username,
 		PasswordHash: u.PasswordHash,
 		Email:        u.Email,
 		Admin:        u.Admin,

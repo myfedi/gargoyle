@@ -8,6 +8,7 @@ import (
 
 	"os"
 
+	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/adapters/gcrypto"
 	pw "github.com/myfedi/gargoyle/adapters/password"
 	"github.com/myfedi/gargoyle/adapters/repos"
@@ -83,25 +84,27 @@ func main() {
 					usersRepo := repos.NewUsersRepo(db)
 					passwordManager := pw.NewBCryptPasswordHasher()
 					pkeyManager := gcrypto.NewRsaPKeyManager()
+					txManager := dbAdapters.NewBunTxProvider(db)
 					registerUser := users.NewRegisterUserUseCase(users.RegisterUserUseCaseConfig{
+						TxProvider:           txManager,
 						AccountsRepo:         accountsRepo,
 						UsersRepo:            usersRepo,
 						PasswordHashProvider: passwordManager,
 						PKeyManager:          pkeyManager,
 						LocalDomain:          config.Domain,
+						Host:                 config.Host(),
 					})
 
-					_, err = registerUser.RegisterUser(users.RegisterUserUseCaseInput{
+					_, derr := registerUser.RegisterUser(users.RegisterUserUseCaseInput{
 						Email:    email,
 						Username: validUsername,
 						Password: password,
 					})
-					if err != nil {
-						return err
+					if derr != nil {
+						return derr
 					}
 
 					fmt.Printf("registered new user <%s> as admin", username)
-
 					return nil
 				},
 			},
@@ -109,6 +112,6 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		log.Fatal(err)
+		log.Fatal("failed: ", err)
 	}
 }

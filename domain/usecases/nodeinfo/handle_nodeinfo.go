@@ -50,7 +50,7 @@ func (h *NodeInfoHandler) HandleNodeInfo() (string, error) {
 
 func (h *NodeInfoHandler) HandleNodeInfoRetrieval(nsVersion string) (string, error) {
 	// Retrieve usage data from repositories
-	usersCount, err := h.cfg.UsersRepo.GetUsersCount()
+	usersCount, err := h.cfg.UsersRepo.GetUsersCount(nil)
 	if err != nil {
 		return "", err
 	}

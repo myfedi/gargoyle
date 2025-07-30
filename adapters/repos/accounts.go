@@ -2,24 +2,36 @@ package repos
 
 import (
 	"context"
+	"errors"
 
+	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/domain/models"
+	dbPorts "github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
-	"github.com/myfedi/gargoyle/infrastructure/db"
+	dbUtils "github.com/myfedi/gargoyle/infrastructure/db"
 	dbModels "github.com/myfedi/gargoyle/infrastructure/db/models"
 	"github.com/uptrace/bun"
 )
 
 type AccountsRepo struct {
-	db *bun.DB
+	db bun.IDB
 }
 
 func NewAccountsRepo(db *bun.DB) *AccountsRepo {
 	return &AccountsRepo{db: db}
 }
 
-func (r *AccountsRepo) CreateAccount(input repos.CreateAccountInput) (*models.Account, error) {
-	ulid, err := db.NewULID()
+func (r *AccountsRepo) CreateAccount(tx *dbPorts.Tx, input repos.CreateAccountInput) (*models.Account, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
+	ulid, err := dbUtils.NewULID()
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +56,7 @@ func (r *AccountsRepo) CreateAccount(input repos.CreateAccountInput) (*models.Ac
 		PublicKey:             input.PublicKey,
 	}
 
-	_, err = r.db.NewInsert().Model(account).Exec(context.Background())
+	_, err = db.NewInsert().Model(account).Exec(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -52,9 +64,18 @@ func (r *AccountsRepo) CreateAccount(input repos.CreateAccountInput) (*models.Ac
 	return account, nil
 }
 
-func (r *AccountsRepo) GetAccountByUserID(userID string) (*models.Account, error) {
+func (r *AccountsRepo) GetAccountByUserID(tx *dbPorts.Tx, userID string) (*models.Account, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
 	var account dbModels.Account
-	err := r.db.NewSelect().
+	err := db.NewSelect().
 		Model(&account).
 		Where("user_id = ?", userID).
 		Limit(1).
@@ -64,4 +85,20 @@ func (r *AccountsRepo) GetAccountByUserID(userID string) (*models.Account, error
 	}
 	model := account.ToModel()
 	return &model, nil
+}
+
+func (r AccountsRepo) AccountWithUsernameExists(tx *dbPorts.Tx, username string) (bool, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return false, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
+	return db.NewSelect().
+		Model((*dbModels.Account)(nil)).
+		Where("username = ?", username).
+		Exists(context.Background())
 }

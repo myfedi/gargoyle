@@ -17,15 +17,15 @@ type Account struct {
 	Domain      *string `bun:",nullzero,unique:accounts_username_domain_uniq"`
 	DisplayName *string `bun:",nullzero"`
 	Summary     *string `bun:",nullzero"`
-	URI         *string `bun:",nullzero,notnull,unique"`
+	URI         string  `bun:",nullzero,notnull,unique"`
 	// null for local accounts
 	URL      *string `bun:",nullzero"`
-	InboxURI *string `bun:",nullzero"`
-	// should be set, some implementations don't tho
+	InboxURI string  `bun:",nullzero"`
+	// should be set, some implementations don't tho for service accounts
 	OutboxURI             *string `bun:",nullzero"`
-	FollowingURI          *string `bun:",nullzero"`
-	FollowersURI          *string `bun:",nullzero"`
-	FeaturedCollectionURI *string `bun:",nullzero"`
+	FollowingURI          string  `bun:",nullzero"`
+	FollowersURI          string  `bun:",nullzero"`
+	FeaturedCollectionURI string  `bun:",nullzero"`
 	PrivateKey            *string `bun:",nullzero"`
 	PublicKey             string  `bun:",nullzero,notnull,unique"`
 	ActorType             string  `bun:",nullzero,notnull"`

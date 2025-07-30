@@ -19,6 +19,24 @@ type Config struct {
 	Sqlite *SqliteConfig `mapstructure:"sqlite"`
 }
 
+func (c Config) Host() string {
+	var host string
+
+	if c.Tls {
+		host = fmt.Sprintf("https://%s", c.Domain)
+		if c.Port != 443 {
+			host += fmt.Sprintf(":%d", c.Port)
+		}
+	} else {
+		host = fmt.Sprintf("http://%s", c.Domain)
+		if c.Port != 80 {
+			host += fmt.Sprintf(":%d", c.Port)
+		}
+	}
+
+	return host
+}
+
 // NewConfig creates a new Config instance by reading the configuration file.
 // It expects the config file to be in YAML format and will parse it accordingly.
 func NewConfig(configFile string) (*Config, error) {
