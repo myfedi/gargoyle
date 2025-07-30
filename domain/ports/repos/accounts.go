@@ -6,23 +6,24 @@ import (
 	"github.com/myfedi/gargoyle/domain/models"
 )
 
+// The data necessary (or optional) to create a new account.
 type CreateAccountInput struct {
 	ID                    string    // ULID
-	UserID                string    // foreign key to users.id
+	UserID                *string   // foreign key to users.id
 	CreatedAt             time.Time // optional override
 	UpdatedAt             time.Time // optional override
 	FetchedAt             time.Time // optional
 	Username              string
-	Domain                string // optional; empty if local user
-	DisplayName           string // optional
-	Summary               string // optional
-	URI                   string
-	URL                   string // optional
-	InboxURI              string
-	OutboxURI             string
-	FollowingURI          string
-	FollowersURI          string
-	FeaturedCollectionURI string
+	Domain                *string // optional; empty if local user
+	DisplayName           *string // optional
+	Summary               *string // optional
+	URI                   *string
+	URL                   *string // optional
+	InboxURI              *string
+	OutboxURI             *string
+	FollowingURI          *string
+	FollowersURI          *string
+	FeaturedCollectionURI *string
 	PrivateKey            *string // nullable
 	PublicKey             string
 	ActorType             models.ActorType // maps to enum
