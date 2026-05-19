@@ -119,6 +119,20 @@ func (r *FollowsRepo) AcceptFollow(tx *dbPorts.Tx, followID string) error {
 	return err
 }
 
+func (r *FollowsRepo) DeleteFollowByActor(tx *dbPorts.Tx, localAccountID string, remoteActor string) error {
+	db, err := unwrapDB(r.db, tx)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.NewDelete().
+		Model((*dbModels.Follow)(nil)).
+		Where("local_account_id = ?", localAccountID).
+		Where("remote_actor = ?", remoteActor).
+		Exec(context.Background())
+	return err
+}
+
 func (r *FollowsRepo) ListFollowers(tx *dbPorts.Tx, localAccountID string) ([]models.Follow, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {

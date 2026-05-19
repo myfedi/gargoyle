@@ -29,11 +29,13 @@ import (
 )
 
 type UsersWebHandlerConfig struct {
-	AccountsRepo   repos.AccountsRepo
-	ActivitiesRepo repos.ActivitiesRepository
-	FollowsRepo    repos.FollowsRepository
-	Serializer     activitypub.ActorSerializer
-	HTTPClient     *http.Client
+	AccountsRepo       repos.AccountsRepo
+	ActivitiesRepo     repos.ActivitiesRepository
+	FollowsRepo        repos.FollowsRepository
+	Serializer         activitypub.ActorSerializer
+	HTTPClient         *http.Client
+	RequireSignedInbox bool
+	DeliveryRetries    int
 }
 
 type UsersWebHandler struct {
@@ -84,6 +86,8 @@ type orderedCollectionResponse struct {
 	ID           string            `json:"id"`
 	Type         string            `json:"type"`
 	TotalItems   int               `json:"totalItems"`
+	First        string            `json:"first,omitempty"`
+	PartOf       string            `json:"partOf,omitempty"`
 	OrderedItems []json.RawMessage `json:"orderedItems,omitempty"`
 }
 
@@ -133,11 +137,15 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 	if account.OutboxURI != nil {
 		id = *account.OutboxURI
 	}
+	items = paginateItems(c, items)
+	typeName := collectionType(c)
 	return sendActivityJSON(c, orderedCollectionResponse{
 		Context:      "https://www.w3.org/ns/activitystreams",
-		ID:           id,
-		Type:         "OrderedCollection",
-		TotalItems:   len(items),
+		ID:           collectionID(c, id),
+		Type:         typeName,
+		TotalItems:   len(activities),
+		First:        firstPage(c, id),
+		PartOf:       partOf(c, id),
 		OrderedItems: items,
 	})
 }
@@ -161,11 +169,15 @@ func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 		items = append(items, json.RawMessage(fmt.Sprintf("%q", follower.RemoteActor)))
 	}
 
+	items = paginateItems(c, items)
+	typeName := collectionType(c)
 	return sendActivityJSON(c, orderedCollectionResponse{
 		Context:      "https://www.w3.org/ns/activitystreams",
-		ID:           account.FollowersURI,
-		Type:         "OrderedCollection",
-		TotalItems:   len(items),
+		ID:           collectionID(c, account.FollowersURI),
+		Type:         typeName,
+		TotalItems:   len(followers),
+		First:        firstPage(c, account.FollowersURI),
+		PartOf:       partOf(c, account.FollowersURI),
 		OrderedItems: items,
 	})
 }
@@ -184,7 +196,7 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	if derr := h.verifyInboundSignature(c, raw, activity.Actor); derr != nil {
+	if derr := h.verifyInboundSignature(c, raw, activity.Actor, h.cfg.RequireSignedInbox); derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
 
@@ -200,7 +212,11 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
 
-	if activity.Type == "Follow" && h.cfg.FollowsRepo != nil {
+	switch activity.Type {
+	case "Follow":
+		if h.cfg.FollowsRepo == nil {
+			break
+		}
 		if activity.Object != account.URI {
 			return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "follow object does not match local actor"))
 		}
@@ -227,6 +243,18 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		if inbox != "" {
 			h.deliverAccept(*account, *follow, raw, inbox)
 		}
+	case "Undo":
+		if h.cfg.FollowsRepo != nil {
+			remoteActor, err := extractUndoFollowActor(raw)
+			if err != nil {
+				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrBadRequest, err))
+			}
+			if remoteActor != "" {
+				if err := h.cfg.FollowsRepo.DeleteFollowByActor(nil, account.ID, remoteActor); err != nil {
+					return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+				}
+			}
+		}
 	}
 
 	return c.SendStatus(fiber.StatusAccepted)
@@ -241,7 +269,10 @@ func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "activities repository not configured"))
 	}
 
-	raw := append([]byte(nil), c.Body()...)
+	raw, derr := normalizeOutboxActivity(append([]byte(nil), c.Body()...), *account)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
 	activity, derr := parseActivity(raw)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
@@ -305,6 +336,90 @@ func parseActivity(raw []byte) (parsedActivity, *domainerrors.DomainError) {
 	return parsedActivity{Type: envelope.Type, Actor: actor, Object: object, Inbox: inbox}, nil
 }
 
+func normalizeOutboxActivity(raw []byte, account models.Account) ([]byte, *domainerrors.DomainError) {
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	typeValue, _ := doc["type"].(string)
+	if typeValue == "" {
+		if _, ok := doc["content"]; ok {
+			typeValue = "Note"
+			doc["type"] = typeValue
+		} else {
+			return nil, domainerrors.New(domainerrors.ErrBadRequest, "activity type is required")
+		}
+	}
+
+	if typeValue != "Create" {
+		object := doc
+		if _, ok := object["@context"]; !ok {
+			object["@context"] = "https://www.w3.org/ns/activitystreams"
+		}
+		if _, ok := object["id"]; !ok {
+			object["id"] = account.URI + "/objects/" + fmt.Sprint(time.Now().UnixNano())
+		}
+		if _, ok := object["attributedTo"]; !ok {
+			object["attributedTo"] = account.URI
+		}
+		if _, ok := object["published"]; !ok {
+			object["published"] = now
+		}
+		doc = map[string]any{
+			"@context":  "https://www.w3.org/ns/activitystreams",
+			"id":        account.URI + "/activities/" + fmt.Sprint(time.Now().UnixNano()),
+			"type":      "Create",
+			"actor":     account.URI,
+			"published": now,
+			"object":    object,
+		}
+	} else {
+		if _, ok := doc["@context"]; !ok {
+			doc["@context"] = "https://www.w3.org/ns/activitystreams"
+		}
+		if _, ok := doc["id"]; !ok {
+			doc["id"] = account.URI + "/activities/" + fmt.Sprint(time.Now().UnixNano())
+		}
+		doc["actor"] = account.URI
+		if _, ok := doc["published"]; !ok {
+			doc["published"] = now
+		}
+	}
+
+	res, err := json.Marshal(doc)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return res, nil
+}
+
+func extractUndoFollowActor(raw []byte) (string, error) {
+	var doc struct {
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return "", err
+	}
+	var obj struct {
+		Type  string          `json:"type"`
+		Actor json.RawMessage `json:"actor"`
+	}
+	if err := json.Unmarshal(doc.Object, &obj); err != nil {
+		actor, _, actorErr := extractIDAndInbox(doc.Object)
+		if actorErr != nil {
+			return "", err
+		}
+		return actor, nil
+	}
+	if obj.Type != "Follow" {
+		return "", nil
+	}
+	actor, _, err := extractIDAndInbox(obj.Actor)
+	return actor, err
+}
+
 func extractIDAndInbox(raw json.RawMessage) (string, string, error) {
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
 		return "", "", nil
@@ -321,6 +436,62 @@ func extractIDAndInbox(raw json.RawMessage) (string, string, error) {
 		return "", "", err
 	}
 	return obj.ID, obj.Inbox, nil
+}
+
+func collectionType(c *fiber.Ctx) string {
+	if c.Query("page") != "" {
+		return "OrderedCollectionPage"
+	}
+	return "OrderedCollection"
+}
+
+func collectionID(c *fiber.Ctx, base string) string {
+	if c.Query("page") == "" {
+		return base
+	}
+	return base + "?page=" + url.QueryEscape(c.Query("page")) + "&limit=" + fmt.Sprint(pageLimit(c))
+}
+
+func firstPage(c *fiber.Ctx, base string) string {
+	if c.Query("page") != "" {
+		return ""
+	}
+	return base + "?page=1&limit=" + fmt.Sprint(pageLimit(c))
+}
+
+func partOf(c *fiber.Ctx, base string) string {
+	if c.Query("page") == "" {
+		return ""
+	}
+	return base
+}
+
+func paginateItems(c *fiber.Ctx, items []json.RawMessage) []json.RawMessage {
+	page := c.QueryInt("page", 0)
+	if page <= 0 {
+		return items
+	}
+	limit := pageLimit(c)
+	start := (page - 1) * limit
+	if start >= len(items) {
+		return []json.RawMessage{}
+	}
+	end := start + limit
+	if end > len(items) {
+		end = len(items)
+	}
+	return items[start:end]
+}
+
+func pageLimit(c *fiber.Ctx) int {
+	limit := c.QueryInt("limit", 20)
+	if limit < 1 {
+		return 20
+	}
+	if limit > 100 {
+		return 100
+	}
+	return limit
 }
 
 func sendActivityJSON(c *fiber.Ctx, v any) error {
@@ -401,18 +572,28 @@ func (h *UsersWebHandler) deliverSigned(body []byte, inbox string, account model
 	if client == nil {
 		client = http.DefaultClient
 	}
-	req, err := http.NewRequest(http.MethodPost, inbox, bytes.NewReader(body))
-	if err != nil {
-		return
+	retries := h.cfg.DeliveryRetries
+	if retries < 1 {
+		retries = 3
 	}
-	req.Header.Set("Content-Type", "application/activity+json")
-	req.Header.Set("Accept", "application/activity+json")
-	signOutboundRequest(req, body, account)
-	resp, err := client.Do(req)
-	if err != nil {
-		return
+	for attempt := 0; attempt < retries; attempt++ {
+		req, err := http.NewRequest(http.MethodPost, inbox, bytes.NewReader(body))
+		if err != nil {
+			return
+		}
+		req.Header.Set("Content-Type", "application/activity+json")
+		req.Header.Set("Accept", "application/activity+json")
+		signOutboundRequest(req, body, account)
+		resp, err := client.Do(req)
+		if err == nil && resp != nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+			_ = resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				return
+			}
+		}
+		time.Sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
 	}
-	defer resp.Body.Close()
 }
 
 func signOutboundRequest(req *http.Request, body []byte, account models.Account) {
@@ -447,13 +628,19 @@ func signOutboundRequest(req *http.Request, body []byte, account models.Account)
 	req.Header.Set("Signature", fmt.Sprintf(`keyId="%s#main-key",algorithm="rsa-sha256",headers="(request-target) host date digest",signature="%s"`, account.URI, base64.StdEncoding.EncodeToString(sig)))
 }
 
-func (h *UsersWebHandler) verifyInboundSignature(c *fiber.Ctx, body []byte, actor string) *domainerrors.DomainError {
+func (h *UsersWebHandler) verifyInboundSignature(c *fiber.Ctx, body []byte, actor string, required bool) *domainerrors.DomainError {
 	sigHeader := c.Get("Signature")
 	if sigHeader == "" {
+		if required {
+			return domainerrors.New(domainerrors.ErrUnauthorized, "missing signature")
+		}
 		return nil
 	}
 
 	params := parseSignatureHeader(sigHeader)
+	if keyID := params["keyId"]; keyID == "" {
+		return domainerrors.New(domainerrors.ErrUnauthorized, "missing keyId")
+	}
 	sig, err := base64.StdEncoding.DecodeString(params["signature"])
 	if err != nil {
 		return domainerrors.NewErr(domainerrors.ErrUnauthorized, err)
@@ -463,8 +650,12 @@ func (h *UsersWebHandler) verifyInboundSignature(c *fiber.Ctx, body []byte, acto
 		headers = []string{"date"}
 	}
 
+	if derr := validateHTTPDate(c.Get("Date")); derr != nil {
+		return derr
+	}
+
 	digest := c.Get("Digest")
-	if digest != "" && digest != digestHeader(body) {
+	if digest != "" && !strings.EqualFold(digest, digestHeader(body)) {
 		return domainerrors.New(domainerrors.ErrUnauthorized, "digest mismatch")
 	}
 
@@ -472,22 +663,54 @@ func (h *UsersWebHandler) verifyInboundSignature(c *fiber.Ctx, body []byte, acto
 	if err != nil || actorDoc.PublicKey.PublicKeyPem == "" {
 		return domainerrors.New(domainerrors.ErrUnauthorized, "could not fetch actor public key")
 	}
+	if !validKeyID(params["keyId"], actor, actorDoc) {
+		return domainerrors.New(domainerrors.ErrUnauthorized, "signature keyId does not match actor")
+	}
 	pub, err := parseRSAPublicKey(actorDoc.PublicKey.PublicKeyPem)
 	if err != nil {
 		return domainerrors.NewErr(domainerrors.ErrUnauthorized, err)
 	}
 
 	u, _ := url.Parse(c.OriginalURL())
-	signed := signatureString(c.Method(), u, map[string]string{
-		"host":   c.Hostname(),
-		"date":   c.Get("Date"),
-		"digest": digest,
-	}, headers)
+	headerValues := map[string]string{
+		"host":         c.Hostname(),
+		"date":         c.Get("Date"),
+		"digest":       digest,
+		"content-type": c.Get("Content-Type"),
+	}
+	signed := signatureString(c.Method(), u, headerValues, headers)
 	hash := sha256.Sum256([]byte(signed))
 	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, hash[:], sig); err != nil {
 		return domainerrors.NewErr(domainerrors.ErrUnauthorized, err)
 	}
 	return nil
+}
+
+func validateHTTPDate(value string) *domainerrors.DomainError {
+	if value == "" {
+		return domainerrors.New(domainerrors.ErrUnauthorized, "missing date")
+	}
+	parsed, err := http.ParseTime(value)
+	if err != nil {
+		return domainerrors.NewErr(domainerrors.ErrUnauthorized, err)
+	}
+	if time.Since(parsed) > 5*time.Minute || time.Until(parsed) > 5*time.Minute {
+		return domainerrors.New(domainerrors.ErrUnauthorized, "date outside allowed clock skew")
+	}
+	return nil
+}
+
+func validKeyID(keyID string, actor string, doc remoteActorDocument) bool {
+	if keyID == "" || actor == "" {
+		return false
+	}
+	if doc.PublicKey.ID != "" && keyID == doc.PublicKey.ID {
+		return true
+	}
+	if doc.PublicKey.Owner != "" && doc.PublicKey.Owner != actor {
+		return false
+	}
+	return strings.HasPrefix(keyID, actor+"#")
 }
 
 func digestHeader(body []byte) string {

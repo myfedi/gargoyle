@@ -77,10 +77,12 @@ func main() {
 	// set up userprofile handler
 	actorSerializer := apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{})
 	userProfileHandler := users.NewUsersWebHandler(users.UsersWebHandlerConfig{
-		AccountsRepo:   accountsRepo,
-		ActivitiesRepo: activitiesRepo,
-		FollowsRepo:    followsRepo,
-		Serializer:     actorSerializer,
+		AccountsRepo:       accountsRepo,
+		ActivitiesRepo:     activitiesRepo,
+		FollowsRepo:        followsRepo,
+		Serializer:         actorSerializer,
+		RequireSignedInbox: true,
+		DeliveryRetries:    3,
 	})
 	userProfileHandler.SetupUserProfileHandler(app)
 

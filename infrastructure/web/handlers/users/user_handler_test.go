@@ -3,6 +3,8 @@ package users
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -60,9 +62,22 @@ func (f *fakeFollowsRepo) CreateFollow(tx *db.Tx, input repos.CreateFollowInput)
 	return &follow, nil
 }
 func (f *fakeFollowsRepo) AcceptFollow(tx *db.Tx, followID string) error { return nil }
+func (f *fakeFollowsRepo) DeleteFollowByActor(tx *db.Tx, localAccountID string, remoteActor string) error {
+	for i, follower := range f.followers {
+		if follower.LocalAccountID == localAccountID && follower.RemoteActor == remoteActor {
+			f.followers = append(f.followers[:i], f.followers[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
 func (f *fakeFollowsRepo) ListFollowers(tx *db.Tx, localAccountID string) ([]models.Follow, error) {
 	return f.followers, nil
 }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepository, follows repos.FollowsRepository) *UsersWebHandler {
 	return NewUsersWebHandler(UsersWebHandlerConfig{
@@ -70,6 +85,10 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		ActivitiesRepo: activities,
 		FollowsRepo:    follows,
 		Serializer:     apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+		})},
+		DeliveryRetries: 1,
 	})
 }
 

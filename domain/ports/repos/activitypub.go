@@ -29,5 +29,6 @@ type CreateFollowInput struct {
 type FollowsRepository interface {
 	CreateFollow(tx *db.Tx, input CreateFollowInput) (*models.Follow, error)
 	AcceptFollow(tx *db.Tx, followID string) error
+	DeleteFollowByActor(tx *db.Tx, localAccountID string, remoteActor string) error
 	ListFollowers(tx *db.Tx, localAccountID string) ([]models.Follow, error)
 }
