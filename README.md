@@ -33,12 +33,34 @@ go run cmd/web/server.go ./config.yml
 -   [x] nodeinfo
 -   [x] host-meta
 -   [x] actor profile
--   [x] inbox, first pass
--   [x] outbox, first pass
--   [x] followers collection, first pass
--   [ ] following/outbound follow flow
--   [ ] delivery queue/retries persistence
--   [ ] compatibility-tested federation with common servers
+    -   [x] `GET /users/:username`
+    -   [x] ActivityPub JSON response
+    -   [x] public key in actor document
+    -   [ ] compatibility-tested against common servers
+-   [ ] inbox
+    -   [x] `POST /users/:username/inbox`
+    -   [x] signed request requirement in server mode
+    -   [x] stores inbound activities
+    -   [x] handles `Follow`
+    -   [x] handles `Undo Follow`
+    -   [ ] handles `Create`
+    -   [ ] handles `Delete` / `Update`
+    -   [ ] handles `Accept` / `Reject` for outbound follows
+    -   [ ] handles `Announce` / `Like`
+-   [ ] outbox
+    -   [x] `GET /users/:username/outbox`
+    -   [x] `POST /users/:username/outbox`
+    -   [x] stores local activities
+    -   [x] persists local `Note`s
+    -   [x] delivers to accepted followers
+    -   [x] basic pagination
+    -   [ ] persistent delivery queue
+    -   [ ] auth/user-facing posting API
+-   [ ] followers/following
+    -   [x] followers collection
+    -   [x] inbound follow acceptance
+    -   [ ] outbound follow flow
+    -   [ ] following collection with real data
 
 Implemented ActivityPub endpoints:
 
