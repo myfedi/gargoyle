@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
 	"github.com/myfedi/gargoyle/adapters/repos"
 	infra "github.com/myfedi/gargoyle/infrastructure"
 	"github.com/myfedi/gargoyle/infrastructure/db"
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers"
+	"github.com/myfedi/gargoyle/infrastructure/web/handlers/users"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/myfedi/gargoyle/infrastructure/config"
@@ -38,7 +40,9 @@ func main() {
 	})
 
 	usersRepo := repos.NewUsersRepo(sqlite.Bun)
-	_ = repos.NewAccountsRepo(sqlite.Bun)
+	accountsRepo := repos.NewAccountsRepo(sqlite.Bun)
+	activitiesRepo := repos.NewActivitiesRepo(sqlite.Bun)
+	followsRepo := repos.NewFollowsRepo(sqlite.Bun)
 
 	// sets up the go-fiber server
 	app := fiber.New()
@@ -69,6 +73,16 @@ func main() {
 		ServerVersion: infra.ServerVersion,
 	})
 	nodeInfoHandler.SetupNodeInfo(app)
+
+	// set up userprofile handler
+	actorSerializer := apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{})
+	userProfileHandler := users.NewUsersWebHandler(users.UsersWebHandlerConfig{
+		AccountsRepo:   accountsRepo,
+		ActivitiesRepo: activitiesRepo,
+		FollowsRepo:    followsRepo,
+		Serializer:     actorSerializer,
+	})
+	userProfileHandler.SetupUserProfileHandler(app)
 
 	/// run server
 	err = app.Listen(fmt.Sprintf(":%d", config.Port))

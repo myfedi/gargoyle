@@ -33,5 +33,6 @@ type CreateAccountInput struct {
 type AccountsRepo interface {
 	CreateAccount(tx *db.Tx, input CreateAccountInput) (*models.Account, error)
 	GetAccountByUserID(tx *db.Tx, userID string) (*models.Account, error)
+	GetLocalAccountByUsername(tx *db.Tx, username string) (*models.Account, error)
 	AccountWithUsernameExists(tx *db.Tx, username string) (bool, error)
 }

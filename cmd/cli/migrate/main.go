@@ -197,7 +197,7 @@ func newDBCommand() *cli.Command {
 }
 
 func newMigrator(cfgPath string) *migrate.Migrator {
-	cfg, err := config.NewConfig("./config.yml") // FIXME:
+	cfg, err := config.NewConfig(cfgPath)
 	if err != nil {
 		panic(err)
 	}

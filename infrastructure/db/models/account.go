@@ -28,11 +28,11 @@ type Account struct {
 	FeaturedCollectionURI string  `bun:",nullzero"`
 	PrivateKey            *string `bun:",nullzero"`
 	PublicKey             string  `bun:",nullzero,notnull,unique"`
-	ActorType             string  `bun:",nullzero,notnull"`
+	ActorType             int     `bun:",nullzero,notnull"`
 }
 
 func (a *Account) ToModel() models.Account {
-	actorType := models.ParseActorType(a.ActorType)
+	actorType := models.NewActorType(a.ActorType)
 
 	return models.Account{
 		ID:                    a.ID,

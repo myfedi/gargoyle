@@ -6,7 +6,6 @@ import (
 
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/domain/models"
-	"github.com/myfedi/gargoyle/domain/models/domainerrors"
 	dbPorts "github.com/myfedi/gargoyle/domain/ports/db"
 	ports "github.com/myfedi/gargoyle/domain/ports/repos"
 	dbUtils "github.com/myfedi/gargoyle/infrastructure/db"
@@ -70,33 +69,6 @@ func (r UsersRepo) UserWithEmailExists(tx *dbPorts.Tx, email string) (bool, erro
 		Model((*models.User)(nil)).
 		Where("email = ?", email).
 		Exists(context.Background())
-}
-
-func (r UsersRepo) GetUserByUsername(tx *dbPorts.Tx, username string) (*models.Account, *domainerrors.DomainError) {
-	db := r.db
-	if tx != nil {
-		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
-			db = adapted.Unwrap()
-		} else {
-			return nil, domainerrors.New(domainerrors.ErrInternal, "unexpected tx implementation provided")
-		}
-	}
-
-	var account dbModels.Account
-	err := db.NewSelect().
-		Model(&account).
-		Where("username = ?", username).
-		Relation("User").
-		Limit(1).
-		Scan(context.Background())
-
-	if err != nil {
-		return nil, domainerrors.New(domainerrors.ErrInternal, "failed to query user")
-	}
-
-	model := account.ToModel()
-
-	return &model, nil
 }
 
 func (r UsersRepo) CreateUser(tx *dbPorts.Tx, input ports.UserCreationInput) (*models.User, error) {

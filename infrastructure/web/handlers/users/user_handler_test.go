@@ -1,0 +1,172 @@
+package users
+
+import (
+	"database/sql"
+	"encoding/json"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gofiber/fiber/v2"
+	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
+	"github.com/myfedi/gargoyle/domain/models"
+	"github.com/myfedi/gargoyle/domain/ports/db"
+	"github.com/myfedi/gargoyle/domain/ports/repos"
+)
+
+type fakeAccountsRepo struct{ err error }
+
+func (f fakeAccountsRepo) CreateAccount(tx *db.Tx, input repos.CreateAccountInput) (*models.Account, error) {
+	return nil, nil
+}
+func (f fakeAccountsRepo) GetAccountByUserID(tx *db.Tx, userID string) (*models.Account, error) {
+	return nil, nil
+}
+func (f fakeAccountsRepo) GetLocalAccountByUsername(tx *db.Tx, username string) (*models.Account, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &models.Account{
+		ID:           "account-1",
+		Username:     username,
+		URI:          "https://example.org/users/" + username,
+		InboxURI:     "https://example.org/users/" + username + "/inbox",
+		FollowersURI: "https://example.org/users/" + username + "/followers",
+		FollowingURI: "https://example.org/users/" + username + "/following",
+		PublicKey:    "public-key-pem",
+		ActorType:    models.ActorTypePerson,
+	}, nil
+}
+func (f fakeAccountsRepo) AccountWithUsernameExists(tx *db.Tx, username string) (bool, error) {
+	return false, nil
+}
+
+type fakeActivitiesRepo struct{ activities []models.Activity }
+
+func (f *fakeActivitiesRepo) CreateActivity(tx *db.Tx, input repos.CreateActivityInput) (*models.Activity, error) {
+	activity := models.Activity{ID: "activity-1", LocalAccountID: input.LocalAccountID, Direction: input.Direction, Type: input.Type, Actor: input.Actor, Object: input.Object, RawJSON: input.RawJSON}
+	f.activities = append(f.activities, activity)
+	return &activity, nil
+}
+func (f *fakeActivitiesRepo) ListOutboxActivities(tx *db.Tx, localAccountID string) ([]models.Activity, error) {
+	return f.activities, nil
+}
+
+type fakeFollowsRepo struct{ followers []models.Follow }
+
+func (f *fakeFollowsRepo) CreateFollow(tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
+	follow := models.Follow{ID: "follow-1", LocalAccountID: input.LocalAccountID, RemoteActor: input.RemoteActor, RemoteInbox: input.RemoteInbox, ActivityID: input.ActivityID}
+	f.followers = append(f.followers, follow)
+	return &follow, nil
+}
+func (f *fakeFollowsRepo) AcceptFollow(tx *db.Tx, followID string) error { return nil }
+func (f *fakeFollowsRepo) ListFollowers(tx *db.Tx, localAccountID string) ([]models.Follow, error) {
+	return f.followers, nil
+}
+
+func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepository, follows repos.FollowsRepository) *UsersWebHandler {
+	return NewUsersWebHandler(UsersWebHandlerConfig{
+		AccountsRepo:   accounts,
+		ActivitiesRepo: activities,
+		FollowsRepo:    follows,
+		Serializer:     apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+	})
+}
+
+func TestUserProfileHandlerReturnsActivityPubContentType(t *testing.T) {
+	app := fiber.New()
+	newTestHandler(fakeAccountsRepo{}, &fakeActivitiesRepo{}, &fakeFollowsRepo{}).SetupUserProfileHandler(app)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/users/alice", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get(fiber.HeaderContentType); !strings.HasPrefix(ct, "application/activity+json") {
+		t.Fatalf("expected activitypub content type, got %q", ct)
+	}
+}
+
+func TestUserProfileHandlerReturnsEmptyOutboxCollection(t *testing.T) {
+	app := fiber.New()
+	newTestHandler(fakeAccountsRepo{}, &fakeActivitiesRepo{}, &fakeFollowsRepo{}).SetupUserProfileHandler(app)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/users/alice/outbox", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get(fiber.HeaderContentType); !strings.HasPrefix(ct, "application/activity+json") {
+		t.Fatalf("expected activitypub content type, got %q", ct)
+	}
+
+	var got map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("invalid JSON response: %v", err)
+	}
+	if got["type"] != "OrderedCollection" {
+		t.Fatalf("expected OrderedCollection, got %v", got["type"])
+	}
+	if got["totalItems"] != float64(0) {
+		t.Fatalf("expected empty collection, got totalItems=%v", got["totalItems"])
+	}
+}
+
+func TestUserProfileHandlerAcceptsInboxActivities(t *testing.T) {
+	app := fiber.New()
+	newTestHandler(fakeAccountsRepo{}, &fakeActivitiesRepo{}, &fakeFollowsRepo{}).SetupUserProfileHandler(app)
+
+	body := `{"type":"Create","actor":"https://remote.example/users/bob","object":"https://remote.example/notes/1"}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserProfileHandlerStoresAndAcceptsFollow(t *testing.T) {
+	app := fiber.New()
+	follows := &fakeFollowsRepo{}
+	newTestHandler(fakeAccountsRepo{}, &fakeActivitiesRepo{}, follows).SetupUserProfileHandler(app)
+
+	body := `{"type":"Follow","actor":{"id":"https://remote.example/users/bob","inbox":"https://remote.example/users/bob/inbox"},"object":"https://example.org/users/alice"}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(follows.followers) != 1 {
+		t.Fatalf("expected one follower, got %d", len(follows.followers))
+	}
+}
+
+func TestUserProfileHandlerReturnsNotFoundForMissingActor(t *testing.T) {
+	app := fiber.New()
+	newTestHandler(fakeAccountsRepo{err: sql.ErrNoRows}, &fakeActivitiesRepo{}, &fakeFollowsRepo{}).SetupUserProfileHandler(app)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/users/missing", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}

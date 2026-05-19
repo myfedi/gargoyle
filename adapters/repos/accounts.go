@@ -36,7 +36,7 @@ func (r *AccountsRepo) CreateAccount(tx *dbPorts.Tx, input repos.CreateAccountIn
 		return nil, err
 	}
 
-	account := &models.Account{
+	account := &dbModels.Account{
 		ID:                    ulid,
 		UserID:                input.UserID,
 		CreatedAt:             input.CreatedAt,
@@ -47,6 +47,7 @@ func (r *AccountsRepo) CreateAccount(tx *dbPorts.Tx, input repos.CreateAccountIn
 		DisplayName:           input.DisplayName,
 		Summary:               input.Summary,
 		URI:                   input.URI,
+		URL:                   input.URL,
 		InboxURI:              input.InboxURI,
 		OutboxURI:             input.OutboxURI,
 		FollowingURI:          input.FollowingURI,
@@ -54,6 +55,7 @@ func (r *AccountsRepo) CreateAccount(tx *dbPorts.Tx, input repos.CreateAccountIn
 		FeaturedCollectionURI: input.FeaturedCollectionURI,
 		PrivateKey:            input.PrivateKey,
 		PublicKey:             input.PublicKey,
+		ActorType:             int(input.ActorType),
 	}
 
 	_, err = db.NewInsert().Model(account).Exec(context.Background())
@@ -61,7 +63,8 @@ func (r *AccountsRepo) CreateAccount(tx *dbPorts.Tx, input repos.CreateAccountIn
 		return nil, err
 	}
 
-	return account, nil
+	model := account.ToModel()
+	return &model, nil
 }
 
 func (r *AccountsRepo) GetAccountByUserID(tx *dbPorts.Tx, userID string) (*models.Account, error) {
@@ -78,6 +81,30 @@ func (r *AccountsRepo) GetAccountByUserID(tx *dbPorts.Tx, userID string) (*model
 	err := db.NewSelect().
 		Model(&account).
 		Where("user_id = ?", userID).
+		Limit(1).
+		Scan(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	model := account.ToModel()
+	return &model, nil
+}
+
+func (r *AccountsRepo) GetLocalAccountByUsername(tx *dbPorts.Tx, username string) (*models.Account, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
+	var account dbModels.Account
+	err := db.NewSelect().
+		Model(&account).
+		Where("username = ?", username).
+		Where("user_id IS NOT NULL").
 		Limit(1).
 		Scan(context.Background())
 	if err != nil {

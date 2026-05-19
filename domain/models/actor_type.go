@@ -43,3 +43,10 @@ func ParseActorType(s string) ActorType {
 	}
 	return ActorTypeUnknown
 }
+
+func NewActorType(i int) ActorType {
+	if i >= 0 && i <= int(ActorTypeService) {
+		return ActorType(i)
+	}
+	return ActorTypeUnknown
+}
