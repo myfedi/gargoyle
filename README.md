@@ -32,21 +32,32 @@ go run cmd/web/server.go ./config.yml
 -   [x] webfinger
 -   [x] nodeinfo
 -   [x] host-meta
--   [ ] actor
--   [ ] inbox
--   [ ] outbox
+-   [x] actor profile
+-   [x] inbox, first pass
+-   [x] outbox, first pass
+-   [x] followers collection, first pass
+-   [ ] following/outbound follow flow
+-   [ ] delivery queue/retries persistence
+-   [ ] compatibility-tested federation with common servers
+
+Implemented ActivityPub endpoints:
+
+-   `GET /users/:username` returns an ActivityPub actor.
+-   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow` and `Undo Follow`.
+-   `GET /users/:username/outbox` returns stored outbox activities.
+-   `POST /users/:username/outbox` creates and stores local `Create`/`Note` activities and delivers them to followers.
+-   `GET /users/:username/followers` returns accepted followers.
+-   `GET /users/:username/following` currently returns an empty collection.
 
 ## Federation
 
-With which servers can we federate?
+The server now has the basic pieces for federation: actor discovery, signed inbox requirement, follow acceptance, signed outbound delivery, stored notes, and outbox/followers collections.
 
--   mastodon: x
--   gotosocial: x
--   akkoma: x
--   pixelfed: x
--   lemmy: x
--   piefed: x
--   bookwyrm: x
--   flohmarkt: x
+Known gaps before claiming broad compatibility:
+
+-   Mastodon/GoToSocial/Akkoma compatibility still needs real-world testing.
+-   Delivery is still in-process; there is no persistent delivery queue yet.
+-   Inbox side effects are limited mostly to `Follow` and `Undo Follow`.
+-   Outbound follow/following is not implemented yet.
 
 For more, see https://github.com/BasixKOR/awesome-activitypub
