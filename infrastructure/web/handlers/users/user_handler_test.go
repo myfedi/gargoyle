@@ -54,6 +54,18 @@ func (f *fakeActivitiesRepo) ListOutboxActivities(tx *db.Tx, localAccountID stri
 	return f.activities, nil
 }
 
+type fakeNotesRepo struct{ notes []models.Note }
+
+func (f *fakeNotesRepo) GetLocalPostsCount() (int, error) { return len(f.notes), nil }
+func (f *fakeNotesRepo) CreateNote(tx *db.Tx, input repos.CreateNoteInput) (*models.Note, error) {
+	note := models.Note{ID: "note-1", LocalAccountID: input.LocalAccountID, ActivityID: input.ActivityID, URI: input.URI, Content: input.Content, PlainText: input.PlainText, AttributedTo: input.AttributedTo, PublishedAt: input.PublishedAt}
+	f.notes = append(f.notes, note)
+	return &note, nil
+}
+func (f *fakeNotesRepo) ListLocalNotes(tx *db.Tx, localAccountID string) ([]models.Note, error) {
+	return f.notes, nil
+}
+
 type fakeFollowsRepo struct{ followers []models.Follow }
 
 func (f *fakeFollowsRepo) CreateFollow(tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
@@ -84,6 +96,7 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		AccountsRepo:   accounts,
 		ActivitiesRepo: activities,
 		FollowsRepo:    follows,
+		NotesRepo:      &fakeNotesRepo{},
 		Serializer:     apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
@@ -152,6 +165,36 @@ func TestUserProfileHandlerAcceptsInboxActivities(t *testing.T) {
 
 	if resp.StatusCode != fiber.StatusAccepted {
 		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserProfileHandlerCreatesNoteFromOutboxPost(t *testing.T) {
+	app := fiber.New()
+	notes := &fakeNotesRepo{}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		AccountsRepo:    fakeAccountsRepo{},
+		ActivitiesRepo:  &fakeActivitiesRepo{},
+		FollowsRepo:     &fakeFollowsRepo{},
+		NotesRepo:       notes,
+		Serializer:      apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		DeliveryRetries: 1,
+	})
+	handler.SetupUserProfileHandler(app)
+
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/outbox", strings.NewReader(`{"content":"<p>hello <b>world</b></p>"}`)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	if len(notes.notes) != 1 {
+		t.Fatalf("expected one note, got %d", len(notes.notes))
+	}
+	if notes.notes[0].PlainText != "hello world" {
+		t.Fatalf("expected stripped plaintext, got %q", notes.notes[0].PlainText)
 	}
 }
 

@@ -43,6 +43,7 @@ func main() {
 	accountsRepo := repos.NewAccountsRepo(sqlite.Bun)
 	activitiesRepo := repos.NewActivitiesRepo(sqlite.Bun)
 	followsRepo := repos.NewFollowsRepo(sqlite.Bun)
+	notesRepo := repos.NewNotesRepo(sqlite.Bun)
 
 	// sets up the go-fiber server
 	app := fiber.New()
@@ -65,9 +66,8 @@ func main() {
 
 	// set up nodeinfo handler and dependencies
 	nodeInfoHandler := handlers.NewNodeInfoWebHandler(handlers.NodeInfoHandlerConfig{
-		// TODO(christian): replace with actual repo adapters
 		UsersRepo:     usersRepo,
-		PostsRepo:     &mock.MockPostsRepository{},
+		PostsRepo:     notesRepo,
 		CommentsRepo:  &mock.MockCommentsRepository{},
 		Host:          host,
 		ServerVersion: infra.ServerVersion,
@@ -80,6 +80,7 @@ func main() {
 		AccountsRepo:       accountsRepo,
 		ActivitiesRepo:     activitiesRepo,
 		FollowsRepo:        followsRepo,
+		NotesRepo:          notesRepo,
 		Serializer:         actorSerializer,
 		RequireSignedInbox: true,
 		DeliveryRetries:    3,

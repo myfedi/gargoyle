@@ -1,8 +1,9 @@
 package nodeinfo
 
 import (
+	"encoding/json"
+
 	"github.com/myfedi/gargoyle/domain/ports/repos"
-	"github.com/myfedi/gargoyle/utils"
 )
 
 type NodeInfoHandlerConfig struct {
@@ -28,28 +29,50 @@ func NewNodeInfoHandler(cfg NodeInfoHandlerConfig) *NodeInfoHandler {
 	return &NodeInfoHandler{cfg: cfg}
 }
 
+type nodeInfoLinksResponse struct {
+	Links []nodeInfoLink `json:"links"`
+}
+
+type nodeInfoLink struct {
+	Rel  string `json:"rel"`
+	Href string `json:"href"`
+}
+
 // HandleNodeInfo processes the nodeinfo request for a given domain.
 // This only returns the supported versions and protocols.
 // For the actual nodeinfo retrieval, use HandleNodeInfoRetrieval.
 func (h *NodeInfoHandler) HandleNodeInfo() (string, error) {
-	return utils.NamedFormat(`{
-	"links": [
-		{
-			"rel": "http://nodeinfo.diaspora.software/ns/schema/2.0",
-			"href": "{{.domain}}/nodeinfo/2.0",
-		},
-		{
-			"rel": "http://nodeinfo.diaspora.software/ns/schema/2.1",
-			"href": "{{.domain}}/nodeinfo/2.1",
-		},
-	]
-}`, utils.FormatParams{
-		"domain": h.cfg.Domain,
-	})
+	res, err := json.Marshal(nodeInfoLinksResponse{Links: []nodeInfoLink{
+		{Rel: "http://nodeinfo.diaspora.software/ns/schema/2.0", Href: h.cfg.Domain + "/nodeinfo/2.0"},
+		{Rel: "http://nodeinfo.diaspora.software/ns/schema/2.1", Href: h.cfg.Domain + "/nodeinfo/2.1"},
+	}})
+	if err != nil {
+		return "", err
+	}
+	return string(res), nil
+}
+
+type nodeInfoResponse struct {
+	Version   string           `json:"version"`
+	Protocols []string         `json:"protocols"`
+	Software  nodeInfoSoftware `json:"software"`
+	Usage     nodeInfoUsage    `json:"usage"`
+}
+
+type nodeInfoSoftware struct {
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	Homepage   string `json:"homepage"`
+	Repository string `json:"repository"`
+}
+
+type nodeInfoUsage struct {
+	Users         int `json:"users"`
+	LocalPosts    int `json:"localPosts"`
+	LocalComments int `json:"localComments"`
 }
 
 func (h *NodeInfoHandler) HandleNodeInfoRetrieval(nsVersion string) (string, error) {
-	// Retrieve usage data from repositories
 	usersCount, err := h.cfg.UsersRepo.GetUsersCount(nil)
 	if err != nil {
 		return "", err
@@ -63,32 +86,23 @@ func (h *NodeInfoHandler) HandleNodeInfoRetrieval(nsVersion string) (string, err
 		return "", err
 	}
 
-	return utils.NamedFormat(`{
-	"version": {{.nsVersion}},
-	"links": [
-		{
-			"rel": "http://nodeinfo.diaspora.software/ns/schema/{{.nsVersion}}",
-			"href": "{{.domain}}/nodeinfo/{{.nsVersion}}",
-			"protocols": ["activitypub"],
-			"software": {
-				"name": "Gargoyle",
-				"version": {{.serverVersion}},
-				"homepage": "https://github.com/myfedi/gargoyle",
-				"repository": "https://github.com/myfedi/gargoyle"
-			},
-			"usage": {
-				"users": {{.usersCount}},
-				"localPosts": {{.postsCount}},
-				"localComments": {{.commentsCount}},
-			}
-		}
-	]
-}`, utils.FormatParams{
-		"nsVersion":     nsVersion,
-		"domain":        h.cfg.Domain,
-		"serverVersion": h.cfg.ServerVersion,
-		"usersCount":    usersCount,
-		"postsCount":    postsCount,
-		"commentsCount": commentsCount,
+	res, err := json.Marshal(nodeInfoResponse{
+		Version:   nsVersion,
+		Protocols: []string{"activitypub"},
+		Software: nodeInfoSoftware{
+			Name:       "Gargoyle",
+			Version:    h.cfg.ServerVersion,
+			Homepage:   "https://github.com/myfedi/gargoyle",
+			Repository: "https://github.com/myfedi/gargoyle",
+		},
+		Usage: nodeInfoUsage{
+			Users:         usersCount,
+			LocalPosts:    postsCount,
+			LocalComments: commentsCount,
+		},
 	})
+	if err != nil {
+		return "", err
+	}
+	return string(res), nil
 }

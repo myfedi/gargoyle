@@ -26,12 +26,14 @@ import (
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 	"github.com/myfedi/gargoyle/infrastructure/web"
+	"github.com/myfedi/gargoyle/utils"
 )
 
 type UsersWebHandlerConfig struct {
 	AccountsRepo       repos.AccountsRepo
 	ActivitiesRepo     repos.ActivitiesRepository
 	FollowsRepo        repos.FollowsRepository
+	NotesRepo          repos.NotesRepository
 	Serializer         activitypub.ActorSerializer
 	HTTPClient         *http.Client
 	RequireSignedInbox bool
@@ -281,7 +283,7 @@ func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "activity actor does not match local actor"))
 	}
 
-	_, err := h.cfg.ActivitiesRepo.CreateActivity(nil, repos.CreateActivityInput{
+	stored, err := h.cfg.ActivitiesRepo.CreateActivity(nil, repos.CreateActivityInput{
 		LocalAccountID: account.ID,
 		Direction:      models.ActivityDirectionOutbox,
 		Type:           activity.Type,
@@ -291,6 +293,23 @@ func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+	}
+
+	if h.cfg.NotesRepo != nil {
+		if note, ok := extractNote(raw); ok {
+			_, err := h.cfg.NotesRepo.CreateNote(nil, repos.CreateNoteInput{
+				LocalAccountID: account.ID,
+				ActivityID:     stored.ID,
+				URI:            note.URI,
+				Content:        note.Content,
+				PlainText:      utils.StripHTMLFromText(note.Content),
+				AttributedTo:   note.AttributedTo,
+				PublishedAt:    note.PublishedAt,
+			})
+			if err != nil {
+				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+			}
+		}
 	}
 
 	if h.cfg.FollowsRepo != nil {
@@ -393,6 +412,43 @@ func normalizeOutboxActivity(raw []byte, account models.Account) ([]byte, *domai
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return res, nil
+}
+
+type extractedNote struct {
+	URI          string
+	Content      string
+	AttributedTo string
+	PublishedAt  time.Time
+}
+
+func extractNote(raw []byte) (extractedNote, bool) {
+	var activity struct {
+		Type   string          `json:"type"`
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(raw, &activity); err != nil || activity.Type != "Create" || len(activity.Object) == 0 {
+		return extractedNote{}, false
+	}
+	var note struct {
+		ID           string `json:"id"`
+		Type         string `json:"type"`
+		Content      string `json:"content"`
+		AttributedTo string `json:"attributedTo"`
+		Published    string `json:"published"`
+	}
+	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
+		return extractedNote{}, false
+	}
+	publishedAt, err := time.Parse(time.RFC3339, note.Published)
+	if err != nil {
+		publishedAt = time.Now().UTC()
+	}
+	return extractedNote{
+		URI:          note.ID,
+		Content:      note.Content,
+		AttributedTo: note.AttributedTo,
+		PublishedAt:  publishedAt,
+	}, true
 }
 
 func extractUndoFollowActor(raw []byte) (string, error) {
