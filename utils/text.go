@@ -12,6 +12,11 @@ var (
 	strict    = bluemonday.StrictPolicy()
 )
 
+// SanitizeHTML sanitizes user-provided HTML while preserving safe formatting.
+func SanitizeHTML(text string) string {
+	return strings.TrimSpace(ugcPolicy.Sanitize(text))
+}
+
 // StripHTMLFromText splits all HTML tags from text and leaves only plain text
 // Source: https://github.com/superseriousbusiness/gotosocial/blob/main/internal/text/sanitize.go
 func StripHTMLFromText(text string) string {

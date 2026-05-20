@@ -36,6 +36,7 @@ type Follow struct {
 	RemoteActor    string     `bun:",nullzero,notnull,unique:follows_local_actor_uniq"`
 	RemoteInbox    *string    `bun:",nullzero"`
 	ActivityID     string     `bun:"type:CHAR(26),nullzero,notnull"`
+	Direction      string     `bun:",nullzero,notnull"`
 	AcceptedAt     *time.Time `bun:"type:timestamptz,nullzero"`
 	CreatedAt      time.Time  `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 }
@@ -47,6 +48,7 @@ func (f Follow) ToModel() domainmodels.Follow {
 		RemoteActor:    f.RemoteActor,
 		RemoteInbox:    f.RemoteInbox,
 		ActivityID:     f.ActivityID,
+		Direction:      f.Direction,
 		AcceptedAt:     f.AcceptedAt,
 		CreatedAt:      f.CreatedAt,
 	}

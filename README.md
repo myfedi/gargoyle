@@ -43,9 +43,9 @@ go run cmd/web/server.go ./config.yml
     -   [x] stores inbound activities
     -   [x] handles `Follow`
     -   [x] handles `Undo Follow`
-    -   [ ] handles `Create`
-    -   [ ] handles `Delete` / `Update`
-    -   [ ] handles `Accept` / `Reject` for outbound follows
+    -   [x] handles `Create` for `Note`s
+    -   [x] handles `Delete` / `Update` for stored `Note`s
+    -   [x] handles `Accept` / `Reject` for outbound follows
     -   [ ] handles `Announce` / `Like`
 -   [ ] outbox
     -   [x] `GET /users/:username/outbox`
@@ -53,23 +53,26 @@ go run cmd/web/server.go ./config.yml
     -   [x] stores local activities
     -   [x] persists local `Note`s
     -   [x] delivers to accepted followers
-    -   [x] basic pagination
+    -   [x] DB-backed pagination
+    -   [x] sanitizes note content
+    -   [x] generated stable ULID-based activity/object IDs
     -   [ ] persistent delivery queue
     -   [ ] auth/user-facing posting API
 -   [ ] followers/following
     -   [x] followers collection
     -   [x] inbound follow acceptance
-    -   [ ] outbound follow flow
-    -   [ ] following collection with real data
+    -   [x] outbound follow flow
+    -   [x] following collection with accepted follows
 
 Implemented ActivityPub endpoints:
 
 -   `GET /users/:username` returns an ActivityPub actor.
--   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow` and `Undo Follow`.
+-   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow`, `Undo Follow`, `Create`, `Delete`, `Update`, `Accept`, and `Reject`.
 -   `GET /users/:username/outbox` returns stored outbox activities.
 -   `POST /users/:username/outbox` creates and stores local `Create`/`Note` activities and delivers them to followers.
 -   `GET /users/:username/followers` returns accepted followers.
--   `GET /users/:username/following` currently returns an empty collection.
+-   `GET /users/:username/following` returns accepted outbound follows.
+-   `POST /users/:username/following` creates and delivers an outbound `Follow`.
 
 ## Federation
 
@@ -79,7 +82,7 @@ Known gaps before claiming broad compatibility:
 
 -   Mastodon/GoToSocial/Akkoma compatibility still needs real-world testing.
 -   Delivery is still in-process; there is no persistent delivery queue yet.
--   Inbox side effects are limited mostly to `Follow` and `Undo Follow`.
--   Outbound follow/following is not implemented yet.
+-   Inbox side effects for `Announce` and `Like` are not implemented yet.
+-   Outbound follow still needs real-server compatibility testing.
 
 For more, see https://github.com/BasixKOR/awesome-activitypub

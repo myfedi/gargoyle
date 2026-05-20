@@ -55,6 +55,39 @@ func (r *NotesRepo) CreateNote(tx *dbPorts.Tx, input repos.CreateNoteInput) (*mo
 	return &model, nil
 }
 
+func (r *NotesRepo) UpdateNoteByURI(tx *dbPorts.Tx, uri string, content string, plainText string) error {
+	db := r.db
+	if tx != nil {
+		adapted, ok := (*tx).(dbAdapters.BunTx)
+		if !ok {
+			return errors.New("internal error: unexpected tx implementation provided")
+		}
+		db = adapted.Unwrap()
+	}
+
+	_, err := db.NewUpdate().
+		Model((*dbModels.Note)(nil)).
+		Set("content = ?", content).
+		Set("plain_text = ?", plainText).
+		Where("uri = ?", uri).
+		Exec(context.Background())
+	return err
+}
+
+func (r *NotesRepo) DeleteNoteByURI(tx *dbPorts.Tx, uri string) error {
+	db := r.db
+	if tx != nil {
+		adapted, ok := (*tx).(dbAdapters.BunTx)
+		if !ok {
+			return errors.New("internal error: unexpected tx implementation provided")
+		}
+		db = adapted.Unwrap()
+	}
+
+	_, err := db.NewDelete().Model((*dbModels.Note)(nil)).Where("uri = ?", uri).Exec(context.Background())
+	return err
+}
+
 func (r *NotesRepo) ListLocalNotes(tx *dbPorts.Tx, localAccountID string) ([]models.Note, error) {
 	db := r.db
 	if tx != nil {

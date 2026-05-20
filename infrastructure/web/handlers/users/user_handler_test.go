@@ -53,6 +53,22 @@ func (f *fakeActivitiesRepo) CreateActivity(tx *db.Tx, input repos.CreateActivit
 func (f *fakeActivitiesRepo) ListOutboxActivities(tx *db.Tx, localAccountID string) ([]models.Activity, error) {
 	return f.activities, nil
 }
+func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
+	if limit <= 0 {
+		return f.activities, nil
+	}
+	if offset >= len(f.activities) {
+		return []models.Activity{}, nil
+	}
+	end := offset + limit
+	if end > len(f.activities) {
+		end = len(f.activities)
+	}
+	return f.activities[offset:end], nil
+}
+func (f *fakeActivitiesRepo) CountOutboxActivities(tx *db.Tx, localAccountID string) (int, error) {
+	return len(f.activities), nil
+}
 
 type fakeNotesRepo struct{ notes []models.Note }
 
@@ -62,6 +78,24 @@ func (f *fakeNotesRepo) CreateNote(tx *db.Tx, input repos.CreateNoteInput) (*mod
 	f.notes = append(f.notes, note)
 	return &note, nil
 }
+func (f *fakeNotesRepo) UpdateNoteByURI(tx *db.Tx, uri string, content string, plainText string) error {
+	for i := range f.notes {
+		if f.notes[i].URI == uri {
+			f.notes[i].Content = content
+			f.notes[i].PlainText = plainText
+		}
+	}
+	return nil
+}
+func (f *fakeNotesRepo) DeleteNoteByURI(tx *db.Tx, uri string) error {
+	for i, note := range f.notes {
+		if note.URI == uri {
+			f.notes = append(f.notes[:i], f.notes[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
 func (f *fakeNotesRepo) ListLocalNotes(tx *db.Tx, localAccountID string) ([]models.Note, error) {
 	return f.notes, nil
 }
@@ -69,11 +103,25 @@ func (f *fakeNotesRepo) ListLocalNotes(tx *db.Tx, localAccountID string) ([]mode
 type fakeFollowsRepo struct{ followers []models.Follow }
 
 func (f *fakeFollowsRepo) CreateFollow(tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
-	follow := models.Follow{ID: "follow-1", LocalAccountID: input.LocalAccountID, RemoteActor: input.RemoteActor, RemoteInbox: input.RemoteInbox, ActivityID: input.ActivityID}
+	direction := input.Direction
+	if direction == "" {
+		direction = "follower"
+	}
+	follow := models.Follow{ID: "follow-1", LocalAccountID: input.LocalAccountID, RemoteActor: input.RemoteActor, RemoteInbox: input.RemoteInbox, ActivityID: input.ActivityID, Direction: direction}
 	f.followers = append(f.followers, follow)
 	return &follow, nil
 }
 func (f *fakeFollowsRepo) AcceptFollow(tx *db.Tx, followID string) error { return nil }
+func (f *fakeFollowsRepo) CreateFollowing(tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
+	input.Direction = "following"
+	return f.CreateFollow(tx, input)
+}
+func (f *fakeFollowsRepo) AcceptFollowingByActor(tx *db.Tx, localAccountID string, remoteActor string) error {
+	return nil
+}
+func (f *fakeFollowsRepo) RejectFollowingByActor(tx *db.Tx, localAccountID string, remoteActor string) error {
+	return nil
+}
 func (f *fakeFollowsRepo) DeleteFollowByActor(tx *db.Tx, localAccountID string, remoteActor string) error {
 	for i, follower := range f.followers {
 		if follower.LocalAccountID == localAccountID && follower.RemoteActor == remoteActor {
@@ -85,6 +133,21 @@ func (f *fakeFollowsRepo) DeleteFollowByActor(tx *db.Tx, localAccountID string, 
 }
 func (f *fakeFollowsRepo) ListFollowers(tx *db.Tx, localAccountID string) ([]models.Follow, error) {
 	return f.followers, nil
+}
+func (f *fakeFollowsRepo) ListFollowersPaged(tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Follow, error) {
+	return f.followers, nil
+}
+func (f *fakeFollowsRepo) CountFollowers(tx *db.Tx, localAccountID string) (int, error) {
+	return len(f.followers), nil
+}
+func (f *fakeFollowsRepo) ListFollowing(tx *db.Tx, localAccountID string) ([]models.Follow, error) {
+	res := []models.Follow{}
+	for _, follow := range f.followers {
+		if follow.Direction == "following" {
+			res = append(res, follow)
+		}
+	}
+	return res, nil
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -195,6 +258,56 @@ func TestUserProfileHandlerCreatesNoteFromOutboxPost(t *testing.T) {
 	}
 	if notes.notes[0].PlainText != "hello world" {
 		t.Fatalf("expected stripped plaintext, got %q", notes.notes[0].PlainText)
+	}
+}
+
+func TestUserProfileHandlerCreatesFollowing(t *testing.T) {
+	app := fiber.New()
+	follows := &fakeFollowsRepo{}
+	newTestHandler(fakeAccountsRepo{}, &fakeActivitiesRepo{}, follows).SetupUserProfileHandler(app)
+
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/following", strings.NewReader(`{"actor":"https://remote.example/users/bob","inbox":"https://remote.example/inbox"}`)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	following, err := follows.ListFollowing(nil, "account-1")
+	if err != nil {
+		t.Fatalf("ListFollowing returned error: %v", err)
+	}
+	if len(following) != 1 || following[0].RemoteActor != "https://remote.example/users/bob" {
+		t.Fatalf("expected following bob, got %#v", following)
+	}
+}
+
+func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
+	app := fiber.New()
+	notes := &fakeNotesRepo{}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		AccountsRepo:    fakeAccountsRepo{},
+		ActivitiesRepo:  &fakeActivitiesRepo{},
+		FollowsRepo:     &fakeFollowsRepo{},
+		NotesRepo:       notes,
+		Serializer:      apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		DeliveryRetries: 1,
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Create","actor":"https://remote.example/users/bob","object":{"id":"https://remote.example/notes/1","type":"Note","content":"<p>remote</p>","attributedTo":"https://remote.example/users/bob","published":"2026-05-19T12:00:00Z"}}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(notes.notes) != 1 || notes.notes[0].PlainText != "remote" {
+		t.Fatalf("expected stored remote note, got %#v", notes.notes)
 	}
 }
 

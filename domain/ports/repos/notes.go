@@ -20,5 +20,7 @@ type CreateNoteInput struct {
 type NotesRepository interface {
 	PostsRepository
 	CreateNote(tx *db.Tx, input CreateNoteInput) (*models.Note, error)
+	UpdateNoteByURI(tx *db.Tx, uri string, content string, plainText string) error
+	DeleteNoteByURI(tx *db.Tx, uri string) error
 	ListLocalNotes(tx *db.Tx, localAccountID string) ([]models.Note, error)
 }

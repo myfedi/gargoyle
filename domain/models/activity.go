@@ -26,6 +26,7 @@ type Follow struct {
 	RemoteActor    string
 	RemoteInbox    *string
 	ActivityID     string
+	Direction      string
 	AcceptedAt     *time.Time
 	CreatedAt      time.Time
 }
