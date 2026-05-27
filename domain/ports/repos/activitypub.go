@@ -1,6 +1,8 @@
 package repos
 
 import (
+	"context"
+
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/ports/db"
 )
@@ -15,10 +17,10 @@ type CreateActivityInput struct {
 }
 
 type ActivitiesRepository interface {
-	CreateActivity(tx *db.Tx, input CreateActivityInput) (*models.Activity, error)
-	ListOutboxActivities(tx *db.Tx, localAccountID string) ([]models.Activity, error)
-	ListOutboxActivitiesPaged(tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error)
-	CountOutboxActivities(tx *db.Tx, localAccountID string) (int, error)
+	CreateActivity(ctx context.Context, tx *db.Tx, input CreateActivityInput) (*models.Activity, error)
+	ListOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Activity, error)
+	ListOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error)
+	CountOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) (int, error)
 }
 
 type CreateFollowInput struct {
@@ -30,14 +32,14 @@ type CreateFollowInput struct {
 }
 
 type FollowsRepository interface {
-	CreateFollow(tx *db.Tx, input CreateFollowInput) (*models.Follow, error)
-	AcceptFollow(tx *db.Tx, followID string) error
-	DeleteFollowByActor(tx *db.Tx, localAccountID string, remoteActor string) error
-	ListFollowers(tx *db.Tx, localAccountID string) ([]models.Follow, error)
-	ListFollowersPaged(tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Follow, error)
-	CountFollowers(tx *db.Tx, localAccountID string) (int, error)
-	CreateFollowing(tx *db.Tx, input CreateFollowInput) (*models.Follow, error)
-	AcceptFollowingByActor(tx *db.Tx, localAccountID string, remoteActor string) error
-	RejectFollowingByActor(tx *db.Tx, localAccountID string, remoteActor string) error
-	ListFollowing(tx *db.Tx, localAccountID string) ([]models.Follow, error)
+	CreateFollow(ctx context.Context, tx *db.Tx, input CreateFollowInput) (*models.Follow, error)
+	AcceptFollow(ctx context.Context, tx *db.Tx, followID string) error
+	DeleteFollowByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error
+	ListFollowers(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error)
+	ListFollowersPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Follow, error)
+	CountFollowers(ctx context.Context, tx *db.Tx, localAccountID string) (int, error)
+	CreateFollowing(ctx context.Context, tx *db.Tx, input CreateFollowInput) (*models.Follow, error)
+	AcceptFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error
+	RejectFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error
+	ListFollowing(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error)
 }

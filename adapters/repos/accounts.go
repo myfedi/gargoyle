@@ -21,7 +21,7 @@ func NewAccountsRepo(db *bun.DB) *AccountsRepo {
 	return &AccountsRepo{db: db}
 }
 
-func (r *AccountsRepo) CreateAccount(tx *dbPorts.Tx, input repos.CreateAccountInput) (*models.Account, error) {
+func (r *AccountsRepo) CreateAccount(ctx context.Context, tx *dbPorts.Tx, input repos.CreateAccountInput) (*models.Account, error) {
 	db := r.db
 	if tx != nil {
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
@@ -58,7 +58,7 @@ func (r *AccountsRepo) CreateAccount(tx *dbPorts.Tx, input repos.CreateAccountIn
 		ActorType:             int(input.ActorType),
 	}
 
-	_, err = db.NewInsert().Model(account).Exec(context.Background())
+	_, err = db.NewInsert().Model(account).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (r *AccountsRepo) CreateAccount(tx *dbPorts.Tx, input repos.CreateAccountIn
 	return &model, nil
 }
 
-func (r *AccountsRepo) GetAccountByUserID(tx *dbPorts.Tx, userID string) (*models.Account, error) {
+func (r *AccountsRepo) GetAccountByUserID(ctx context.Context, tx *dbPorts.Tx, userID string) (*models.Account, error) {
 	db := r.db
 	if tx != nil {
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
@@ -82,7 +82,7 @@ func (r *AccountsRepo) GetAccountByUserID(tx *dbPorts.Tx, userID string) (*model
 		Model(&account).
 		Where("user_id = ?", userID).
 		Limit(1).
-		Scan(context.Background())
+		Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (r *AccountsRepo) GetAccountByUserID(tx *dbPorts.Tx, userID string) (*model
 	return &model, nil
 }
 
-func (r *AccountsRepo) GetLocalAccountByUsername(tx *dbPorts.Tx, username string) (*models.Account, error) {
+func (r *AccountsRepo) GetLocalAccountByUsername(ctx context.Context, tx *dbPorts.Tx, username string) (*models.Account, error) {
 	db := r.db
 	if tx != nil {
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
@@ -106,7 +106,7 @@ func (r *AccountsRepo) GetLocalAccountByUsername(tx *dbPorts.Tx, username string
 		Where("username = ?", username).
 		Where("user_id IS NOT NULL").
 		Limit(1).
-		Scan(context.Background())
+		Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (r *AccountsRepo) GetLocalAccountByUsername(tx *dbPorts.Tx, username string
 	return &model, nil
 }
 
-func (r AccountsRepo) AccountWithUsernameExists(tx *dbPorts.Tx, username string) (bool, error) {
+func (r AccountsRepo) AccountWithUsernameExists(ctx context.Context, tx *dbPorts.Tx, username string) (bool, error) {
 	db := r.db
 	if tx != nil {
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
@@ -127,5 +127,5 @@ func (r AccountsRepo) AccountWithUsernameExists(tx *dbPorts.Tx, username string)
 	return db.NewSelect().
 		Model((*dbModels.Account)(nil)).
 		Where("username = ?", username).
-		Exists(context.Background())
+		Exists(ctx)
 }

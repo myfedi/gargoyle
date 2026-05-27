@@ -1,6 +1,7 @@
 package webfinger
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -31,7 +32,7 @@ func NewWebfingerHandler(cfg WebFingerHandlerConfig) *WebfingerHandler {
 // match as well.
 // Both acct:username@domain and acct://username@domain are supported.
 // See https://datatracker.ietf.org/doc/html/rfc7033
-func (h *WebfingerHandler) HandleWebfinger(resource string) (string, *errors.DomainError) {
+func (h *WebfingerHandler) HandleWebfinger(ctx context.Context, resource string) (string, *errors.DomainError) {
 	// first we try to parse the resource string.
 	// we expect something like "acct:alice@example.org"
 	if resource == "" {
@@ -71,7 +72,7 @@ func (h *WebfingerHandler) HandleWebfinger(resource string) (string, *errors.Dom
 		return "", errors.New(errors.ErrBadRequest, fmt.Sprintf("domain mismatch, expected '%s', got '%s'", h.cfg.Domain, domain))
 	}
 
-	exists, err := h.cfg.UsersRepo.UserWithUsernameExists(nil, username)
+	exists, err := h.cfg.UsersRepo.UserWithUsernameExists(ctx, nil, username)
 	if err != nil {
 		return "", errors.NewErr(errors.ErrInternal, err)
 	}

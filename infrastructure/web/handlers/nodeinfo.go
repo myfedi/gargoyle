@@ -75,7 +75,7 @@ func (h NodeInfoWebHandler) SetupNodeInfo(app *fiber.App) {
 			return c.Status(fiber.StatusBadRequest).SendString("Unsupported version, only 2.0 and 2.1 are supported")
 		}
 
-		nodeInfo, err := handler.HandleNodeInfoRetrieval(version)
+		nodeInfo, err := handler.HandleNodeInfoRetrieval(c.UserContext(), version)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 		}

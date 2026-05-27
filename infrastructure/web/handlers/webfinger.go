@@ -41,7 +41,7 @@ func (h *WebfingerWebHandler) SetupWebfinger(app *fiber.App) {
 			return c.Status(fiber.StatusBadRequest).SendString("Missing resource query parameter")
 		}
 
-		res, err := h.handler.HandleWebfinger(qry)
+		res, err := h.handler.HandleWebfinger(c.UserContext(), qry)
 		if err != nil {
 			return web.HandleDomainError(c, err)
 		}

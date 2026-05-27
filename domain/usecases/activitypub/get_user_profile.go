@@ -1,6 +1,7 @@
 package activitypub
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -24,8 +25,8 @@ func NewGetUserProfileUseCase(cfg GetUserProfileUseCaseConfig) GetUserProfileUse
 	}
 }
 
-func (u *GetUserProfileUseCase) GetUserProfile(username string) (string, *domainerrors.DomainError) {
-	account, err := u.cfg.AccountsRepo.GetLocalAccountByUsername(nil, username)
+func (u *GetUserProfileUseCase) GetUserProfile(ctx context.Context, username string) (string, *domainerrors.DomainError) {
+	account, err := u.cfg.AccountsRepo.GetLocalAccountByUsername(ctx, nil, username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", domainerrors.New(domainerrors.ErrNotFound, "no such username")

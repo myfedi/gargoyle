@@ -42,8 +42,8 @@ func NewRegisterUserUseCase(cfg RegisterUserUseCaseConfig) RegisterUserUseCase {
 
 // RegisterUser creates a new user by hashing the password and persisting the user in the database.
 // It is expected, that the input has been verified for format, length etc. beforehand.
-func (u *RegisterUserUseCase) RegisterUser(input RegisterUserUseCaseInput) (*models.User, *errors.DomainError) {
-	userNameTaken, err := u.cfg.UsersRepo.UserWithUsernameExists(nil, input.Username)
+func (u *RegisterUserUseCase) RegisterUser(ctx context.Context, input RegisterUserUseCaseInput) (*models.User, *errors.DomainError) {
+	userNameTaken, err := u.cfg.UsersRepo.UserWithUsernameExists(ctx, nil, input.Username)
 	if err != nil {
 		return nil, errors.NewErr(errors.ErrBadRequest, err)
 	}
@@ -51,7 +51,7 @@ func (u *RegisterUserUseCase) RegisterUser(input RegisterUserUseCaseInput) (*mod
 		return nil, errors.NewErr(errors.ErrBadRequest, fmt.Errorf("Username %s already taken", input.Username))
 	}
 
-	emailTaken, err := u.cfg.UsersRepo.UserWithEmailExists(nil, input.Email)
+	emailTaken, err := u.cfg.UsersRepo.UserWithEmailExists(ctx, nil, input.Email)
 	if err != nil {
 		return nil, errors.NewErr(errors.ErrBadRequest, err)
 	}
@@ -66,17 +66,16 @@ func (u *RegisterUserUseCase) RegisterUser(input RegisterUserUseCaseInput) (*mod
 
 	var user *models.User
 
-	err = u.cfg.TxProvider.RunInTx(context.Background(), sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
-		res, err := u.cfg.UsersRepo.CreateUser(&tx, repos.UserCreationInput{
+	err = u.cfg.TxProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
+		res, err := u.cfg.UsersRepo.CreateUser(ctx, &tx, repos.UserCreationInput{
 			HashedPassword: hashedPass,
 			Username:       input.Username,
 			Email:          input.Email,
 			Admin:          input.Admin,
 		})
 		if err != nil {
-			tx.Rollback()
 			// TODO: do we need better error resolution here?
-			return errors.NewErr(errors.ErrInternal, err)
+			return err
 		}
 
 		user = res
@@ -84,8 +83,7 @@ func (u *RegisterUserUseCase) RegisterUser(input RegisterUserUseCaseInput) (*mod
 		// create pkey
 		pkey, err := u.cfg.PKeyManager.CreatePKeyPair(input.Email)
 		if err != nil {
-			tx.Rollback()
-			return errors.NewErr(errors.ErrInternal, err)
+			return err
 		}
 
 		publicPem := string(pkey.PublicKey().ToPEM())
@@ -99,7 +97,7 @@ func (u *RegisterUserUseCase) RegisterUser(input RegisterUserUseCaseInput) (*mod
 		featured := fmt.Sprintf("%s/collections/featured", uri)
 
 		// create account
-		_, err = u.cfg.AccountsRepo.CreateAccount(&tx, repos.CreateAccountInput{
+		_, err = u.cfg.AccountsRepo.CreateAccount(ctx, &tx, repos.CreateAccountInput{
 			UserID:                &user.ID,
 			Username:              input.Username,
 			Domain:                &u.cfg.LocalDomain,

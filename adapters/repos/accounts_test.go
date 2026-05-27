@@ -17,7 +17,7 @@ func TestAccountsRepoCreateAndLoadPreservesActorType(t *testing.T) {
 	repo := NewAccountsRepo(db)
 	userID := "user-1"
 
-	_, err := repo.CreateAccount(nil, portrepos.CreateAccountInput{
+	_, err := repo.CreateAccount(context.Background(), nil, portrepos.CreateAccountInput{
 		UserID:                &userID,
 		Username:              "alice",
 		Domain:                strPtr("example.org"),
@@ -33,7 +33,7 @@ func TestAccountsRepoCreateAndLoadPreservesActorType(t *testing.T) {
 		t.Fatalf("CreateAccount returned error: %v", err)
 	}
 
-	account, err := repo.GetLocalAccountByUsername(nil, "alice")
+	account, err := repo.GetLocalAccountByUsername(context.Background(), nil, "alice")
 	if err != nil {
 		t.Fatalf("GetLocalAccountByUsername returned error: %v", err)
 	}

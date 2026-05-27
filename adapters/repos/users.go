@@ -26,7 +26,7 @@ func NewUsersRepo(db *bun.DB) UsersRepo {
 // check that adapter implements port
 var _ ports.UsersRepository = &UsersRepo{}
 
-func (r UsersRepo) GetUsersCount(tx *dbPorts.Tx) (int, error) {
+func (r UsersRepo) GetUsersCount(ctx context.Context, tx *dbPorts.Tx) (int, error) {
 	db := r.db
 	if tx != nil {
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
@@ -36,10 +36,10 @@ func (r UsersRepo) GetUsersCount(tx *dbPorts.Tx) (int, error) {
 		}
 	}
 
-	return db.NewSelect().Model((*models.User)(nil)).Count(context.Background())
+	return db.NewSelect().Model((*models.User)(nil)).Count(ctx)
 }
 
-func (r UsersRepo) UserWithUsernameExists(tx *dbPorts.Tx, username string) (bool, error) {
+func (r UsersRepo) UserWithUsernameExists(ctx context.Context, tx *dbPorts.Tx, username string) (bool, error) {
 	db := r.db
 	if tx != nil {
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
@@ -52,10 +52,10 @@ func (r UsersRepo) UserWithUsernameExists(tx *dbPorts.Tx, username string) (bool
 	return db.NewSelect().
 		Model((*dbModels.User)(nil)).
 		Where("username = ?", username).
-		Exists(context.Background())
+		Exists(ctx)
 }
 
-func (r UsersRepo) UserWithEmailExists(tx *dbPorts.Tx, email string) (bool, error) {
+func (r UsersRepo) UserWithEmailExists(ctx context.Context, tx *dbPorts.Tx, email string) (bool, error) {
 	db := r.db
 	if tx != nil {
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
@@ -68,10 +68,10 @@ func (r UsersRepo) UserWithEmailExists(tx *dbPorts.Tx, email string) (bool, erro
 	return db.NewSelect().
 		Model((*models.User)(nil)).
 		Where("email = ?", email).
-		Exists(context.Background())
+		Exists(ctx)
 }
 
-func (r UsersRepo) CreateUser(tx *dbPorts.Tx, input ports.UserCreationInput) (*models.User, error) {
+func (r UsersRepo) CreateUser(ctx context.Context, tx *dbPorts.Tx, input ports.UserCreationInput) (*models.User, error) {
 	db := r.db
 	if tx != nil {
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
@@ -94,7 +94,7 @@ func (r UsersRepo) CreateUser(tx *dbPorts.Tx, input ports.UserCreationInput) (*m
 		Admin:        input.Admin,
 	}
 
-	_, err = db.NewInsert().Model(user).Exec(context.Background())
+	_, err = db.NewInsert().Model(user).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}

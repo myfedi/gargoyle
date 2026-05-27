@@ -2,6 +2,7 @@ package users
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -66,7 +67,7 @@ func (h *UsersWebHandler) SetupUserProfileHandler(app *fiber.App) {
 			return c.Status(fiber.StatusBadRequest).SendString("missing username")
 		}
 
-		profile, derr := h.handler.GetUserProfile(username)
+		profile, derr := h.handler.GetUserProfile(c.UserContext(), username)
 		if derr != nil {
 			return web.HandleDomainError(c, derr)
 		}
@@ -103,7 +104,7 @@ type activityEnvelope struct {
 
 func (h *UsersWebHandler) emptyCollection(id func(models.Account) string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		account, derr := h.account(c.Params("username"))
+		account, derr := h.account(c.UserContext(), c.Params("username"))
 		if derr != nil {
 			return web.HandleDomainError(c, derr)
 		}
@@ -117,7 +118,7 @@ func (h *UsersWebHandler) emptyCollection(id func(models.Account) string) fiber.
 }
 
 func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
-	account, derr := h.account(c.Params("username"))
+	account, derr := h.account(c.UserContext(), c.Params("username"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -126,7 +127,7 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 	}
 
 	limit, offset := pagination(c)
-	activities, err := h.cfg.ActivitiesRepo.ListOutboxActivitiesPaged(nil, account.ID, limit, offset)
+	activities, err := h.cfg.ActivitiesRepo.ListOutboxActivitiesPaged(c.UserContext(), nil, account.ID, limit, offset)
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
@@ -140,7 +141,7 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 	if account.OutboxURI != nil {
 		id = *account.OutboxURI
 	}
-	total, err := h.cfg.ActivitiesRepo.CountOutboxActivities(nil, account.ID)
+	total, err := h.cfg.ActivitiesRepo.CountOutboxActivities(c.UserContext(), nil, account.ID)
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
@@ -157,14 +158,14 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) followingCollection(c *fiber.Ctx) error {
-	account, derr := h.account(c.Params("username"))
+	account, derr := h.account(c.UserContext(), c.Params("username"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
 	if h.cfg.FollowsRepo == nil {
 		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "follows repository not configured"))
 	}
-	following, err := h.cfg.FollowsRepo.ListFollowing(nil, account.ID)
+	following, err := h.cfg.FollowsRepo.ListFollowing(c.UserContext(), nil, account.ID)
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
@@ -182,7 +183,7 @@ func (h *UsersWebHandler) followingCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
-	account, derr := h.account(c.Params("username"))
+	account, derr := h.account(c.UserContext(), c.Params("username"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -200,7 +201,7 @@ func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "actor is required"))
 	}
 	if input.Inbox == "" {
-		input.Inbox = h.fetchActorInbox(input.Actor)
+		input.Inbox = h.fetchActorInbox(c.UserContext(), input.Actor)
 	}
 	followID, _ := dbUtils.NewULID()
 	followActivity := map[string]any{
@@ -214,7 +215,7 @@ func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
-	stored, err := h.cfg.ActivitiesRepo.CreateActivity(nil, repos.CreateActivityInput{LocalAccountID: account.ID, Direction: models.ActivityDirectionOutbox, Type: "Follow", Actor: account.URI, Object: input.Actor, RawJSON: string(raw)})
+	stored, err := h.cfg.ActivitiesRepo.CreateActivity(c.UserContext(), nil, repos.CreateActivityInput{LocalAccountID: account.ID, Direction: models.ActivityDirectionOutbox, Type: "Follow", Actor: account.URI, Object: input.Actor, RawJSON: string(raw)})
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
@@ -222,17 +223,17 @@ func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
 	if input.Inbox != "" {
 		inboxPtr = &input.Inbox
 	}
-	if _, err := h.cfg.FollowsRepo.CreateFollowing(nil, repos.CreateFollowInput{LocalAccountID: account.ID, RemoteActor: input.Actor, RemoteInbox: inboxPtr, ActivityID: stored.ID}); err != nil {
+	if _, err := h.cfg.FollowsRepo.CreateFollowing(c.UserContext(), nil, repos.CreateFollowInput{LocalAccountID: account.ID, RemoteActor: input.Actor, RemoteInbox: inboxPtr, ActivityID: stored.ID}); err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
 	if input.Inbox != "" {
-		h.deliverSigned(raw, input.Inbox, *account)
+		h.deliverSigned(c.UserContext(), raw, input.Inbox, *account)
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }
 
 func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
-	account, derr := h.account(c.Params("username"))
+	account, derr := h.account(c.UserContext(), c.Params("username"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -241,7 +242,7 @@ func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 	}
 
 	limit, offset := pagination(c)
-	followers, err := h.cfg.FollowsRepo.ListFollowersPaged(nil, account.ID, limit, offset)
+	followers, err := h.cfg.FollowsRepo.ListFollowersPaged(c.UserContext(), nil, account.ID, limit, offset)
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
@@ -251,7 +252,7 @@ func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 		items = append(items, json.RawMessage(fmt.Sprintf("%q", follower.RemoteActor)))
 	}
 
-	total, err := h.cfg.FollowsRepo.CountFollowers(nil, account.ID)
+	total, err := h.cfg.FollowsRepo.CountFollowers(c.UserContext(), nil, account.ID)
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
@@ -268,7 +269,7 @@ func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
-	account, derr := h.account(c.Params("username"))
+	account, derr := h.account(c.UserContext(), c.Params("username"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -285,7 +286,7 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 
-	stored, err := h.cfg.ActivitiesRepo.CreateActivity(nil, repos.CreateActivityInput{
+	stored, err := h.cfg.ActivitiesRepo.CreateActivity(c.UserContext(), nil, repos.CreateActivityInput{
 		LocalAccountID: account.ID,
 		Direction:      models.ActivityDirectionInbox,
 		Type:           activity.Type,
@@ -307,13 +308,13 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		}
 		inbox := activity.Inbox
 		if inbox == "" {
-			inbox = h.fetchActorInbox(activity.Actor)
+			inbox = h.fetchActorInbox(c.UserContext(), activity.Actor)
 		}
 		var inboxPtr *string
 		if inbox != "" {
 			inboxPtr = &inbox
 		}
-		follow, err := h.cfg.FollowsRepo.CreateFollow(nil, repos.CreateFollowInput{
+		follow, err := h.cfg.FollowsRepo.CreateFollow(c.UserContext(), nil, repos.CreateFollowInput{
 			LocalAccountID: account.ID,
 			RemoteActor:    activity.Actor,
 			RemoteInbox:    inboxPtr,
@@ -322,16 +323,16 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		if err != nil {
 			return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 		}
-		if err := h.cfg.FollowsRepo.AcceptFollow(nil, follow.ID); err != nil {
+		if err := h.cfg.FollowsRepo.AcceptFollow(c.UserContext(), nil, follow.ID); err != nil {
 			return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 		}
 		if inbox != "" {
-			h.deliverAccept(*account, *follow, raw, inbox)
+			h.deliverAccept(c.UserContext(), *account, *follow, raw, inbox)
 		}
 	case "Create":
 		if h.cfg.NotesRepo != nil {
 			if note, ok := extractNote(raw); ok {
-				_, err := h.cfg.NotesRepo.CreateNote(nil, repos.CreateNoteInput{
+				_, err := h.cfg.NotesRepo.CreateNote(c.UserContext(), nil, repos.CreateNoteInput{
 					LocalAccountID: account.ID,
 					ActivityID:     stored.ID,
 					URI:            note.URI,
@@ -347,27 +348,27 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		}
 	case "Delete":
 		if h.cfg.NotesRepo != nil && activity.Object != "" {
-			if err := h.cfg.NotesRepo.DeleteNoteByURI(nil, activity.Object); err != nil {
+			if err := h.cfg.NotesRepo.DeleteNoteByURI(c.UserContext(), nil, activity.Object); err != nil {
 				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 			}
 		}
 	case "Update":
 		if h.cfg.NotesRepo != nil {
 			if note, ok := extractNoteObject(raw); ok {
-				if err := h.cfg.NotesRepo.UpdateNoteByURI(nil, note.URI, utils.SanitizeHTML(note.Content), utils.StripHTMLFromText(note.Content)); err != nil {
+				if err := h.cfg.NotesRepo.UpdateNoteByURI(c.UserContext(), nil, note.URI, utils.SanitizeHTML(note.Content), utils.StripHTMLFromText(note.Content)); err != nil {
 					return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 				}
 			}
 		}
 	case "Accept":
 		if h.cfg.FollowsRepo != nil && activity.Actor != "" {
-			if err := h.cfg.FollowsRepo.AcceptFollowingByActor(nil, account.ID, activity.Actor); err != nil {
+			if err := h.cfg.FollowsRepo.AcceptFollowingByActor(c.UserContext(), nil, account.ID, activity.Actor); err != nil {
 				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 			}
 		}
 	case "Reject":
 		if h.cfg.FollowsRepo != nil && activity.Actor != "" {
-			if err := h.cfg.FollowsRepo.RejectFollowingByActor(nil, account.ID, activity.Actor); err != nil {
+			if err := h.cfg.FollowsRepo.RejectFollowingByActor(c.UserContext(), nil, account.ID, activity.Actor); err != nil {
 				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 			}
 		}
@@ -378,7 +379,7 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrBadRequest, err))
 			}
 			if remoteActor != "" {
-				if err := h.cfg.FollowsRepo.DeleteFollowByActor(nil, account.ID, remoteActor); err != nil {
+				if err := h.cfg.FollowsRepo.DeleteFollowByActor(c.UserContext(), nil, account.ID, remoteActor); err != nil {
 					return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 				}
 			}
@@ -389,7 +390,7 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
-	account, derr := h.account(c.Params("username"))
+	account, derr := h.account(c.UserContext(), c.Params("username"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -409,7 +410,7 @@ func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "activity actor does not match local actor"))
 	}
 
-	stored, err := h.cfg.ActivitiesRepo.CreateActivity(nil, repos.CreateActivityInput{
+	stored, err := h.cfg.ActivitiesRepo.CreateActivity(c.UserContext(), nil, repos.CreateActivityInput{
 		LocalAccountID: account.ID,
 		Direction:      models.ActivityDirectionOutbox,
 		Type:           activity.Type,
@@ -423,7 +424,7 @@ func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
 
 	if h.cfg.NotesRepo != nil {
 		if note, ok := extractNote(raw); ok {
-			_, err := h.cfg.NotesRepo.CreateNote(nil, repos.CreateNoteInput{
+			_, err := h.cfg.NotesRepo.CreateNote(c.UserContext(), nil, repos.CreateNoteInput{
 				LocalAccountID: account.ID,
 				ActivityID:     stored.ID,
 				URI:            note.URI,
@@ -439,13 +440,13 @@ func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
 	}
 
 	if h.cfg.FollowsRepo != nil {
-		followers, err := h.cfg.FollowsRepo.ListFollowers(nil, account.ID)
+		followers, err := h.cfg.FollowsRepo.ListFollowers(c.UserContext(), nil, account.ID)
 		if err != nil {
 			return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 		}
 		for _, follower := range followers {
 			if follower.RemoteInbox != nil {
-				h.deliverSigned(raw, *follower.RemoteInbox, *account)
+				h.deliverSigned(c.UserContext(), raw, *follower.RemoteInbox, *account)
 			}
 		}
 	}
@@ -734,15 +735,15 @@ type remoteActorDocument struct {
 	} `json:"publicKey"`
 }
 
-func (h *UsersWebHandler) fetchActorInbox(actor string) string {
-	actorDoc, err := h.fetchActorDocument(actor)
+func (h *UsersWebHandler) fetchActorInbox(ctx context.Context, actor string) string {
+	actorDoc, err := h.fetchActorDocument(ctx, actor)
 	if err != nil {
 		return ""
 	}
 	return actorDoc.Inbox
 }
 
-func (h *UsersWebHandler) fetchActorDocument(actor string) (remoteActorDocument, error) {
+func (h *UsersWebHandler) fetchActorDocument(ctx context.Context, actor string) (remoteActorDocument, error) {
 	if actor == "" {
 		return remoteActorDocument{}, errors.New("empty actor")
 	}
@@ -750,7 +751,7 @@ func (h *UsersWebHandler) fetchActorDocument(actor string) (remoteActorDocument,
 	if client == nil {
 		client = http.DefaultClient
 	}
-	req, err := http.NewRequest(http.MethodGet, actor, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, actor, nil)
 	if err != nil {
 		return remoteActorDocument{}, err
 	}
@@ -774,7 +775,7 @@ func (h *UsersWebHandler) fetchActorDocument(actor string) (remoteActorDocument,
 	return actorDoc, nil
 }
 
-func (h *UsersWebHandler) deliverAccept(account models.Account, follow models.Follow, followRaw []byte, inbox string) {
+func (h *UsersWebHandler) deliverAccept(ctx context.Context, account models.Account, follow models.Follow, followRaw []byte, inbox string) {
 	accept := map[string]any{
 		"@context": "https://www.w3.org/ns/activitystreams",
 		"id":       account.URI + "/accepts/" + follow.ID,
@@ -786,10 +787,10 @@ func (h *UsersWebHandler) deliverAccept(account models.Account, follow models.Fo
 	if err != nil {
 		return
 	}
-	h.deliverSigned(body, inbox, account)
+	h.deliverSigned(ctx, body, inbox, account)
 }
 
-func (h *UsersWebHandler) deliverSigned(body []byte, inbox string, account models.Account) {
+func (h *UsersWebHandler) deliverSigned(ctx context.Context, body []byte, inbox string, account models.Account) {
 	client := h.cfg.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
@@ -799,7 +800,7 @@ func (h *UsersWebHandler) deliverSigned(body []byte, inbox string, account model
 		retries = 3
 	}
 	for attempt := 0; attempt < retries; attempt++ {
-		req, err := http.NewRequest(http.MethodPost, inbox, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, inbox, bytes.NewReader(body))
 		if err != nil {
 			return
 		}
@@ -881,7 +882,7 @@ func (h *UsersWebHandler) verifyInboundSignature(c *fiber.Ctx, body []byte, acto
 		return domainerrors.New(domainerrors.ErrUnauthorized, "digest mismatch")
 	}
 
-	actorDoc, err := h.fetchActorDocument(actor)
+	actorDoc, err := h.fetchActorDocument(c.UserContext(), actor)
 	if err != nil || actorDoc.PublicKey.PublicKeyPem == "" {
 		return domainerrors.New(domainerrors.ErrUnauthorized, "could not fetch actor public key")
 	}
@@ -985,12 +986,12 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 	return rsaPub, nil
 }
 
-func (h *UsersWebHandler) account(username string) (*models.Account, *domainerrors.DomainError) {
+func (h *UsersWebHandler) account(ctx context.Context, username string) (*models.Account, *domainerrors.DomainError) {
 	if username == "" {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "missing username")
 	}
 
-	account, err := h.cfg.AccountsRepo.GetLocalAccountByUsername(nil, username)
+	account, err := h.cfg.AccountsRepo.GetLocalAccountByUsername(ctx, nil, username)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domainerrors.New(domainerrors.ErrNotFound, "no such username")

@@ -19,11 +19,11 @@ func NewNotesRepo(db *bun.DB) *NotesRepo { return &NotesRepo{db: db} }
 
 var _ repos.NotesRepository = &NotesRepo{}
 
-func (r *NotesRepo) GetLocalPostsCount() (int, error) {
-	return r.db.NewSelect().Model((*dbModels.Note)(nil)).Count(context.Background())
+func (r *NotesRepo) GetLocalPostsCount(ctx context.Context) (int, error) {
+	return r.db.NewSelect().Model((*dbModels.Note)(nil)).Count(ctx)
 }
 
-func (r *NotesRepo) CreateNote(tx *dbPorts.Tx, input repos.CreateNoteInput) (*models.Note, error) {
+func (r *NotesRepo) CreateNote(ctx context.Context, tx *dbPorts.Tx, input repos.CreateNoteInput) (*models.Note, error) {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)
@@ -47,7 +47,7 @@ func (r *NotesRepo) CreateNote(tx *dbPorts.Tx, input repos.CreateNoteInput) (*mo
 		AttributedTo:   input.AttributedTo,
 		PublishedAt:    input.PublishedAt,
 	}
-	_, err = db.NewInsert().Model(note).Exec(context.Background())
+	_, err = db.NewInsert().Model(note).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (r *NotesRepo) CreateNote(tx *dbPorts.Tx, input repos.CreateNoteInput) (*mo
 	return &model, nil
 }
 
-func (r *NotesRepo) UpdateNoteByURI(tx *dbPorts.Tx, uri string, content string, plainText string) error {
+func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri string, content string, plainText string) error {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)
@@ -70,11 +70,11 @@ func (r *NotesRepo) UpdateNoteByURI(tx *dbPorts.Tx, uri string, content string, 
 		Set("content = ?", content).
 		Set("plain_text = ?", plainText).
 		Where("uri = ?", uri).
-		Exec(context.Background())
+		Exec(ctx)
 	return err
 }
 
-func (r *NotesRepo) DeleteNoteByURI(tx *dbPorts.Tx, uri string) error {
+func (r *NotesRepo) DeleteNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri string) error {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)
@@ -84,11 +84,11 @@ func (r *NotesRepo) DeleteNoteByURI(tx *dbPorts.Tx, uri string) error {
 		db = adapted.Unwrap()
 	}
 
-	_, err := db.NewDelete().Model((*dbModels.Note)(nil)).Where("uri = ?", uri).Exec(context.Background())
+	_, err := db.NewDelete().Model((*dbModels.Note)(nil)).Where("uri = ?", uri).Exec(ctx)
 	return err
 }
 
-func (r *NotesRepo) ListLocalNotes(tx *dbPorts.Tx, localAccountID string) ([]models.Note, error) {
+func (r *NotesRepo) ListLocalNotes(ctx context.Context, tx *dbPorts.Tx, localAccountID string) ([]models.Note, error) {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)
@@ -103,7 +103,7 @@ func (r *NotesRepo) ListLocalNotes(tx *dbPorts.Tx, localAccountID string) ([]mod
 		Model(&notes).
 		Where("local_account_id = ?", localAccountID).
 		Order("published_at DESC").
-		Scan(context.Background())
+		Scan(ctx)
 	if err != nil {
 		return nil, err
 	}

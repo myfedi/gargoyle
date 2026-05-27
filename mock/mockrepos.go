@@ -3,6 +3,8 @@ package mock
 // TODO(christian): move this to testing later on, when we have proper adapters
 
 import (
+	"context"
+
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 )
 
@@ -12,7 +14,7 @@ type MockPostsRepository struct {
 	PostsCount int
 }
 
-func (m *MockPostsRepository) GetLocalPostsCount() (int, error) {
+func (m *MockPostsRepository) GetLocalPostsCount(ctx context.Context) (int, error) {
 	return m.PostsCount, nil
 }
 
@@ -24,7 +26,7 @@ type MockCommentsRepository struct {
 	CommentsCount int
 }
 
-func (m *MockCommentsRepository) GetLocalCommentsCount() (int, error) {
+func (m *MockCommentsRepository) GetLocalCommentsCount(ctx context.Context) (int, error) {
 	return m.CommentsCount, nil
 }
 

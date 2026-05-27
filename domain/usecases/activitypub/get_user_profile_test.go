@@ -1,6 +1,7 @@
 package activitypub
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -26,22 +27,22 @@ func (f fakeActorSerializer) Unmarshall(input string) (*models.Account, error) {
 	return nil, nil
 }
 
-func (f fakeAccountsRepo) CreateAccount(tx *db.Tx, input repos.CreateAccountInput) (*models.Account, error) {
+func (f fakeAccountsRepo) CreateAccount(ctx context.Context, tx *db.Tx, input repos.CreateAccountInput) (*models.Account, error) {
 	return nil, nil
 }
 
-func (f fakeAccountsRepo) GetAccountByUserID(tx *db.Tx, userID string) (*models.Account, error) {
+func (f fakeAccountsRepo) GetAccountByUserID(ctx context.Context, tx *db.Tx, userID string) (*models.Account, error) {
 	return nil, nil
 }
 
-func (f fakeAccountsRepo) GetLocalAccountByUsername(tx *db.Tx, username string) (*models.Account, error) {
+func (f fakeAccountsRepo) GetLocalAccountByUsername(ctx context.Context, tx *db.Tx, username string) (*models.Account, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.account, nil
 }
 
-func (f fakeAccountsRepo) AccountWithUsernameExists(tx *db.Tx, username string) (bool, error) {
+func (f fakeAccountsRepo) AccountWithUsernameExists(ctx context.Context, tx *db.Tx, username string) (bool, error) {
 	return false, nil
 }
 
@@ -50,7 +51,7 @@ func TestGetUserProfileMapsMissingAccountToNotFound(t *testing.T) {
 		AccountsRepo: fakeAccountsRepo{err: sql.ErrNoRows},
 	})
 
-	_, derr := uc.GetUserProfile("missing")
+	_, derr := uc.GetUserProfile(context.Background(), "missing")
 	if derr == nil {
 		t.Fatal("expected domain error")
 	}
@@ -73,7 +74,7 @@ func TestGetUserProfileReturnsActivityPubActor(t *testing.T) {
 		}},
 	})
 
-	profile, derr := uc.GetUserProfile("alice")
+	profile, derr := uc.GetUserProfile(context.Background(), "alice")
 	if derr != nil {
 		t.Fatalf("unexpected domain error: %v", derr)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/mail"
@@ -95,7 +96,7 @@ func main() {
 						Host:                 config.Host(),
 					})
 
-					_, derr := registerUser.RegisterUser(users.RegisterUserUseCaseInput{
+					_, derr := registerUser.RegisterUser(context.Background(), users.RegisterUserUseCaseInput{
 						Email:    email,
 						Username: validUsername,
 						Password: password,

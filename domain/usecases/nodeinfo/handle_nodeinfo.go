@@ -1,6 +1,7 @@
 package nodeinfo
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/myfedi/gargoyle/domain/ports/repos"
@@ -72,16 +73,16 @@ type nodeInfoUsage struct {
 	LocalComments int `json:"localComments"`
 }
 
-func (h *NodeInfoHandler) HandleNodeInfoRetrieval(nsVersion string) (string, error) {
-	usersCount, err := h.cfg.UsersRepo.GetUsersCount(nil)
+func (h *NodeInfoHandler) HandleNodeInfoRetrieval(ctx context.Context, nsVersion string) (string, error) {
+	usersCount, err := h.cfg.UsersRepo.GetUsersCount(ctx, nil)
 	if err != nil {
 		return "", err
 	}
-	postsCount, err := h.cfg.PostsRepo.GetLocalPostsCount()
+	postsCount, err := h.cfg.PostsRepo.GetLocalPostsCount(ctx)
 	if err != nil {
 		return "", err
 	}
-	commentsCount, err := h.cfg.CommentsRepo.GetLocalCommentsCount()
+	commentsCount, err := h.cfg.CommentsRepo.GetLocalCommentsCount(ctx)
 	if err != nil {
 		return "", err
 	}

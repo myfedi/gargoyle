@@ -1,6 +1,7 @@
 package users
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io"
@@ -18,13 +19,13 @@ import (
 
 type fakeAccountsRepo struct{ err error }
 
-func (f fakeAccountsRepo) CreateAccount(tx *db.Tx, input repos.CreateAccountInput) (*models.Account, error) {
+func (f fakeAccountsRepo) CreateAccount(ctx context.Context, tx *db.Tx, input repos.CreateAccountInput) (*models.Account, error) {
 	return nil, nil
 }
-func (f fakeAccountsRepo) GetAccountByUserID(tx *db.Tx, userID string) (*models.Account, error) {
+func (f fakeAccountsRepo) GetAccountByUserID(ctx context.Context, tx *db.Tx, userID string) (*models.Account, error) {
 	return nil, nil
 }
-func (f fakeAccountsRepo) GetLocalAccountByUsername(tx *db.Tx, username string) (*models.Account, error) {
+func (f fakeAccountsRepo) GetLocalAccountByUsername(ctx context.Context, tx *db.Tx, username string) (*models.Account, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -39,21 +40,21 @@ func (f fakeAccountsRepo) GetLocalAccountByUsername(tx *db.Tx, username string) 
 		ActorType:    models.ActorTypePerson,
 	}, nil
 }
-func (f fakeAccountsRepo) AccountWithUsernameExists(tx *db.Tx, username string) (bool, error) {
+func (f fakeAccountsRepo) AccountWithUsernameExists(ctx context.Context, tx *db.Tx, username string) (bool, error) {
 	return false, nil
 }
 
 type fakeActivitiesRepo struct{ activities []models.Activity }
 
-func (f *fakeActivitiesRepo) CreateActivity(tx *db.Tx, input repos.CreateActivityInput) (*models.Activity, error) {
+func (f *fakeActivitiesRepo) CreateActivity(ctx context.Context, tx *db.Tx, input repos.CreateActivityInput) (*models.Activity, error) {
 	activity := models.Activity{ID: "activity-1", LocalAccountID: input.LocalAccountID, Direction: input.Direction, Type: input.Type, Actor: input.Actor, Object: input.Object, RawJSON: input.RawJSON}
 	f.activities = append(f.activities, activity)
 	return &activity, nil
 }
-func (f *fakeActivitiesRepo) ListOutboxActivities(tx *db.Tx, localAccountID string) ([]models.Activity, error) {
+func (f *fakeActivitiesRepo) ListOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Activity, error) {
 	return f.activities, nil
 }
-func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
+func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
 	if limit <= 0 {
 		return f.activities, nil
 	}
@@ -66,19 +67,21 @@ func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(tx *db.Tx, localAccountID
 	}
 	return f.activities[offset:end], nil
 }
-func (f *fakeActivitiesRepo) CountOutboxActivities(tx *db.Tx, localAccountID string) (int, error) {
+func (f *fakeActivitiesRepo) CountOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) (int, error) {
 	return len(f.activities), nil
 }
 
 type fakeNotesRepo struct{ notes []models.Note }
 
-func (f *fakeNotesRepo) GetLocalPostsCount() (int, error) { return len(f.notes), nil }
-func (f *fakeNotesRepo) CreateNote(tx *db.Tx, input repos.CreateNoteInput) (*models.Note, error) {
+func (f *fakeNotesRepo) GetLocalPostsCount(ctx context.Context) (int, error) {
+	return len(f.notes), nil
+}
+func (f *fakeNotesRepo) CreateNote(ctx context.Context, tx *db.Tx, input repos.CreateNoteInput) (*models.Note, error) {
 	note := models.Note{ID: "note-1", LocalAccountID: input.LocalAccountID, ActivityID: input.ActivityID, URI: input.URI, Content: input.Content, PlainText: input.PlainText, AttributedTo: input.AttributedTo, PublishedAt: input.PublishedAt}
 	f.notes = append(f.notes, note)
 	return &note, nil
 }
-func (f *fakeNotesRepo) UpdateNoteByURI(tx *db.Tx, uri string, content string, plainText string) error {
+func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri string, content string, plainText string) error {
 	for i := range f.notes {
 		if f.notes[i].URI == uri {
 			f.notes[i].Content = content
@@ -87,7 +90,7 @@ func (f *fakeNotesRepo) UpdateNoteByURI(tx *db.Tx, uri string, content string, p
 	}
 	return nil
 }
-func (f *fakeNotesRepo) DeleteNoteByURI(tx *db.Tx, uri string) error {
+func (f *fakeNotesRepo) DeleteNoteByURI(ctx context.Context, tx *db.Tx, uri string) error {
 	for i, note := range f.notes {
 		if note.URI == uri {
 			f.notes = append(f.notes[:i], f.notes[i+1:]...)
@@ -96,13 +99,13 @@ func (f *fakeNotesRepo) DeleteNoteByURI(tx *db.Tx, uri string) error {
 	}
 	return nil
 }
-func (f *fakeNotesRepo) ListLocalNotes(tx *db.Tx, localAccountID string) ([]models.Note, error) {
+func (f *fakeNotesRepo) ListLocalNotes(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Note, error) {
 	return f.notes, nil
 }
 
 type fakeFollowsRepo struct{ followers []models.Follow }
 
-func (f *fakeFollowsRepo) CreateFollow(tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
+func (f *fakeFollowsRepo) CreateFollow(ctx context.Context, tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
 	direction := input.Direction
 	if direction == "" {
 		direction = "follower"
@@ -111,18 +114,20 @@ func (f *fakeFollowsRepo) CreateFollow(tx *db.Tx, input repos.CreateFollowInput)
 	f.followers = append(f.followers, follow)
 	return &follow, nil
 }
-func (f *fakeFollowsRepo) AcceptFollow(tx *db.Tx, followID string) error { return nil }
-func (f *fakeFollowsRepo) CreateFollowing(tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
+func (f *fakeFollowsRepo) AcceptFollow(ctx context.Context, tx *db.Tx, followID string) error {
+	return nil
+}
+func (f *fakeFollowsRepo) CreateFollowing(ctx context.Context, tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
 	input.Direction = "following"
-	return f.CreateFollow(tx, input)
+	return f.CreateFollow(ctx, tx, input)
 }
-func (f *fakeFollowsRepo) AcceptFollowingByActor(tx *db.Tx, localAccountID string, remoteActor string) error {
+func (f *fakeFollowsRepo) AcceptFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
 	return nil
 }
-func (f *fakeFollowsRepo) RejectFollowingByActor(tx *db.Tx, localAccountID string, remoteActor string) error {
+func (f *fakeFollowsRepo) RejectFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
 	return nil
 }
-func (f *fakeFollowsRepo) DeleteFollowByActor(tx *db.Tx, localAccountID string, remoteActor string) error {
+func (f *fakeFollowsRepo) DeleteFollowByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
 	for i, follower := range f.followers {
 		if follower.LocalAccountID == localAccountID && follower.RemoteActor == remoteActor {
 			f.followers = append(f.followers[:i], f.followers[i+1:]...)
@@ -131,16 +136,16 @@ func (f *fakeFollowsRepo) DeleteFollowByActor(tx *db.Tx, localAccountID string, 
 	}
 	return nil
 }
-func (f *fakeFollowsRepo) ListFollowers(tx *db.Tx, localAccountID string) ([]models.Follow, error) {
+func (f *fakeFollowsRepo) ListFollowers(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error) {
 	return f.followers, nil
 }
-func (f *fakeFollowsRepo) ListFollowersPaged(tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Follow, error) {
+func (f *fakeFollowsRepo) ListFollowersPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Follow, error) {
 	return f.followers, nil
 }
-func (f *fakeFollowsRepo) CountFollowers(tx *db.Tx, localAccountID string) (int, error) {
+func (f *fakeFollowsRepo) CountFollowers(ctx context.Context, tx *db.Tx, localAccountID string) (int, error) {
 	return len(f.followers), nil
 }
-func (f *fakeFollowsRepo) ListFollowing(tx *db.Tx, localAccountID string) ([]models.Follow, error) {
+func (f *fakeFollowsRepo) ListFollowing(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error) {
 	res := []models.Follow{}
 	for _, follow := range f.followers {
 		if follow.Direction == "following" {
@@ -275,7 +280,7 @@ func TestUserProfileHandlerCreatesFollowing(t *testing.T) {
 	if resp.StatusCode != fiber.StatusCreated {
 		t.Fatalf("expected 201, got %d", resp.StatusCode)
 	}
-	following, err := follows.ListFollowing(nil, "account-1")
+	following, err := follows.ListFollowing(context.Background(), nil, "account-1")
 	if err != nil {
 		t.Fatalf("ListFollowing returned error: %v", err)
 	}

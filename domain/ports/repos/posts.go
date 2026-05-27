@@ -1,6 +1,8 @@
 package repos
 
+import "context"
+
 type PostsRepository interface {
 	// Main usecase is the nodeinfo.
-	GetLocalPostsCount() (int, error)
+	GetLocalPostsCount(ctx context.Context) (int, error)
 }
