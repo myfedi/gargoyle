@@ -5,6 +5,7 @@ import (
 	"os"
 
 	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
+	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/adapters/repos"
 	infra "github.com/myfedi/gargoyle/infrastructure"
 	"github.com/myfedi/gargoyle/infrastructure/db"
@@ -44,6 +45,7 @@ func main() {
 	activitiesRepo := repos.NewActivitiesRepo(sqlite.Bun)
 	followsRepo := repos.NewFollowsRepo(sqlite.Bun)
 	notesRepo := repos.NewNotesRepo(sqlite.Bun)
+	txProvider := dbAdapters.NewBunTxProvider(sqlite.Bun)
 
 	// sets up the go-fiber server
 	app := fiber.New()
@@ -77,6 +79,7 @@ func main() {
 	// set up userprofile handler
 	actorSerializer := apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{})
 	userProfileHandler := users.NewUsersWebHandler(users.UsersWebHandlerConfig{
+		TxProvider:         txProvider,
 		AccountsRepo:       accountsRepo,
 		ActivitiesRepo:     activitiesRepo,
 		FollowsRepo:        followsRepo,

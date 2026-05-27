@@ -8,7 +8,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -24,14 +23,15 @@ import (
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
 	"github.com/myfedi/gargoyle/domain/ports/activitypub"
+	"github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 	dbUtils "github.com/myfedi/gargoyle/infrastructure/db"
 	"github.com/myfedi/gargoyle/infrastructure/web"
-	"github.com/myfedi/gargoyle/utils"
 )
 
 type UsersWebHandlerConfig struct {
+	TxProvider         db.TxProvider
 	AccountsRepo       repos.AccountsRepo
 	ActivitiesRepo     repos.ActivitiesRepository
 	FollowsRepo        repos.FollowsRepository
@@ -43,8 +43,14 @@ type UsersWebHandlerConfig struct {
 }
 
 type UsersWebHandler struct {
-	cfg     UsersWebHandlerConfig
-	handler apUsecases.GetUserProfileUseCase
+	cfg                    UsersWebHandlerConfig
+	handler                apUsecases.GetUserProfileUseCase
+	getOutbox              apUsecases.GetOutboxUseCase
+	getFollowers           apUsecases.GetFollowersUseCase
+	getFollowing           apUsecases.GetFollowingUseCase
+	createFollowingUC      apUsecases.CreateFollowingUseCase
+	createOutboxActivityUC apUsecases.CreateOutboxActivityUseCase
+	handleInboxActivityUC  apUsecases.HandleInboxActivityUseCase
 }
 
 // NewWebfingerWebHandler creates a new Webfinger handler with the given dependencies.
@@ -53,9 +59,22 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		AccountsRepo: cfg.AccountsRepo,
 		Serializer:   cfg.Serializer,
 	})
+	flowCfg := apUsecases.ActivityPubFlowConfig{
+		TxProvider:     cfg.TxProvider,
+		AccountsRepo:   cfg.AccountsRepo,
+		ActivitiesRepo: cfg.ActivitiesRepo,
+		FollowsRepo:    cfg.FollowsRepo,
+		NotesRepo:      cfg.NotesRepo,
+	}
 	return &UsersWebHandler{
-		cfg:     cfg,
-		handler: handler,
+		cfg:                    cfg,
+		handler:                handler,
+		getOutbox:              apUsecases.NewGetOutboxUseCase(flowCfg),
+		getFollowers:           apUsecases.NewGetFollowersUseCase(flowCfg),
+		getFollowing:           apUsecases.NewGetFollowingUseCase(flowCfg),
+		createFollowingUC:      apUsecases.NewCreateFollowingUseCase(flowCfg),
+		createOutboxActivityUC: apUsecases.NewCreateOutboxActivityUseCase(flowCfg),
+		handleInboxActivityUC:  apUsecases.NewHandleInboxActivityUseCase(flowCfg),
 	}
 }
 
@@ -94,63 +113,28 @@ type orderedCollectionResponse struct {
 	OrderedItems []json.RawMessage `json:"orderedItems,omitempty"`
 }
 
-type activityEnvelope struct {
-	Context json.RawMessage `json:"@context,omitempty"`
-	ID      string          `json:"id,omitempty"`
-	Type    string          `json:"type"`
-	Actor   json.RawMessage `json:"actor"`
-	Object  json.RawMessage `json:"object,omitempty"`
-}
-
-func (h *UsersWebHandler) emptyCollection(id func(models.Account) string) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		account, derr := h.account(c.UserContext(), c.Params("username"))
-		if derr != nil {
-			return web.HandleDomainError(c, derr)
-		}
-		return sendActivityJSON(c, orderedCollectionResponse{
-			Context:    "https://www.w3.org/ns/activitystreams",
-			ID:         id(*account),
-			Type:       "OrderedCollection",
-			TotalItems: 0,
-		})
-	}
-}
-
 func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
-	account, derr := h.account(c.UserContext(), c.Params("username"))
+	limit, offset := pagination(c)
+	res, derr := h.getOutbox.GetOutbox(c.UserContext(), c.Params("username"), apUsecases.PaginationInput{Limit: limit, Offset: offset})
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	if h.cfg.ActivitiesRepo == nil {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "activities repository not configured"))
-	}
 
-	limit, offset := pagination(c)
-	activities, err := h.cfg.ActivitiesRepo.ListOutboxActivitiesPaged(c.UserContext(), nil, account.ID, limit, offset)
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-
-	items := make([]json.RawMessage, 0, len(activities))
-	for _, activity := range activities {
+	items := make([]json.RawMessage, 0, len(res.Activities))
+	for _, activity := range res.Activities {
 		items = append(items, json.RawMessage(activity.RawJSON))
 	}
 
-	id := account.URI + "/outbox"
-	if account.OutboxURI != nil {
-		id = *account.OutboxURI
-	}
-	total, err := h.cfg.ActivitiesRepo.CountOutboxActivities(c.UserContext(), nil, account.ID)
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+	id := res.Account.URI + "/outbox"
+	if res.Account.OutboxURI != nil {
+		id = *res.Account.OutboxURI
 	}
 	typeName := collectionType(c)
 	return sendActivityJSON(c, orderedCollectionResponse{
 		Context:      "https://www.w3.org/ns/activitystreams",
 		ID:           collectionID(c, id),
 		Type:         typeName,
-		TotalItems:   total,
+		TotalItems:   res.Total,
 		First:        firstPage(c, id),
 		PartOf:       partOf(c, id),
 		OrderedItems: items,
@@ -158,24 +142,17 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) followingCollection(c *fiber.Ctx) error {
-	account, derr := h.account(c.UserContext(), c.Params("username"))
+	res, derr := h.getFollowing.GetFollowing(c.UserContext(), c.Params("username"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	if h.cfg.FollowsRepo == nil {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "follows repository not configured"))
-	}
-	following, err := h.cfg.FollowsRepo.ListFollowing(c.UserContext(), nil, account.ID)
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-	items := make([]json.RawMessage, 0, len(following))
-	for _, follow := range following {
+	items := make([]json.RawMessage, 0, len(res.Following))
+	for _, follow := range res.Following {
 		items = append(items, json.RawMessage(fmt.Sprintf("%q", follow.RemoteActor)))
 	}
 	return sendActivityJSON(c, orderedCollectionResponse{
 		Context:      "https://www.w3.org/ns/activitystreams",
-		ID:           account.FollowingURI,
+		ID:           res.Account.FollowingURI,
 		Type:         "OrderedCollection",
 		TotalItems:   len(items),
 		OrderedItems: items,
@@ -183,13 +160,6 @@ func (h *UsersWebHandler) followingCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
-	account, derr := h.account(c.UserContext(), c.Params("username"))
-	if derr != nil {
-		return web.HandleDomainError(c, derr)
-	}
-	if h.cfg.FollowsRepo == nil || h.cfg.ActivitiesRepo == nil {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "follow repositories not configured"))
-	}
 	var input struct {
 		Actor string `json:"actor"`
 		Inbox string `json:"inbox"`
@@ -201,84 +171,53 @@ func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "actor is required"))
 	}
 	if input.Inbox == "" {
+		account, derr := h.createFollowingUC.GetLocalAccount(c.UserContext(), c.Params("username"))
+		if derr != nil {
+			return web.HandleDomainError(c, derr)
+		}
 		input.Inbox = h.fetchActorInbox(c.UserContext(), input.Actor, account)
 	}
-	followID, _ := dbUtils.NewULID()
-	followActivity := map[string]any{
-		"@context": "https://www.w3.org/ns/activitystreams",
-		"id":       account.URI + "/follows/" + followID,
-		"type":     "Follow",
-		"actor":    account.URI,
-		"object":   input.Actor,
-	}
-	raw, err := json.Marshal(followActivity)
+	followID, err := dbUtils.NewULID()
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
-	stored, err := h.cfg.ActivitiesRepo.CreateActivity(c.UserContext(), nil, repos.CreateActivityInput{LocalAccountID: account.ID, Direction: models.ActivityDirectionOutbox, Type: "Follow", Actor: account.URI, Object: input.Actor, RawJSON: string(raw)})
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+	res, derr := h.createFollowingUC.CreateFollowing(c.UserContext(), apUsecases.CreateFollowingInput{Username: c.Params("username"), Actor: input.Actor, Inbox: input.Inbox, FollowID: followID})
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
 	}
-	var inboxPtr *string
-	if input.Inbox != "" {
-		inboxPtr = &input.Inbox
-	}
-	if _, err := h.cfg.FollowsRepo.CreateFollowing(c.UserContext(), nil, repos.CreateFollowInput{LocalAccountID: account.ID, RemoteActor: input.Actor, RemoteInbox: inboxPtr, ActivityID: stored.ID}); err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-	if input.Inbox != "" {
-		h.deliverSigned(c.UserContext(), raw, input.Inbox, *account)
+	if res.Inbox != "" {
+		h.deliverSigned(c.UserContext(), res.RawJSON, res.Inbox, res.Account)
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }
 
 func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
-	account, derr := h.account(c.UserContext(), c.Params("username"))
+	limit, offset := pagination(c)
+	res, derr := h.getFollowers.GetFollowers(c.UserContext(), c.Params("username"), apUsecases.PaginationInput{Limit: limit, Offset: offset})
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	if h.cfg.FollowsRepo == nil {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "follows repository not configured"))
-	}
 
-	limit, offset := pagination(c)
-	followers, err := h.cfg.FollowsRepo.ListFollowersPaged(c.UserContext(), nil, account.ID, limit, offset)
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-
-	items := make([]json.RawMessage, 0, len(followers))
-	for _, follower := range followers {
+	items := make([]json.RawMessage, 0, len(res.Followers))
+	for _, follower := range res.Followers {
 		items = append(items, json.RawMessage(fmt.Sprintf("%q", follower.RemoteActor)))
 	}
 
-	total, err := h.cfg.FollowsRepo.CountFollowers(c.UserContext(), nil, account.ID)
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
 	typeName := collectionType(c)
 	return sendActivityJSON(c, orderedCollectionResponse{
 		Context:      "https://www.w3.org/ns/activitystreams",
-		ID:           collectionID(c, account.FollowersURI),
+		ID:           collectionID(c, res.Account.FollowersURI),
 		Type:         typeName,
-		TotalItems:   total,
-		First:        firstPage(c, account.FollowersURI),
-		PartOf:       partOf(c, account.FollowersURI),
+		TotalItems:   res.Total,
+		First:        firstPage(c, res.Account.FollowersURI),
+		PartOf:       partOf(c, res.Account.FollowersURI),
 		OrderedItems: items,
 	})
 }
 
 func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
-	account, derr := h.account(c.UserContext(), c.Params("username"))
-	if derr != nil {
-		return web.HandleDomainError(c, derr)
-	}
-	if h.cfg.ActivitiesRepo == nil {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "activities repository not configured"))
-	}
-
 	raw := append([]byte(nil), c.Body()...)
-	activity, derr := parseActivity(raw)
+	account, activity, derr := h.handleInboxActivityUC.InspectInboxActivity(c.UserContext(), c.Params("username"), raw)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -286,406 +225,37 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 
-	stored, err := h.cfg.ActivitiesRepo.CreateActivity(c.UserContext(), nil, repos.CreateActivityInput{
-		LocalAccountID: account.ID,
-		Direction:      models.ActivityDirectionInbox,
-		Type:           activity.Type,
-		Actor:          activity.Actor,
-		Object:         activity.Object,
-		RawJSON:        string(raw),
-	})
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+	inbox := activity.Inbox
+	if activity.Type == "Follow" && inbox == "" {
+		inbox = h.fetchActorInbox(c.UserContext(), activity.Actor, account)
 	}
-
-	switch activity.Type {
-	case "Follow":
-		if h.cfg.FollowsRepo == nil {
-			break
-		}
-		if activity.Object != account.URI {
-			return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "follow object does not match local actor"))
-		}
-		inbox := activity.Inbox
-		if inbox == "" {
-			inbox = h.fetchActorInbox(c.UserContext(), activity.Actor, account)
-		}
-		var inboxPtr *string
-		if inbox != "" {
-			inboxPtr = &inbox
-		}
-		follow, err := h.cfg.FollowsRepo.CreateFollow(c.UserContext(), nil, repos.CreateFollowInput{
-			LocalAccountID: account.ID,
-			RemoteActor:    activity.Actor,
-			RemoteInbox:    inboxPtr,
-			ActivityID:     stored.ID,
-		})
-		if err != nil {
-			return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-		}
-		if err := h.cfg.FollowsRepo.AcceptFollow(c.UserContext(), nil, follow.ID); err != nil {
-			return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-		}
-		if inbox != "" {
-			h.deliverAccept(c.UserContext(), *account, *follow, raw, inbox)
-		}
-	case "Create":
-		if h.cfg.NotesRepo != nil {
-			if note, ok := extractNote(raw); ok {
-				_, err := h.cfg.NotesRepo.CreateNote(c.UserContext(), nil, repos.CreateNoteInput{
-					LocalAccountID: account.ID,
-					ActivityID:     stored.ID,
-					URI:            note.URI,
-					Content:        utils.SanitizeHTML(note.Content),
-					PlainText:      utils.StripHTMLFromText(note.Content),
-					AttributedTo:   note.AttributedTo,
-					PublishedAt:    note.PublishedAt,
-				})
-				if err != nil {
-					return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-				}
-			}
-		}
-	case "Delete":
-		if h.cfg.NotesRepo != nil && activity.Object != "" {
-			if err := h.cfg.NotesRepo.DeleteNoteByURI(c.UserContext(), nil, activity.Object); err != nil {
-				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-			}
-		}
-	case "Update":
-		if h.cfg.NotesRepo != nil {
-			if note, ok := extractNoteObject(raw); ok {
-				if err := h.cfg.NotesRepo.UpdateNoteByURI(c.UserContext(), nil, note.URI, utils.SanitizeHTML(note.Content), utils.StripHTMLFromText(note.Content)); err != nil {
-					return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-				}
-			}
-		}
-	case "Accept":
-		if h.cfg.FollowsRepo != nil && activity.Actor != "" {
-			if err := h.cfg.FollowsRepo.AcceptFollowingByActor(c.UserContext(), nil, account.ID, activity.Actor); err != nil {
-				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-			}
-		}
-	case "Reject":
-		if h.cfg.FollowsRepo != nil && activity.Actor != "" {
-			if err := h.cfg.FollowsRepo.RejectFollowingByActor(c.UserContext(), nil, account.ID, activity.Actor); err != nil {
-				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-			}
-		}
-	case "Undo":
-		if h.cfg.FollowsRepo != nil {
-			remoteActor, err := extractUndoFollowActor(raw)
-			if err != nil {
-				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrBadRequest, err))
-			}
-			if remoteActor != "" {
-				if err := h.cfg.FollowsRepo.DeleteFollowByActor(c.UserContext(), nil, account.ID, remoteActor); err != nil {
-					return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-				}
-			}
-		}
+	res, derr := h.handleInboxActivityUC.HandleInboxActivity(c.UserContext(), apUsecases.HandleInboxActivityInput{Username: c.Params("username"), RawJSON: raw, Inbox: inbox})
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
 	}
-
+	if len(res.AcceptJSON) > 0 && res.AcceptInbox != "" {
+		h.deliverSigned(c.UserContext(), res.AcceptJSON, res.AcceptInbox, res.Account)
+	}
 	return c.SendStatus(fiber.StatusAccepted)
 }
 
 func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
-	account, derr := h.account(c.UserContext(), c.Params("username"))
-	if derr != nil {
-		return web.HandleDomainError(c, derr)
-	}
-	if h.cfg.ActivitiesRepo == nil {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "activities repository not configured"))
-	}
-
-	raw, derr := normalizeOutboxActivity(append([]byte(nil), c.Body()...), *account)
-	if derr != nil {
-		return web.HandleDomainError(c, derr)
-	}
-	activity, derr := parseActivity(raw)
-	if derr != nil {
-		return web.HandleDomainError(c, derr)
-	}
-	if activity.Actor != "" && activity.Actor != account.URI {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "activity actor does not match local actor"))
-	}
-
-	stored, err := h.cfg.ActivitiesRepo.CreateActivity(c.UserContext(), nil, repos.CreateActivityInput{
-		LocalAccountID: account.ID,
-		Direction:      models.ActivityDirectionOutbox,
-		Type:           activity.Type,
-		Actor:          account.URI,
-		Object:         activity.Object,
-		RawJSON:        string(raw),
-	})
+	activityID, err := dbUtils.NewULID()
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
-
-	if h.cfg.NotesRepo != nil {
-		if note, ok := extractNote(raw); ok {
-			_, err := h.cfg.NotesRepo.CreateNote(c.UserContext(), nil, repos.CreateNoteInput{
-				LocalAccountID: account.ID,
-				ActivityID:     stored.ID,
-				URI:            note.URI,
-				Content:        utils.SanitizeHTML(note.Content),
-				PlainText:      utils.StripHTMLFromText(note.Content),
-				AttributedTo:   note.AttributedTo,
-				PublishedAt:    note.PublishedAt,
-			})
-			if err != nil {
-				return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-			}
-		}
-	}
-
-	if h.cfg.FollowsRepo != nil {
-		followers, err := h.cfg.FollowsRepo.ListFollowers(c.UserContext(), nil, account.ID)
-		if err != nil {
-			return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-		}
-		for _, follower := range followers {
-			if follower.RemoteInbox != nil {
-				h.deliverSigned(c.UserContext(), raw, *follower.RemoteInbox, *account)
-			}
-		}
-	}
-
-	return c.SendStatus(fiber.StatusCreated)
-}
-
-type parsedActivity struct {
-	Type   string
-	Actor  string
-	Object string
-	Inbox  string
-}
-
-func parseActivity(raw []byte) (parsedActivity, *domainerrors.DomainError) {
-	var envelope activityEnvelope
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return parsedActivity{}, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
-	}
-	if envelope.Type == "" {
-		return parsedActivity{}, domainerrors.New(domainerrors.ErrBadRequest, "activity type is required")
-	}
-
-	actor, inbox, err := extractIDAndInbox(envelope.Actor)
-	if err != nil {
-		return parsedActivity{}, domainerrors.NewErr(domainerrors.ErrBadRequest, fmt.Errorf("invalid actor: %w", err))
-	}
-	object, _, err := extractIDAndInbox(envelope.Object)
-	if len(envelope.Object) > 0 && err != nil {
-		return parsedActivity{}, domainerrors.NewErr(domainerrors.ErrBadRequest, fmt.Errorf("invalid object: %w", err))
-	}
-
-	return parsedActivity{Type: envelope.Type, Actor: actor, Object: object, Inbox: inbox}, nil
-}
-
-func normalizeOutboxActivity(raw []byte, account models.Account) ([]byte, *domainerrors.DomainError) {
-	var doc map[string]any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	activityID, err := dbUtils.NewULID()
-	if err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-	}
 	objectID, err := dbUtils.NewULID()
 	if err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
-	typeValue, _ := doc["type"].(string)
-	if typeValue == "" {
-		if _, ok := doc["content"]; ok {
-			typeValue = "Note"
-			doc["type"] = typeValue
-		} else {
-			return nil, domainerrors.New(domainerrors.ErrBadRequest, "activity type is required")
-		}
+	res, derr := h.createOutboxActivityUC.CreateOutboxActivity(c.UserContext(), apUsecases.CreateOutboxActivityInput{Username: c.Params("username"), RawJSON: append([]byte(nil), c.Body()...), ActivityID: activityID, ObjectID: objectID})
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
 	}
-
-	if typeValue != "Create" {
-		object := doc
-		sanitizeObjectContent(object)
-		if _, ok := object["@context"]; !ok {
-			object["@context"] = "https://www.w3.org/ns/activitystreams"
-		}
-		if _, ok := object["id"]; !ok {
-			object["id"] = account.URI + "/objects/" + objectID
-		}
-		if _, ok := object["attributedTo"]; !ok {
-			object["attributedTo"] = account.URI
-		}
-		if _, ok := object["published"]; !ok {
-			object["published"] = now
-		}
-		if _, ok := object["to"]; !ok {
-			object["to"] = []string{"https://www.w3.org/ns/activitystreams#Public"}
-		}
-		if _, ok := object["cc"]; !ok {
-			object["cc"] = []string{account.FollowersURI}
-		}
-		doc = map[string]any{
-			"@context":  "https://www.w3.org/ns/activitystreams",
-			"id":        account.URI + "/activities/" + activityID,
-			"type":      "Create",
-			"actor":     account.URI,
-			"published": now,
-			"to":        object["to"],
-			"cc":        object["cc"],
-			"object":    object,
-		}
-	} else {
-		if object, ok := doc["object"].(map[string]any); ok {
-			sanitizeObjectContent(object)
-		}
-		if _, ok := doc["@context"]; !ok {
-			doc["@context"] = "https://www.w3.org/ns/activitystreams"
-		}
-		if _, ok := doc["id"]; !ok {
-			doc["id"] = account.URI + "/activities/" + activityID
-		}
-		doc["actor"] = account.URI
-		if _, ok := doc["published"]; !ok {
-			doc["published"] = now
-		}
-		if _, ok := doc["to"]; !ok {
-			doc["to"] = []string{"https://www.w3.org/ns/activitystreams#Public"}
-		}
-		if _, ok := doc["cc"]; !ok {
-			doc["cc"] = []string{account.FollowersURI}
-		}
-		if object, ok := doc["object"].(map[string]any); ok {
-			if _, ok := object["to"]; !ok {
-				object["to"] = doc["to"]
-			}
-			if _, ok := object["cc"]; !ok {
-				object["cc"] = doc["cc"]
-			}
-		}
+	for _, inbox := range res.FollowerInboxes {
+		h.deliverSigned(c.UserContext(), res.RawJSON, inbox, res.Account)
 	}
-
-	res, err := json.Marshal(doc)
-	if err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-	}
-	return res, nil
-}
-
-func sanitizeObjectContent(object map[string]any) {
-	if typ, _ := object["type"].(string); typ != "" && typ != "Note" {
-		return
-	}
-	if content, ok := object["content"].(string); ok {
-		object["content"] = utils.SanitizeHTML(content)
-	}
-}
-
-type extractedNote struct {
-	URI          string
-	Content      string
-	AttributedTo string
-	PublishedAt  time.Time
-}
-
-func extractNote(raw []byte) (extractedNote, bool) {
-	var activity struct {
-		Type   string          `json:"type"`
-		Object json.RawMessage `json:"object"`
-	}
-	if err := json.Unmarshal(raw, &activity); err != nil || activity.Type != "Create" || len(activity.Object) == 0 {
-		return extractedNote{}, false
-	}
-	var note struct {
-		ID           string `json:"id"`
-		Type         string `json:"type"`
-		Content      string `json:"content"`
-		AttributedTo string `json:"attributedTo"`
-		Published    string `json:"published"`
-	}
-	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
-		return extractedNote{}, false
-	}
-	publishedAt, err := time.Parse(time.RFC3339, note.Published)
-	if err != nil {
-		publishedAt = time.Now().UTC()
-	}
-	return extractedNote{
-		URI:          note.ID,
-		Content:      note.Content,
-		AttributedTo: note.AttributedTo,
-		PublishedAt:  publishedAt,
-	}, true
-}
-
-func extractNoteObject(raw []byte) (extractedNote, bool) {
-	var activity struct {
-		Object json.RawMessage `json:"object"`
-	}
-	if err := json.Unmarshal(raw, &activity); err != nil || len(activity.Object) == 0 {
-		return extractedNote{}, false
-	}
-	var note struct {
-		ID           string `json:"id"`
-		Type         string `json:"type"`
-		Content      string `json:"content"`
-		AttributedTo string `json:"attributedTo"`
-		Published    string `json:"published"`
-	}
-	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
-		return extractedNote{}, false
-	}
-	publishedAt, err := time.Parse(time.RFC3339, note.Published)
-	if err != nil {
-		publishedAt = time.Now().UTC()
-	}
-	return extractedNote{URI: note.ID, Content: note.Content, AttributedTo: note.AttributedTo, PublishedAt: publishedAt}, true
-}
-
-func extractUndoFollowActor(raw []byte) (string, error) {
-	var doc struct {
-		Object json.RawMessage `json:"object"`
-	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return "", err
-	}
-	var obj struct {
-		Type  string          `json:"type"`
-		Actor json.RawMessage `json:"actor"`
-	}
-	if err := json.Unmarshal(doc.Object, &obj); err != nil {
-		actor, _, actorErr := extractIDAndInbox(doc.Object)
-		if actorErr != nil {
-			return "", err
-		}
-		return actor, nil
-	}
-	if obj.Type != "Follow" {
-		return "", nil
-	}
-	actor, _, err := extractIDAndInbox(obj.Actor)
-	return actor, err
-}
-
-func extractIDAndInbox(raw json.RawMessage) (string, string, error) {
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-		return "", "", nil
-	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s, "", nil
-	}
-	var obj struct {
-		ID    string `json:"id"`
-		Inbox string `json:"inbox"`
-	}
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return "", "", err
-	}
-	return obj.ID, obj.Inbox, nil
+	return c.SendStatus(fiber.StatusCreated)
 }
 
 func collectionType(c *fiber.Ctx) string {
@@ -798,21 +368,6 @@ func (h *UsersWebHandler) fetchActorDocument(ctx context.Context, actor string, 
 		return remoteActorDocument{}, err
 	}
 	return actorDoc, nil
-}
-
-func (h *UsersWebHandler) deliverAccept(ctx context.Context, account models.Account, follow models.Follow, followRaw []byte, inbox string) {
-	accept := map[string]any{
-		"@context": "https://www.w3.org/ns/activitystreams",
-		"id":       account.URI + "/accepts/" + follow.ID,
-		"type":     "Accept",
-		"actor":    account.URI,
-		"object":   json.RawMessage(followRaw),
-	}
-	body, err := json.Marshal(accept)
-	if err != nil {
-		return
-	}
-	h.deliverSigned(ctx, body, inbox, account)
 }
 
 func (h *UsersWebHandler) deliverSigned(ctx context.Context, body []byte, inbox string, account models.Account) {
@@ -1009,19 +564,4 @@ func parseRSAPublicKey(pemStr string) (*rsa.PublicKey, error) {
 		return nil, errors.New("not an RSA public key")
 	}
 	return rsaPub, nil
-}
-
-func (h *UsersWebHandler) account(ctx context.Context, username string) (*models.Account, *domainerrors.DomainError) {
-	if username == "" {
-		return nil, domainerrors.New(domainerrors.ErrBadRequest, "missing username")
-	}
-
-	account, err := h.cfg.AccountsRepo.GetLocalAccountByUsername(ctx, nil, username)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, domainerrors.New(domainerrors.ErrNotFound, "no such username")
-		}
-		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-	}
-	return account, nil
 }

@@ -155,12 +155,28 @@ func (f *fakeFollowsRepo) ListFollowing(ctx context.Context, tx *db.Tx, localAcc
 	return res, nil
 }
 
+type fakeTx struct{}
+
+func (fakeTx) Commit() error   { return nil }
+func (fakeTx) Rollback() error { return nil }
+func (fakeTx) NewInsert() any  { return nil }
+func (fakeTx) NewSelect() any  { return nil }
+func (fakeTx) NewUpdate() any  { return nil }
+func (fakeTx) NewDelete() any  { return nil }
+
+type fakeTxProvider struct{}
+
+func (fakeTxProvider) RunInTx(ctx context.Context, options interface{}, runIn func(ctx context.Context, tx db.Tx) error) error {
+	return runIn(ctx, fakeTx{})
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepository, follows repos.FollowsRepository) *UsersWebHandler {
 	return NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:     fakeTxProvider{},
 		AccountsRepo:   accounts,
 		ActivitiesRepo: activities,
 		FollowsRepo:    follows,
@@ -240,6 +256,7 @@ func TestUserProfileHandlerCreatesNoteFromOutboxPost(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
 	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:      fakeTxProvider{},
 		AccountsRepo:    fakeAccountsRepo{},
 		ActivitiesRepo:  &fakeActivitiesRepo{},
 		FollowsRepo:     &fakeFollowsRepo{},
@@ -293,6 +310,7 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
 	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:      fakeTxProvider{},
 		AccountsRepo:    fakeAccountsRepo{},
 		ActivitiesRepo:  &fakeActivitiesRepo{},
 		FollowsRepo:     &fakeFollowsRepo{},
