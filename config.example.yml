@@ -1,5 +1,8 @@
 debug: false
 domain: example.org
+# Optional externally visible base URL when running behind a reverse proxy.
+# If omitted, Gargoyle builds this from tls/domain/port.
+# public_host: https://example.org
 port: 80
 tls: true
 sqlite:

@@ -1,0 +1,33 @@
+services:
+  gotosocial:
+    image: superseriousbusiness/gotosocial:latest
+    container_name: gts
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      GTS_HOST: gts.test
+      GTS_ACCOUNT_DOMAIN: gts.test
+      GTS_PROTOCOL: http
+      GTS_BIND_ADDRESS: 0.0.0.0
+      GTS_PORT: 8080
+
+      GTS_DB_TYPE: sqlite
+      GTS_DB_ADDRESS: /gotosocial/storage/sqlite.db
+
+      GTS_STORAGE_BACKEND: local
+      GTS_STORAGE_LOCAL_BASE_PATH: /gotosocial/storage
+
+      GTS_LETSENCRYPT_ENABLED: "false"
+
+      # Local compatibility testing only: allow GTS federation HTTP client
+      # to fetch Gargoyle through Docker's host-gateway/reserved IP mapping.
+      GTS_HTTP_CLIENT_ALLOW_IPS: "0.250.250.254/32"
+      GTS_HTTP_CLIENT_INSECURE_OUTGOING: "true"
+
+    volumes:
+      - ./gts-data:/gotosocial/storage
+
+    extra_hosts:
+      - "gargoyle.test:host-gateway"
+      - "gts.test:host-gateway"

@@ -36,7 +36,8 @@ go run cmd/web/server.go ./config.yml
     -   [x] `GET /users/:username`
     -   [x] ActivityPub JSON response
     -   [x] public key in actor document
-    -   [ ] compatibility-tested against common servers
+    -   [x] compatibility-tested against GoToSocial
+    -   [ ] compatibility-tested against Mastodon/Akkoma
 -   [ ] inbox
     -   [x] `POST /users/:username/inbox`
     -   [x] signed request requirement in server mode
@@ -78,11 +79,21 @@ Implemented ActivityPub endpoints:
 
 The server now has the basic pieces for federation: actor discovery, signed inbox requirement, follow acceptance, signed outbound delivery, stored notes, and outbox/followers collections.
 
+Compatibility notes:
+
+| Implementation | Discovery | Inbound Follow | Outbound Accept | Outbound Note | Inbound Mention Note | Unfollow |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| GoToSocial | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Mastodon | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| Akkoma/Pleroma | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+
+See [`compat/README.md`](compat/README.md) for the local GoToSocial compatibility setup and the validated flow checklist.
+
 Known gaps before claiming broad compatibility:
 
--   Mastodon/GoToSocial/Akkoma compatibility still needs real-world testing.
+-   Mastodon/Akkoma compatibility still needs real-world testing.
 -   Delivery is still in-process; there is no persistent delivery queue yet.
 -   Inbox side effects for `Announce` and `Like` are not implemented yet.
--   Outbound follow still needs real-server compatibility testing.
+-   Outbound follow still needs broader real-server compatibility testing.
 
 For more, see https://github.com/BasixKOR/awesome-activitypub

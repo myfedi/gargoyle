@@ -12,14 +12,19 @@ type SqliteConfig struct {
 }
 
 type Config struct {
-	Debug  bool          `mapstructure:"debug"`
-	Domain string        `mapstructure:"domain"`
-	Port   int           `mapstructure:"port"`
-	Tls    bool          `mapstructure:"tls"`
-	Sqlite *SqliteConfig `mapstructure:"sqlite"`
+	Debug      bool          `mapstructure:"debug"`
+	Domain     string        `mapstructure:"domain"`
+	PublicHost string        `mapstructure:"public_host"`
+	Port       int           `mapstructure:"port"`
+	Tls        bool          `mapstructure:"tls"`
+	Sqlite     *SqliteConfig `mapstructure:"sqlite"`
 }
 
 func (c Config) Host() string {
+	if c.PublicHost != "" {
+		return strings.TrimRight(c.PublicHost, "/")
+	}
+
 	var host string
 
 	if c.Tls {
@@ -91,6 +96,12 @@ func verifyConfig(cfg *Config) error {
 	}
 	if strings.HasSuffix(cfg.Domain, "/") {
 		cfg.Domain = strings.TrimRight(cfg.Domain, "/")
+	}
+	if cfg.PublicHost != "" {
+		if !strings.HasPrefix(cfg.PublicHost, "http://") && !strings.HasPrefix(cfg.PublicHost, "https://") {
+			return fmt.Errorf("public_host must include http:// or https://")
+		}
+		cfg.PublicHost = strings.TrimRight(cfg.PublicHost, "/")
 	}
 	if cfg.Port <= 0 || cfg.Port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")

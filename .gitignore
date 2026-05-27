@@ -1,4 +1,7 @@
 config.yml
 .env*
 *.db
+*.db-shm
+*.db-wal
+compat/gts-data/
 .vscode/

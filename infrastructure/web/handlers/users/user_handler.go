@@ -201,7 +201,7 @@ func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "actor is required"))
 	}
 	if input.Inbox == "" {
-		input.Inbox = h.fetchActorInbox(c.UserContext(), input.Actor)
+		input.Inbox = h.fetchActorInbox(c.UserContext(), input.Actor, account)
 	}
 	followID, _ := dbUtils.NewULID()
 	followActivity := map[string]any{
@@ -282,7 +282,7 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	if derr := h.verifyInboundSignature(c, raw, activity.Actor, h.cfg.RequireSignedInbox); derr != nil {
+	if derr := h.verifyInboundSignature(c, raw, activity.Actor, account, h.cfg.RequireSignedInbox); derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
 
@@ -308,7 +308,7 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		}
 		inbox := activity.Inbox
 		if inbox == "" {
-			inbox = h.fetchActorInbox(c.UserContext(), activity.Actor)
+			inbox = h.fetchActorInbox(c.UserContext(), activity.Actor, account)
 		}
 		var inboxPtr *string
 		if inbox != "" {
@@ -522,12 +522,20 @@ func normalizeOutboxActivity(raw []byte, account models.Account) ([]byte, *domai
 		if _, ok := object["published"]; !ok {
 			object["published"] = now
 		}
+		if _, ok := object["to"]; !ok {
+			object["to"] = []string{"https://www.w3.org/ns/activitystreams#Public"}
+		}
+		if _, ok := object["cc"]; !ok {
+			object["cc"] = []string{account.FollowersURI}
+		}
 		doc = map[string]any{
 			"@context":  "https://www.w3.org/ns/activitystreams",
 			"id":        account.URI + "/activities/" + activityID,
 			"type":      "Create",
 			"actor":     account.URI,
 			"published": now,
+			"to":        object["to"],
+			"cc":        object["cc"],
 			"object":    object,
 		}
 	} else {
@@ -543,6 +551,20 @@ func normalizeOutboxActivity(raw []byte, account models.Account) ([]byte, *domai
 		doc["actor"] = account.URI
 		if _, ok := doc["published"]; !ok {
 			doc["published"] = now
+		}
+		if _, ok := doc["to"]; !ok {
+			doc["to"] = []string{"https://www.w3.org/ns/activitystreams#Public"}
+		}
+		if _, ok := doc["cc"]; !ok {
+			doc["cc"] = []string{account.FollowersURI}
+		}
+		if object, ok := doc["object"].(map[string]any); ok {
+			if _, ok := object["to"]; !ok {
+				object["to"] = doc["to"]
+			}
+			if _, ok := object["cc"]; !ok {
+				object["cc"] = doc["cc"]
+			}
 		}
 	}
 
@@ -735,15 +757,15 @@ type remoteActorDocument struct {
 	} `json:"publicKey"`
 }
 
-func (h *UsersWebHandler) fetchActorInbox(ctx context.Context, actor string) string {
-	actorDoc, err := h.fetchActorDocument(ctx, actor)
+func (h *UsersWebHandler) fetchActorInbox(ctx context.Context, actor string, signer *models.Account) string {
+	actorDoc, err := h.fetchActorDocument(ctx, actor, signer)
 	if err != nil {
 		return ""
 	}
 	return actorDoc.Inbox
 }
 
-func (h *UsersWebHandler) fetchActorDocument(ctx context.Context, actor string) (remoteActorDocument, error) {
+func (h *UsersWebHandler) fetchActorDocument(ctx context.Context, actor string, signer *models.Account) (remoteActorDocument, error) {
 	if actor == "" {
 		return remoteActorDocument{}, errors.New("empty actor")
 	}
@@ -756,6 +778,9 @@ func (h *UsersWebHandler) fetchActorDocument(ctx context.Context, actor string) 
 		return remoteActorDocument{}, err
 	}
 	req.Header.Set("Accept", "application/activity+json")
+	if signer != nil {
+		signOutboundRequest(req, nil, *signer)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return remoteActorDocument{}, err
@@ -851,7 +876,7 @@ func signOutboundRequest(req *http.Request, body []byte, account models.Account)
 	req.Header.Set("Signature", fmt.Sprintf(`keyId="%s#main-key",algorithm="rsa-sha256",headers="(request-target) host date digest",signature="%s"`, account.URI, base64.StdEncoding.EncodeToString(sig)))
 }
 
-func (h *UsersWebHandler) verifyInboundSignature(c *fiber.Ctx, body []byte, actor string, required bool) *domainerrors.DomainError {
+func (h *UsersWebHandler) verifyInboundSignature(c *fiber.Ctx, body []byte, actor string, localAccount *models.Account, required bool) *domainerrors.DomainError {
 	sigHeader := c.Get("Signature")
 	if sigHeader == "" {
 		if required {
@@ -882,7 +907,7 @@ func (h *UsersWebHandler) verifyInboundSignature(c *fiber.Ctx, body []byte, acto
 		return domainerrors.New(domainerrors.ErrUnauthorized, "digest mismatch")
 	}
 
-	actorDoc, err := h.fetchActorDocument(c.UserContext(), actor)
+	actorDoc, err := h.fetchActorDocument(c.UserContext(), actor, localAccount)
 	if err != nil || actorDoc.PublicKey.PublicKeyPem == "" {
 		return domainerrors.New(domainerrors.ErrUnauthorized, "could not fetch actor public key")
 	}
