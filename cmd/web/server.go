@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/myfedi/gargoyle/adapters"
 	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/adapters/repos"
@@ -78,6 +79,7 @@ func main() {
 
 	// set up userprofile handler
 	actorSerializer := apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{})
+	contentSanitizer := adapters.NewContentSanitizer()
 	userProfileHandler := users.NewUsersWebHandler(users.UsersWebHandlerConfig{
 		TxProvider:         txProvider,
 		AccountsRepo:       accountsRepo,
@@ -85,6 +87,7 @@ func main() {
 		FollowsRepo:        followsRepo,
 		NotesRepo:          notesRepo,
 		Serializer:         actorSerializer,
+		ContentSanitizer:   contentSanitizer,
 		RequireSignedInbox: true,
 		DeliveryRetries:    3,
 	})

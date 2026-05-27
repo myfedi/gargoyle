@@ -7,7 +7,6 @@ import (
 
 	errors "github.com/myfedi/gargoyle/domain/models/domainerrors"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
-	"github.com/myfedi/gargoyle/utils"
 )
 
 type WebFingerHandlerConfig struct {
@@ -81,23 +80,14 @@ func (h *WebfingerHandler) HandleWebfinger(ctx context.Context, resource string)
 		return "", errors.New(errors.ErrNotFound, "username does not exist")
 	}
 
-	res, err := utils.NamedFormat(`{
-  "subject": "acct:{{.username}}@{{.domain}}",
+	return fmt.Sprintf(`{
+  "subject": "acct:%s@%s",
   "links": [
     {
       "rel": "self",
       "type": "application/activity+json",
-      "href": "{{.host}}/users/{{.username}}"
+      "href": "%s/users/%s"
     }
   ]
-}`, utils.FormatParams{
-		"username": username,
-		"domain":   h.cfg.Domain,
-		"host":     h.cfg.Host,
-	})
-	if err != nil {
-		return "", errors.NewErr(errors.ErrInternal, err)
-	}
-
-	return res, nil
+}`, username, h.cfg.Domain, h.cfg.Host, username), nil
 }

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/myfedi/gargoyle/adapters"
 	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/ports/db"
@@ -157,12 +158,10 @@ func (f *fakeFollowsRepo) ListFollowing(ctx context.Context, tx *db.Tx, localAcc
 
 type fakeTx struct{}
 
-func (fakeTx) Commit() error   { return nil }
-func (fakeTx) Rollback() error { return nil }
-func (fakeTx) NewInsert() any  { return nil }
-func (fakeTx) NewSelect() any  { return nil }
-func (fakeTx) NewUpdate() any  { return nil }
-func (fakeTx) NewDelete() any  { return nil }
+func (fakeTx) NewInsert() any { return nil }
+func (fakeTx) NewSelect() any { return nil }
+func (fakeTx) NewUpdate() any { return nil }
+func (fakeTx) NewDelete() any { return nil }
 
 type fakeTxProvider struct{}
 
@@ -176,12 +175,13 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { re
 
 func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepository, follows repos.FollowsRepository) *UsersWebHandler {
 	return NewUsersWebHandler(UsersWebHandlerConfig{
-		TxProvider:     fakeTxProvider{},
-		AccountsRepo:   accounts,
-		ActivitiesRepo: activities,
-		FollowsRepo:    follows,
-		NotesRepo:      &fakeNotesRepo{},
-		Serializer:     apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		TxProvider:       fakeTxProvider{},
+		AccountsRepo:     accounts,
+		ActivitiesRepo:   activities,
+		FollowsRepo:      follows,
+		NotesRepo:        &fakeNotesRepo{},
+		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer: adapters.NewContentSanitizer(),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
 		})},
@@ -256,13 +256,14 @@ func TestUserProfileHandlerCreatesNoteFromOutboxPost(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
 	handler := NewUsersWebHandler(UsersWebHandlerConfig{
-		TxProvider:      fakeTxProvider{},
-		AccountsRepo:    fakeAccountsRepo{},
-		ActivitiesRepo:  &fakeActivitiesRepo{},
-		FollowsRepo:     &fakeFollowsRepo{},
-		NotesRepo:       notes,
-		Serializer:      apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
-		DeliveryRetries: 1,
+		TxProvider:       fakeTxProvider{},
+		AccountsRepo:     fakeAccountsRepo{},
+		ActivitiesRepo:   &fakeActivitiesRepo{},
+		FollowsRepo:      &fakeFollowsRepo{},
+		NotesRepo:        notes,
+		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer: adapters.NewContentSanitizer(),
+		DeliveryRetries:  1,
 	})
 	handler.SetupUserProfileHandler(app)
 
@@ -310,13 +311,14 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
 	handler := NewUsersWebHandler(UsersWebHandlerConfig{
-		TxProvider:      fakeTxProvider{},
-		AccountsRepo:    fakeAccountsRepo{},
-		ActivitiesRepo:  &fakeActivitiesRepo{},
-		FollowsRepo:     &fakeFollowsRepo{},
-		NotesRepo:       notes,
-		Serializer:      apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
-		DeliveryRetries: 1,
+		TxProvider:       fakeTxProvider{},
+		AccountsRepo:     fakeAccountsRepo{},
+		ActivitiesRepo:   &fakeActivitiesRepo{},
+		FollowsRepo:      &fakeFollowsRepo{},
+		NotesRepo:        notes,
+		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer: adapters.NewContentSanitizer(),
+		DeliveryRetries:  1,
 	})
 	handler.SetupUserProfileHandler(app)
 

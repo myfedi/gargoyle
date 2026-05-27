@@ -3,8 +3,6 @@ package db
 import "context"
 
 type Tx interface {
-	Commit() error
-	Rollback() error
 	NewInsert() any
 	NewSelect() any
 	NewUpdate() any
