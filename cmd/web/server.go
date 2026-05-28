@@ -69,6 +69,7 @@ func main() {
 	activitiesRepo := repos.NewActivitiesRepo(sqlite.Bun)
 	followsRepo := repos.NewFollowsRepo(sqlite.Bun)
 	notesRepo := repos.NewNotesRepo(sqlite.Bun)
+	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
 	txProvider := dbAdapters.NewBunTxProvider(sqlite.Bun)
 
@@ -148,15 +149,16 @@ func main() {
 		ContentSanitizer: contentSanitizer,
 	}
 	mastodonAPIUC := mastodonUsecases.NewUseCase(mastodonUsecases.Config{
-		Host:              host,
-		Domain:            config.Domain,
-		ServerVersion:     infra.ServerVersion,
-		NotesRepo:         notesRepo,
-		FollowsRepo:       followsRepo,
-		IDGenerator:       adapters.NewULIDGenerator(),
-		RemoteResolver:    mastodon.NewRemoteAccountResolver(nil, mastodonRemoteURLExceptions),
-		CreateOutboxUC:    apUsecases.NewCreateOutboxActivityUseCase(mastodonFlowCfg),
-		CreateFollowingUC: apUsecases.NewCreateFollowingUseCase(mastodonFlowCfg),
+		Host:               host,
+		Domain:             config.Domain,
+		ServerVersion:      infra.ServerVersion,
+		NotesRepo:          notesRepo,
+		FollowsRepo:        followsRepo,
+		RemoteAccountsRepo: remoteAccountsRepo,
+		IDGenerator:        adapters.NewULIDGenerator(),
+		RemoteResolver:     mastodon.NewRemoteAccountResolver(nil, mastodonRemoteURLExceptions),
+		CreateOutboxUC:     apUsecases.NewCreateOutboxActivityUseCase(mastodonFlowCfg),
+		CreateFollowingUC:  apUsecases.NewCreateFollowingUseCase(mastodonFlowCfg),
 	})
 	mastodon.NewAPIHandler(mastodon.APIHandlerConfig{OAuth: oauthUC, API: mastodonAPIUC, QueueDelivery: userProfileHandler.QueueDelivery}).Setup(app)
 

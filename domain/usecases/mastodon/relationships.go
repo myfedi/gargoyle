@@ -69,9 +69,12 @@ func (u UseCase) FollowerAccounts(ctx context.Context, localAccount *models.Acco
 func (u UseCase) resolveFollowActors(ctx context.Context, localAccount *models.Account, follows []models.Follow) ([]models.Account, *domainerrors.DomainError) {
 	accounts := make([]models.Account, 0, len(follows))
 	for _, follow := range follows {
-		remote, err := u.cfg.RemoteResolver.ResolveAccount(ctx, follow.RemoteActor, localAccount)
+		remote, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, follow.RemoteActor)
 		if err != nil {
-			continue
+			remote, err = u.resolveAndCacheRemoteAccount(ctx, follow.RemoteActor, localAccount)
+			if err != nil {
+				continue
+			}
 		}
 		accounts = append(accounts, *remote)
 	}

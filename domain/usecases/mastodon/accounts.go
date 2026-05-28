@@ -21,7 +21,7 @@ func (u UseCase) SearchAccounts(ctx context.Context, account *models.Account, qu
 	if query == "" {
 		return []models.Account{}, nil
 	}
-	remote, err := u.cfg.RemoteResolver.ResolveAccount(ctx, query, account)
+	remote, err := u.resolveAndCacheRemoteAccount(ctx, query, account)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
 	}
@@ -38,7 +38,7 @@ func (u UseCase) FollowAccount(ctx context.Context, localAccount *models.Account
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
 	}
-	remote, err := u.cfg.RemoteResolver.ResolveAccount(ctx, actor, localAccount)
+	remote, err := u.resolveAndCacheRemoteAccount(ctx, actor, localAccount)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
 	}
@@ -64,7 +64,7 @@ func (u UseCase) UnfollowAccount(ctx context.Context, localAccount *models.Accou
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
 	}
-	remote, err := u.cfg.RemoteResolver.ResolveAccount(ctx, actor, localAccount)
+	remote, err := u.resolveAndCacheRemoteAccount(ctx, actor, localAccount)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
 	}
@@ -80,4 +80,12 @@ func (u UseCase) UnfollowAccount(ctx context.Context, localAccount *models.Accou
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return &FollowAccountResult{Account: *localAccount, RawJSON: raw, Inbox: remote.InboxURI}, nil
+}
+
+func (u UseCase) resolveAndCacheRemoteAccount(ctx context.Context, query string, signer *models.Account) (*models.Account, error) {
+	remote, err := u.cfg.RemoteResolver.ResolveAccount(ctx, query, signer)
+	if err != nil {
+		return nil, err
+	}
+	return u.cfg.RemoteAccountsRepo.UpsertRemoteAccount(ctx, nil, *remote)
 }

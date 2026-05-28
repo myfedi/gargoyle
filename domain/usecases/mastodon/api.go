@@ -21,15 +21,16 @@ type RemoteAccountResolver interface {
 // Config wires Mastodon-compatible client API workflows to repositories,
 // application ports, and lower-level ActivityPub use cases.
 type Config struct {
-	Host              string
-	Domain            string
-	ServerVersion     string
-	NotesRepo         repos.NotesRepository
-	FollowsRepo       repos.FollowsRepository
-	IDGenerator       ports.IDGenerator
-	RemoteResolver    RemoteAccountResolver
-	CreateOutboxUC    apUsecases.CreateOutboxActivityUseCase
-	CreateFollowingUC apUsecases.CreateFollowingUseCase
+	Host               string
+	Domain             string
+	ServerVersion      string
+	NotesRepo          repos.NotesRepository
+	FollowsRepo        repos.FollowsRepository
+	RemoteAccountsRepo repos.RemoteAccountsRepository
+	IDGenerator        ports.IDGenerator
+	RemoteResolver     RemoteAccountResolver
+	CreateOutboxUC     apUsecases.CreateOutboxActivityUseCase
+	CreateFollowingUC  apUsecases.CreateFollowingUseCase
 }
 
 // UseCase groups the Mastodon-compatible client API workflows. Individual
@@ -67,6 +68,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.FollowsRepo == nil {
 		panic("mastodon API use case requires FollowsRepo")
+	}
+	if cfg.RemoteAccountsRepo == nil {
+		panic("mastodon API use case requires RemoteAccountsRepo")
 	}
 	if cfg.IDGenerator == nil {
 		panic("mastodon API use case requires IDGenerator")
