@@ -148,14 +148,21 @@ func (u UseCase) Authorize(ctx context.Context, input AuthorizeInput) (string, *
 
 func (u UseCase) IssueToken(ctx context.Context, input IssueTokenInput) (*IssuedToken, *derrors.DomainError) {
 	app, err := u.cfg.OAuthRepo.GetApplicationByClientID(ctx, nil, input.ClientID)
-	if err != nil || app.ClientSecret != input.ClientSecret {
-		return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+	if err != nil {
+		return nil, derrors.New(derrors.ErrUnauthorized, "invalid client_id")
 	}
 	if input.GrantType == "password" {
+		if app.ClientSecret != input.ClientSecret {
+			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+		}
 		return u.issuePasswordToken(ctx, app, input)
 	}
 	if input.GrantType == "authorization_code" {
-		return u.issueAuthorizationCodeToken(ctx, app, input)
+		clientSecretProvided := input.ClientSecret != ""
+		if clientSecretProvided && app.ClientSecret != input.ClientSecret {
+			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+		}
+		return u.issueAuthorizationCodeToken(ctx, app, input, clientSecretProvided)
 	}
 	return nil, derrors.New(derrors.ErrBadRequest, "unsupported grant_type")
 }
@@ -175,10 +182,13 @@ func (u UseCase) issuePasswordToken(ctx context.Context, app *models.OAuthApplic
 	return u.issueAccessToken(ctx, app.ID, user.ID, scope)
 }
 
-func (u UseCase) issueAuthorizationCodeToken(ctx context.Context, app *models.OAuthApplication, input IssueTokenInput) (*IssuedToken, *derrors.DomainError) {
+func (u UseCase) issueAuthorizationCodeToken(ctx context.Context, app *models.OAuthApplication, input IssueTokenInput, clientSecretProvided bool) (*IssuedToken, *derrors.DomainError) {
 	code, err := u.cfg.OAuthRepo.GetAuthorizationCodeByHash(ctx, nil, TokenHash(input.Code))
 	if err != nil || code.ApplicationID != app.ID || code.RedirectURI != input.RedirectURI || code.UsedAt != nil || time.Now().After(code.ExpiresAt) {
 		return nil, derrors.New(derrors.ErrUnauthorized, "invalid authorization code")
+	}
+	if !clientSecretProvided && code.CodeChallenge == "" {
+		return nil, derrors.New(derrors.ErrUnauthorized, "public clients must use PKCE")
 	}
 	if !validPKCE(code.CodeChallenge, code.CodeChallengeMethod, input.CodeVerifier) {
 		return nil, derrors.New(derrors.ErrUnauthorized, "invalid code verifier")
