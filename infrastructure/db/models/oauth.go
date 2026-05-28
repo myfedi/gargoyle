@@ -4,9 +4,12 @@ import (
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
+	"github.com/uptrace/bun"
 )
 
 type OAuthApplication struct {
+	bun.BaseModel `bun:"table:oauth_applications"`
+
 	ID           string    `bun:"type:CHAR(26),pk,nullzero,notnull,unique"`
 	CreatedAt    time.Time `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 	UpdatedAt    time.Time `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
@@ -23,6 +26,8 @@ func (a OAuthApplication) ToModel() models.OAuthApplication {
 }
 
 type OAuthAccessToken struct {
+	bun.BaseModel `bun:"table:oauth_access_tokens"`
+
 	ID            string     `bun:"type:CHAR(26),pk,nullzero,notnull,unique"`
 	CreatedAt     time.Time  `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 	UpdatedAt     time.Time  `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
@@ -38,6 +43,8 @@ func (t OAuthAccessToken) ToModel() models.OAuthAccessToken {
 }
 
 type OAuthAuthorizationCode struct {
+	bun.BaseModel `bun:"table:oauth_authorization_codes"`
+
 	ID                  string    `bun:"type:CHAR(26),pk,nullzero,notnull,unique"`
 	CreatedAt           time.Time `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 	UpdatedAt           time.Time `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
