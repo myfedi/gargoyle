@@ -1,20 +1,30 @@
+import { accountHref } from "@/lib/routes";
+import type { MastodonMention } from "@/types/mastodon";
+
 type StatusContentProps = {
   html: string;
+  mentions?: MastodonMention[];
 };
 
 type ContentPart =
   | { type: "text"; value: string }
-  | { type: "link"; value: string; href: string };
+  | { type: "link"; value: string; href: string; internal: boolean };
 
-export function StatusContent({ html }: StatusContentProps) {
-  const parts = parseStatusContent(html);
+export function StatusContent({ html, mentions = [] }: StatusContentProps) {
+  const parts = parseStatusContent(html, mentions);
 
   return (
     <p className="whitespace-pre-wrap text-sm leading-6">
       {parts.map((part, index) => {
         if (part.type === "link") {
           return (
-            <a key={`${part.href}-${index}`} className="text-primary hover:underline" href={part.href} target="_blank" rel="noreferrer">
+            <a
+              key={`${part.href}-${index}`}
+              className="text-primary hover:underline"
+              href={part.href}
+              target={part.internal ? undefined : "_blank"}
+              rel={part.internal ? undefined : "noreferrer"}
+            >
               {part.value}
             </a>
           );
@@ -25,9 +35,10 @@ export function StatusContent({ html }: StatusContentProps) {
   );
 }
 
-function parseStatusContent(html: string): ContentPart[] {
+function parseStatusContent(html: string, mentions: MastodonMention[]): ContentPart[] {
   const document = new DOMParser().parseFromString(html, "text/html");
   const parts: ContentPart[] = [];
+  const mentionLookup = createMentionLookup(mentions);
 
   function walk(node: Node) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -38,8 +49,11 @@ function parseStatusContent(html: string): ContentPart[] {
     if (node instanceof HTMLAnchorElement) {
       const text = node.textContent ?? "";
       const href = node.href;
-      if (text && isSafeHttpUrl(href)) {
-        parts.push({ type: "link", value: text, href });
+      const mention = findMentionForLink(text, href, mentionLookup);
+      if (mention) {
+        parts.push({ type: "link", value: text || `@${mention.acct}`, href: accountHref(mention.id), internal: true });
+      } else if (text && isSafeHttpUrl(href)) {
+        parts.push({ type: "link", value: text, href, internal: false });
       } else {
         pushText(parts, text);
       }
@@ -59,7 +73,36 @@ function parseStatusContent(html: string): ContentPart[] {
   }
 
   document.body.childNodes.forEach(walk);
-  return linkifyMentions(parts).filter((part) => part.value.length > 0);
+  return linkifyMentions(parts, mentionLookup).filter((part) => part.value.length > 0);
+}
+
+type MentionLookup = {
+  byAcct: Map<string, MastodonMention>;
+  byUrl: Map<string, MastodonMention>;
+};
+
+function createMentionLookup(mentions: MastodonMention[]): MentionLookup {
+  const byAcct = new Map<string, MastodonMention>();
+  const byUrl = new Map<string, MastodonMention>();
+
+  for (const mention of mentions) {
+    byAcct.set(normalizeMentionAcct(mention.acct), mention);
+    byAcct.set(normalizeMentionAcct(mention.username), mention);
+    byAcct.set(normalizeMentionAcct(`@${mention.acct}`), mention);
+    byAcct.set(normalizeMentionAcct(`@${mention.username}`), mention);
+    if (mention.url) {
+      byUrl.set(normalizeUrl(mention.url), mention);
+    }
+  }
+
+  return { byAcct, byUrl };
+}
+
+function findMentionForLink(text: string, href: string, lookup: MentionLookup) {
+  const byUrl = lookup.byUrl.get(normalizeUrl(href));
+  if (byUrl) return byUrl;
+
+  return lookup.byAcct.get(normalizeMentionAcct(text));
 }
 
 function pushText(parts: ContentPart[], value: string) {
@@ -74,35 +117,55 @@ function pushText(parts: ContentPart[], value: string) {
   parts.push({ type: "text", value });
 }
 
-function linkifyMentions(parts: ContentPart[]) {
+function linkifyMentions(parts: ContentPart[], lookup: MentionLookup) {
   return parts.flatMap((part): ContentPart[] => {
     if (part.type !== "text") {
       return [part];
     }
 
     const result: ContentPart[] = [];
-    const mentionPattern = /(^|\s)(@[a-zA-Z0-9_][a-zA-Z0-9_.-]*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+    const mentionPattern = /(^|\s)(@[a-zA-Z0-9_][a-zA-Z0-9_.-]*(?:@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})?)/g;
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
     while ((match = mentionPattern.exec(part.value))) {
       const prefix = match[1] ?? "";
-      const mention = match[2] ?? "";
+      const mentionText = match[2] ?? "";
       const mentionStart = match.index + prefix.length;
 
       pushText(result, part.value.slice(lastIndex, mentionStart));
-      const [, handle, host] = mention.match(/^@(.+)@([^@]+)$/) ?? [];
-      if (handle && host) {
-        result.push({ type: "link", value: mention, href: `https://${host}/@${handle}` });
+      const mention = lookup.byAcct.get(normalizeMentionAcct(mentionText));
+      if (mention) {
+        result.push({ type: "link", value: mentionText, href: accountHref(mention.id), internal: true });
       } else {
-        pushText(result, mention);
+        const [, handle, host] = mentionText.match(/^@(.+)@([^@]+)$/) ?? [];
+        if (handle && host) {
+          result.push({ type: "link", value: mentionText, href: `https://${host}/@${handle}`, internal: false });
+        } else {
+          pushText(result, mentionText);
+        }
       }
-      lastIndex = mentionStart + mention.length;
+      lastIndex = mentionStart + mentionText.length;
     }
 
     pushText(result, part.value.slice(lastIndex));
     return result;
   });
+}
+
+function normalizeMentionAcct(value: string) {
+  return value.trim().replace(/^@/, "").toLowerCase();
+}
+
+function normalizeUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.search = "";
+    return url.toString().replace(/\/$/, "").toLowerCase();
+  } catch {
+    return value.trim().replace(/\/$/, "").toLowerCase();
+  }
 }
 
 function isSafeHttpUrl(value: string) {

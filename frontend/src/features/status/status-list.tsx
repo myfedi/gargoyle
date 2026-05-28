@@ -85,7 +85,7 @@ export function StatusList({
                   </div>
                   {displayedStatus.spoiler_text ? <p className="mt-2 text-sm font-medium">{displayedStatus.spoiler_text}</p> : null}
                   <div className="mt-2">
-                    <StatusContent html={displayedStatus.content} />
+                    <StatusContent html={displayedStatus.content} mentions={displayedStatus.mentions} />
                   </div>
                   <StatusStats status={displayedStatus} />
                   <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />

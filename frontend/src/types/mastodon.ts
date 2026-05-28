@@ -42,6 +42,13 @@ export type MastodonMediaAttachment = {
   description?: string;
 };
 
+export type MastodonMention = {
+  id: string;
+  username: string;
+  acct: string;
+  url: string;
+};
+
 export type MastodonStatus = {
   id: string;
   uri: string;
@@ -59,6 +66,7 @@ export type MastodonStatus = {
   reblogged?: boolean;
   bookmarked?: boolean;
   media_attachments?: MastodonMediaAttachment[];
+  mentions?: MastodonMention[];
   in_reply_to_id?: string | null;
   in_reply_to_account_id?: string | null;
   reblog?: MastodonStatus | null;

@@ -161,7 +161,7 @@ function ConversationRow({ conversation, currentAccountId, isBusy, onMarkRead, o
               <time dateTime={lastStatus.created_at}>{formatDateTime(lastStatus.created_at)}</time>
             </a>
           </div>
-          <StatusContent html={lastStatus.content} />
+          <StatusContent html={lastStatus.content} mentions={lastStatus.mentions} />
         </div>
       ) : null}
     </article>
