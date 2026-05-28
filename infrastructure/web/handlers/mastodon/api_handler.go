@@ -45,6 +45,8 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/accounts/relationships", h.relationships)
 	app.Get("/api/v1/notifications", h.notifications)
 	app.Post("/api/v1/notifications/clear", h.clearNotifications)
+	app.Post("/api/v1/notifications/:id/dismiss", h.dismissNotification)
+	app.Delete("/api/v1/notifications/:id", h.dismissNotification)
 	app.Get("/api/v1/favourites", h.favouriteStatuses)
 	app.Get("/api/v1/bookmarks", h.bookmarkedStatuses)
 	app.Get("/api/v1/preferences", h.preferences)
@@ -497,6 +499,17 @@ func (h APIHandler) clearNotifications(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	if derr := h.api.ClearNotifications(c.UserContext(), principal.Account); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(map[string]any{})
+}
+
+func (h APIHandler) dismissNotification(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if derr := h.api.DismissNotification(c.UserContext(), principal.Account, c.Params("id")); derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
 	return c.JSON(map[string]any{})

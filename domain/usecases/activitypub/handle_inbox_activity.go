@@ -84,6 +84,11 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 			if err := u.cfg.FollowsRepo.AcceptFollow(ctx, &tx, follow.ID); err != nil {
 				return err
 			}
+			if u.cfg.SocialRepo != nil {
+				if _, err := u.cfg.SocialRepo.CreateNotification(ctx, &tx, account.ID, activity.Actor, "follow", nil); err != nil {
+					return err
+				}
+			}
 			acceptJSON, err = MarshalAccept(*account, *follow, input.RawJSON)
 			return err
 		case "Create":
@@ -93,8 +98,11 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 					if err := enqueueMissingReplyFetch(ctx, u.cfg.FetchJobsRepo, &tx, account.ID, note, replyID); err != nil {
 						return err
 					}
-					_, err := u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: stored.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
-					return err
+					created, err := u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: stored.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
+					if err != nil {
+						return err
+					}
+					return u.createStatusNotification(ctx, &tx, *account, note, created.ID, replyID)
 				}
 			}
 		case "Delete":
@@ -116,6 +124,10 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 					return u.cfg.NotesRepo.UpdateNoteByURI(ctx, &tx, note.URI, u.cfg.ContentSanitizer.SanitizeHTML(note.Content), u.cfg.ContentSanitizer.StripHTMLFromText(note.Content))
 				}
 			}
+		case "Like":
+			return u.createInteractionNotification(ctx, &tx, *account, activity, "favourite")
+		case "Announce":
+			return u.createInteractionNotification(ctx, &tx, *account, activity, "reblog")
 		case "Accept":
 			if u.cfg.FollowsRepo != nil && activity.Actor != "" {
 				if err := validateFollowResponseObject(input.RawJSON, account.URI, activity.Actor); err != nil {
@@ -151,6 +163,60 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return &HandleInboxActivityResult{Account: *account, Activity: activity, AcceptJSON: acceptJSON, AcceptInbox: acceptInbox}, nil
+}
+
+func (u *HandleInboxActivityUseCase) createStatusNotification(ctx context.Context, tx *db.Tx, account models.Account, note ExtractedNote, statusID string, replyID *string) error {
+	if u.cfg.SocialRepo == nil {
+		return nil
+	}
+	statusIDPtr := &statusID
+	if noteMentionsLocalActor(note, account.URI) {
+		_, err := u.cfg.SocialRepo.CreateNotification(ctx, tx, account.ID, note.AttributedTo, "mention", statusIDPtr)
+		return err
+	}
+	if replyID == nil {
+		return nil
+	}
+	parent, err := u.cfg.NotesRepo.GetNoteByID(ctx, tx, *replyID)
+	if err != nil {
+		return nil
+	}
+	if parent.AttributedTo != account.URI {
+		return nil
+	}
+	_, err = u.cfg.SocialRepo.CreateNotification(ctx, tx, account.ID, note.AttributedTo, "status", statusIDPtr)
+	return err
+}
+
+func noteMentionsLocalActor(note ExtractedNote, localActor string) bool {
+	for _, uri := range note.MentionURIs {
+		if uri == localActor {
+			return true
+		}
+	}
+	for _, uri := range note.To {
+		if uri == localActor {
+			return true
+		}
+	}
+	for _, uri := range note.CC {
+		if uri == localActor {
+			return true
+		}
+	}
+	return false
+}
+
+func (u *HandleInboxActivityUseCase) createInteractionNotification(ctx context.Context, tx *db.Tx, account models.Account, activity ParsedActivity, notificationType string) error {
+	if u.cfg.SocialRepo == nil || u.cfg.NotesRepo == nil || activity.Object == "" {
+		return nil
+	}
+	note, err := u.cfg.NotesRepo.GetNoteByURI(ctx, tx, activity.Object)
+	if err != nil || note.AttributedTo != account.URI {
+		return nil
+	}
+	_, err = u.cfg.SocialRepo.CreateNotification(ctx, tx, account.ID, activity.Actor, notificationType, &note.ID)
+	return err
 }
 
 func (u *HandleInboxActivityUseCase) ensureRemoteNoteOwner(ctx context.Context, tx *db.Tx, uri string, actor string) error {

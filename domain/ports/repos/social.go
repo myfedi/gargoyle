@@ -14,5 +14,6 @@ type SocialRepository interface {
 	ListInteractions(ctx context.Context, tx *db.Tx, localAccountID string, typ string, limit int) ([]models.StatusInteraction, error)
 	CreateNotification(ctx context.Context, tx *db.Tx, localAccountID string, actorAccountID string, typ string, statusID *string) (*models.Notification, error)
 	ListNotifications(ctx context.Context, tx *db.Tx, localAccountID string, limit int) ([]models.Notification, error)
+	DeleteNotification(ctx context.Context, tx *db.Tx, localAccountID string, notificationID string) error
 	ClearNotifications(ctx context.Context, tx *db.Tx, localAccountID string) error
 }

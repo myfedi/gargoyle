@@ -72,6 +72,9 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
 	}
+	if derr := u.createLocalStatusNotifications(ctx, account, note.ID, mentions); derr != nil {
+		return nil, derr
+	}
 	note.Visibility = visibility
 	note.Sensitive = input.Sensitive
 	note.SpoilerText = input.SpoilerText
@@ -172,6 +175,18 @@ func applyVisibilityAddressing(noteDoc map[string]any, visibility string, accoun
 		noteDoc["to"] = append([]string{public}, mentionURIs...)
 		noteDoc["cc"] = []string{account.FollowersURI}
 	}
+}
+
+func (u UseCase) createLocalStatusNotifications(ctx context.Context, actor *models.Account, statusID string, mentions []models.Account) *domainerrors.DomainError {
+	for _, mention := range mentions {
+		if mention.Domain != nil || mention.ID == actor.ID {
+			continue
+		}
+		if _, err := u.cfg.SocialRepo.CreateNotification(ctx, nil, mention.ID, actor.URI, "mention", &statusID); err != nil {
+			return domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+	}
+	return nil
 }
 
 func mentionInboxes(mentions []models.Account) []string {

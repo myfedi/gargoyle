@@ -116,6 +116,15 @@ func (r *SocialRepo) ListNotifications(ctx context.Context, tx *dbPorts.Tx, loca
 	}
 	return res, nil
 }
+func (r *SocialRepo) DeleteNotification(ctx context.Context, tx *dbPorts.Tx, localAccountID string, notificationID string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewDelete().Model((*dbModels.Notification)(nil)).Where("local_account_id = ?", localAccountID).Where("id = ?", notificationID).Exec(ctx)
+	return err
+}
+
 func (r *SocialRepo) ClearNotifications(ctx context.Context, tx *dbPorts.Tx, localAccountID string) error {
 	db, err := r.resolveDB(tx)
 	if err != nil {

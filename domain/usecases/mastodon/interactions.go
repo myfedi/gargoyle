@@ -40,6 +40,11 @@ func (u UseCase) interact(ctx context.Context, account *models.Account, id strin
 	if _, err := u.cfg.SocialRepo.CreateInteraction(ctx, nil, account.ID, id, typ); err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+	if item.Account.Domain == nil && item.Account.ID != account.ID {
+		if _, err := u.cfg.SocialRepo.CreateNotification(ctx, nil, item.Account.ID, account.URI, typ, &id); err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+	}
 	payload, derr := u.interactionPayload(ctx, account, item, apType, false)
 	if derr != nil {
 		return nil, derr

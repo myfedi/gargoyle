@@ -2,6 +2,7 @@ package mastodon
 
 import (
 	"context"
+	"strings"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -23,10 +24,7 @@ func (u UseCase) Notifications(ctx context.Context, account *models.Account, lim
 	}
 	items := make([]NotificationItem, 0, len(notifications))
 	for _, notification := range notifications {
-		actor, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, notification.ActorAccountID)
-		if err != nil {
-			actor = account
-		}
+		actor := u.notificationActor(ctx, account, notification.ActorAccountID)
 		var status *TimelineItem
 		if notification.StatusID != nil {
 			status, _ = u.GetStatus(ctx, account, *notification.StatusID)
@@ -35,6 +33,39 @@ func (u UseCase) Notifications(ctx context.Context, account *models.Account, lim
 	}
 	return items, nil
 }
+func (u UseCase) notificationActor(ctx context.Context, localAccount *models.Account, actorURI string) *models.Account {
+	if actorURI == localAccount.URI || actorURI == localAccount.ID {
+		return localAccount
+	}
+	localPrefix := strings.TrimRight(u.cfg.Host, "/") + "/users/"
+	if strings.HasPrefix(actorURI, localPrefix) {
+		username := strings.TrimPrefix(actorURI, localPrefix)
+		if account, err := u.cfg.AccountsRepo.GetLocalAccountByUsername(ctx, nil, username); err == nil {
+			return account
+		}
+	}
+	if actor, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, actorURI); err == nil {
+		return actor
+	}
+	if actor, err := u.resolveAndCacheRemoteAccount(ctx, actorURI, localAccount); err == nil {
+		return actor
+	}
+	return &models.Account{ID: AccountIDForRemoteActor(actorURI), Username: actorURI, URI: actorURI, InboxURI: "", PublicKey: "", ActorType: models.ActorTypePerson}
+}
+
+func (u UseCase) DismissNotification(ctx context.Context, account *models.Account, notificationID string) *domainerrors.DomainError {
+	if derr := requireAccount(account); derr != nil {
+		return derr
+	}
+	if notificationID == "" {
+		return domainerrors.New(domainerrors.ErrBadRequest, "notification id is required")
+	}
+	if err := u.cfg.SocialRepo.DeleteNotification(ctx, nil, account.ID, notificationID); err != nil {
+		return domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return nil
+}
+
 func (u UseCase) ClearNotifications(ctx context.Context, account *models.Account) *domainerrors.DomainError {
 	if derr := requireAccount(account); derr != nil {
 		return derr

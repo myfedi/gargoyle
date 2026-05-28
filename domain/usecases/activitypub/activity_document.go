@@ -144,7 +144,25 @@ type ExtractedNote struct {
 	SpoilerText  string
 	AttributedTo string
 	InReplyToURI *string
+	MentionURIs  []string
+	To           []string
+	CC           []string
 	PublishedAt  time.Time
+}
+
+type extractedNoteJSON struct {
+	ID           string          `json:"id"`
+	Type         string          `json:"type"`
+	Content      string          `json:"content"`
+	Summary      string          `json:"summary"`
+	Visibility   string          `json:"visibility"`
+	Sensitive    bool            `json:"sensitive"`
+	AttributedTo string          `json:"attributedTo"`
+	InReplyTo    *string         `json:"inReplyTo"`
+	To           json.RawMessage `json:"to"`
+	CC           json.RawMessage `json:"cc"`
+	Tag          json.RawMessage `json:"tag"`
+	Published    string          `json:"published"`
 }
 
 func normalizedExtractedVisibility(visibility string) string {
@@ -165,25 +183,11 @@ func ExtractNote(raw []byte) (ExtractedNote, bool) {
 	if err := json.Unmarshal(raw, &activity); err != nil || activity.Type != "Create" || len(activity.Object) == 0 {
 		return ExtractedNote{}, false
 	}
-	var note struct {
-		ID           string  `json:"id"`
-		Type         string  `json:"type"`
-		Content      string  `json:"content"`
-		Summary      string  `json:"summary"`
-		Visibility   string  `json:"visibility"`
-		Sensitive    bool    `json:"sensitive"`
-		AttributedTo string  `json:"attributedTo"`
-		InReplyTo    *string `json:"inReplyTo"`
-		Published    string  `json:"published"`
-	}
+	var note extractedNoteJSON
 	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
 		return ExtractedNote{}, false
 	}
-	publishedAt, err := time.Parse(time.RFC3339, note.Published)
-	if err != nil {
-		publishedAt = time.Now().UTC()
-	}
-	return ExtractedNote{URI: note.ID, Content: note.Content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, PublishedAt: publishedAt}, true
+	return extractedNoteFromJSON(note), true
 }
 
 // ExtractNoteObject returns a Note from an activity object, used for Updates.
@@ -194,25 +198,64 @@ func ExtractNoteObject(raw []byte) (ExtractedNote, bool) {
 	if err := json.Unmarshal(raw, &activity); err != nil || len(activity.Object) == 0 {
 		return ExtractedNote{}, false
 	}
-	var note struct {
-		ID           string  `json:"id"`
-		Type         string  `json:"type"`
-		Content      string  `json:"content"`
-		Summary      string  `json:"summary"`
-		Visibility   string  `json:"visibility"`
-		Sensitive    bool    `json:"sensitive"`
-		AttributedTo string  `json:"attributedTo"`
-		InReplyTo    *string `json:"inReplyTo"`
-		Published    string  `json:"published"`
-	}
+	var note extractedNoteJSON
 	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
 		return ExtractedNote{}, false
 	}
+	return extractedNoteFromJSON(note), true
+}
+
+func extractedNoteFromJSON(note extractedNoteJSON) ExtractedNote {
 	publishedAt, err := time.Parse(time.RFC3339, note.Published)
 	if err != nil {
 		publishedAt = time.Now().UTC()
 	}
-	return ExtractedNote{URI: note.ID, Content: note.Content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, PublishedAt: publishedAt}, true
+	return ExtractedNote{URI: note.ID, Content: note.Content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: extractStringList(note.To), CC: extractStringList(note.CC), PublishedAt: publishedAt}
+}
+
+func extractStringList(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var single string
+	if err := json.Unmarshal(raw, &single); err == nil && single != "" {
+		return []string{single}
+	}
+	var list []string
+	if err := json.Unmarshal(raw, &list); err == nil {
+		return list
+	}
+	return nil
+}
+
+func extractMentionURIs(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var tags []struct {
+		Type string `json:"type"`
+		Href string `json:"href"`
+	}
+	if err := json.Unmarshal(raw, &tags); err != nil {
+		var tag struct {
+			Type string `json:"type"`
+			Href string `json:"href"`
+		}
+		if err := json.Unmarshal(raw, &tag); err != nil {
+			return nil
+		}
+		tags = []struct {
+			Type string `json:"type"`
+			Href string `json:"href"`
+		}{tag}
+	}
+	mentions := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if tag.Type == "Mention" && tag.Href != "" {
+			mentions = append(mentions, tag.Href)
+		}
+	}
+	return mentions
 }
 
 // ExtractedFollowObject is the normalized Follow object embedded in Accept/Reject activities.

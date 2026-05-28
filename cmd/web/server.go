@@ -154,6 +154,7 @@ func main() {
 		FollowsRepo:      followsRepo,
 		NotesRepo:        notesRepo,
 		FetchJobsRepo:    jobsRepo,
+		SocialRepo:       socialRepo,
 		ContentSanitizer: contentSanitizer,
 	}
 	mastodonAPIUC := mastodonUsecases.NewUseCase(mastodonUsecases.Config{
