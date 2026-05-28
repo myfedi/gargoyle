@@ -4,7 +4,6 @@ import { useAuth } from "@/app/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
-import { AccountCombobox, normalizeRemoteQuery } from "@/features/accounts/account-combobox";
 import { EmptyState, FieldRow, FeaturePage, Panel } from "@/features/shared";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
@@ -13,7 +12,7 @@ import { accountHref } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
 import type { MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
 
-type ProfileTab = "profile" | "posts" | "bookmarks" | "favourites" | "following" | "followers" | "find";
+type ProfileTab = "profile" | "posts" | "bookmarks" | "favourites" | "following" | "followers";
 
 type AccountSearchResult = {
   account: MastodonAccount;
@@ -27,7 +26,6 @@ const profileTabs = [
   { value: "favourites", label: "Favourites" },
   { value: "following", label: "Following" },
   { value: "followers", label: "Followers" },
-  { value: "find", label: "Find people" },
 ] as const;
 
 export function MyProfilePage() {
@@ -37,10 +35,7 @@ export function MyProfilePage() {
   const [statuses, setStatuses] = useState<MastodonStatus[]>([]);
   const [following, setFollowing] = useState<AccountSearchResult[]>([]);
   const [followers, setFollowers] = useState<AccountSearchResult[]>([]);
-  const [searchResults, setSearchResults] = useState<AccountSearchResult[]>([]);
-  const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isResolving, setIsResolving] = useState(false);
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
@@ -83,33 +78,6 @@ export function MyProfilePage() {
     void loadProfile();
   }, [loadProfile]);
 
-  const searchKnownAccounts = useCallback(async (searchQuery: string) => {
-    if (!api) return [];
-    return api.searchKnownAccounts(searchQuery);
-  }, [api]);
-
-  async function loadSearchResults(accounts: MastodonAccount[]) {
-    if (!api) return;
-    const ids = accounts.map((item) => item.id);
-    const relationships = ids.length > 0 ? await api.relationships(ids) : [];
-    const byId = new Map(relationships.map((relationship) => [relationship.id, relationship]));
-    setSearchResults(accounts.map((item) => ({ account: item, relationship: byId.get(item.id) })));
-  }
-
-  async function resolveRemoteAccount(searchQuery: string) {
-    if (!api || !searchQuery.trim()) return;
-    setIsResolving(true);
-    setError(null);
-
-    try {
-      const search = await api.searchAccounts(normalizeRemoteQuery(searchQuery));
-      await loadSearchResults(search.accounts);
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Could not look up account.");
-    } finally {
-      setIsResolving(false);
-    }
-  }
 
   async function runAction(action: StatusAction, status: MastodonStatus) {
     if (!api) return;
@@ -184,7 +152,6 @@ export function MyProfilePage() {
     const update = (current: AccountSearchResult[]) => current.map((item) => item.account.id === accountId ? { ...item, relationship } : item);
     setFollowing(update);
     setFollowers(update);
-    setSearchResults(update);
   }
 
   return (
@@ -232,22 +199,6 @@ export function MyProfilePage() {
       );
     }
 
-    if (activeTab === "find") {
-      return (
-        <div className="space-y-5">
-          <AccountCombobox
-            value={query}
-            onValueChange={setQuery}
-            searchKnownAccounts={searchKnownAccounts}
-            isResolving={isResolving}
-            placeholder="Search known accounts or enter @user@example.org"
-            onSelect={(item) => void loadSearchResults([item])}
-            onResolve={(searchQuery) => void resolveRemoteAccount(searchQuery)}
-          />
-          <AccountList accounts={searchResults} busyAccountId={busyAccountId} onFollow={followAccount} onUnfollow={unfollowAccount} emptyTitle="No results" />
-        </div>
-      );
-    }
 
     const accounts = activeTab === "following" ? following : followers;
     return <AccountList accounts={accounts} busyAccountId={busyAccountId} onFollow={followAccount} onUnfollow={unfollowAccount} emptyTitle={activeTab === "following" ? "Not following anyone" : "No followers"} />;

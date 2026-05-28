@@ -1,8 +1,7 @@
 import {
   Mail,
   MessageSquareText,
-  Repeat2,
-  Settings,
+  Search,
   UserCircle,
 } from "lucide-react";
 
@@ -21,6 +20,12 @@ export const navItems: NavItem[] = [
     icon: MessageSquareText,
   },
   {
+    href: "#/search",
+    label: "Search",
+    description: "Find people",
+    icon: Search,
+  },
+  {
     href: "#/profile",
     label: "My profile",
     description: "Profile, follows, bookmarks, and favourites",
@@ -28,20 +33,8 @@ export const navItems: NavItem[] = [
   },
   {
     href: "#/direct",
-    label: "Direct",
+    label: "DMs",
     description: "Private conversations",
     icon: Mail,
-  },
-  {
-    href: "#/delivery",
-    label: "Delivery",
-    description: "Remote delivery attempts and retries",
-    icon: Repeat2,
-  },
-  {
-    href: "#/settings",
-    label: "Settings",
-    description: "Instance and account preferences",
-    icon: Settings,
   },
 ];
