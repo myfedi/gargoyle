@@ -21,3 +21,11 @@ A cleaner long-term design is adapter-level error classification, e.g. a reposit
 ## Private key storage
 
 Local actor private keys are currently stored as PEM text in the database. This keeps federation signing simple, but a hardened deployment should use encryption-at-rest or a dedicated key management system.
+
+## Outgoing pending follow request listing
+
+Gargoyle persists outgoing follow requests while they are pending, and exposes their per-account state through the Mastodon-compatible relationships endpoint (`/api/v1/accounts/relationships`) as `requested: true`.
+
+It intentionally does not expose pending outgoing follows through `/api/v1/accounts/:id/following`, because that endpoint conventionally represents accepted follows. Mastodon-compatible APIs generally expose incoming follow requests for approval, but do not provide a standard global list of outgoing pending follow requests.
+
+A UI that needs to display pending state should query relationships for accounts it is already rendering, rather than depend on a Gargoyle-specific pending-follow list.
