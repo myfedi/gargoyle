@@ -28,6 +28,29 @@ export function createMastodonApi(accessToken: string) {
         body: JSON.stringify(input),
       });
     },
+    account(id: string) {
+      return client.request<MastodonAccount>(`/api/v1/accounts/${encodeURIComponent(id)}`);
+    },
+    accountStatuses(id: string, options: { limit?: number; maxId?: string } = {}) {
+      const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+      if (options.maxId) {
+        params.set("max_id", options.maxId);
+      }
+      return client.request<MastodonStatus[]>(`/api/v1/accounts/${encodeURIComponent(id)}/statuses?${params.toString()}`);
+    },
+    status(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}`);
+    },
+    statusContext(id: string) {
+      return client.request<{ ancestors: MastodonStatus[]; descendants: MastodonStatus[] }>(
+        `/api/v1/statuses/${encodeURIComponent(id)}/context`,
+      );
+    },
+    deleteStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+    },
     searchAccounts(query: string) {
       const params = new URLSearchParams({ q: query, type: "accounts", resolve: "true" });
       return client.request<MastodonSearchResults>(`/api/v2/search?${params.toString()}`);

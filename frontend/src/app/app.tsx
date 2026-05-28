@@ -5,12 +5,14 @@ import { LogOut, Menu } from "lucide-react";
 import { AuthProvider, useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { LoginPage } from "@/features/auth/login-page";
+import { AccountPage } from "@/features/accounts/account-page";
 import { DeliveryPage } from "@/features/delivery/delivery-page";
 import { FollowsPage } from "@/features/follows/follows-page";
 import { InboxPage } from "@/features/inbox/inbox-page";
 import { OutboxPage } from "@/features/outbox/outbox-page";
 import { PostsPage } from "@/features/posts/posts-page";
 import { SettingsPage } from "@/features/settings/settings-page";
+import { StatusPage } from "@/features/status/status-page";
 import { ApiError } from "@/lib/api";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { cn } from "@/lib/utils";
@@ -41,7 +43,8 @@ function AuthenticatedApp() {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const route = useHashRoute();
-  const Page = routes[route as keyof typeof routes] ?? PostsPage;
+  const RoutePage = routes[route as keyof typeof routes];
+  const page = renderRoute(route, RoutePage);
   const currentItem = useMemo(
     () => navItems.find((item) => item.href === `#${route}`) ?? navItems[0],
     [route],
@@ -195,12 +198,25 @@ function AuthenticatedApp() {
           </header>
 
           <main id="main-content" className="w-full px-4 py-6 md:px-8 md:py-8 xl:px-10">
-            <Page />
+            {page}
           </main>
         </div>
       </div>
     </div>
   );
+}
+
+function renderRoute(route: string, RoutePage: React.ComponentType | undefined) {
+  if (route.startsWith("/accounts/")) {
+    return <AccountPage route={route} />;
+  }
+
+  if (route.startsWith("/statuses/")) {
+    return <StatusPage route={route} />;
+  }
+
+  const Page = RoutePage ?? PostsPage;
+  return <Page />;
 }
 
 function useHashRoute() {

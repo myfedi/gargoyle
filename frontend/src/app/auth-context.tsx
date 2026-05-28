@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(nextSession);
         setError(null);
         setStatus("authenticated");
-        window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+        window.history.replaceState({}, document.title, "/");
       } catch (caughtError) {
         if (cancelled) {
           return;
