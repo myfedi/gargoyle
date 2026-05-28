@@ -61,10 +61,12 @@ export function StatusList({
                       {status.account.display_name || status.account.username}
                     </a>
                     <p className="text-xs text-muted-foreground">@{status.account.acct}</p>
+                    <StatusMeta status={status} />
                     <a className="ml-auto text-xs text-muted-foreground hover:underline" href={statusHref(status.id)}>
                       <time dateTime={status.created_at}>{formatDateTime(status.created_at)}</time>
                     </a>
                   </div>
+                  {status.spoiler_text ? <p className="mt-2 text-sm font-medium">{status.spoiler_text}</p> : null}
                   <div className="mt-2">
                     <StatusContent html={status.content} />
                   </div>
@@ -152,6 +154,16 @@ export function StatusList({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function StatusMeta({ status }: { status: MastodonStatus }) {
+  return (
+    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="rounded-full bg-secondary px-2 py-0.5 capitalize text-secondary-foreground">{status.visibility}</span>
+      {status.sensitive ? <span className="rounded-full bg-secondary px-2 py-0.5 text-secondary-foreground">Sensitive</span> : null}
+      {status.spoiler_text ? <span className="rounded-full bg-secondary px-2 py-0.5 text-secondary-foreground">CW</span> : null}
+    </div>
   );
 }
 

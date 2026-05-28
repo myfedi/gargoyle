@@ -1,4 +1,4 @@
-import { ComposeForm } from "@/features/status/compose-form";
+import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import type { MastodonStatus } from "@/types/mastodon";
 
 type ReplyComposerProps = {
@@ -6,7 +6,7 @@ type ReplyComposerProps = {
   isSubmitting: boolean;
   error?: string | null;
   onCancel: () => void;
-  onSubmit: (text: string) => Promise<void>;
+  onSubmit: (values: ComposeValues) => Promise<void>;
 };
 
 export function ReplyComposer({ status, isSubmitting, error, onCancel, onSubmit }: ReplyComposerProps) {
@@ -25,7 +25,7 @@ export function ReplyComposer({ status, isSubmitting, error, onCancel, onSubmit 
         initialText={prefillMention(status)}
         isSubmitting={isSubmitting}
         error={error}
-        onSubmit={(values) => onSubmit(values.status)}
+        onSubmit={onSubmit}
       />
     </div>
   );

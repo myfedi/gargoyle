@@ -88,6 +88,10 @@ export function createMastodonApi(accessToken: string) {
         method: "DELETE",
       });
     },
+    searchKnownAccounts(query: string, limit = 8) {
+      const params = new URLSearchParams({ q: query, limit: String(limit) });
+      return client.request<MastodonAccount[]>(`/api/v1/accounts/search?${params.toString()}`);
+    },
     searchAccounts(query: string) {
       const params = new URLSearchParams({ q: query, type: "accounts", resolve: "true" });
       return client.request<MastodonSearchResults>(`/api/v2/search?${params.toString()}`);

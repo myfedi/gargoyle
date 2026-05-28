@@ -117,7 +117,7 @@ export function PostsPage() {
     }
   }
 
-  async function submitReply(text: string) {
+  async function submitReply(values: ComposeValues) {
     if (!api || !replyingTo) {
       return;
     }
@@ -126,7 +126,14 @@ export function PostsPage() {
     setReplyError(null);
 
     try {
-      const createdStatus = await api.createStatus({ status: text, visibility: "public", in_reply_to_id: replyingTo.id });
+      const createdStatus = await api.createStatus({
+        status: values.status,
+        visibility: values.visibility,
+        sensitive: values.sensitive,
+        spoiler_text: values.spoilerText,
+        media_ids: values.mediaIds,
+        in_reply_to_id: replyingTo.id,
+      });
       setReplyingTo(null);
       if (activeTimeline === "home") {
         setStatuses((current) => [createdStatus, ...current]);

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
+import type { ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
 import { StatusList } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
@@ -78,7 +79,7 @@ export function StatusPage({ route }: StatusPageProps) {
     }
   }
 
-  async function submitReply(text: string) {
+  async function submitReply(values: ComposeValues) {
     if (!api || !replyingTo) {
       return;
     }
@@ -87,7 +88,14 @@ export function StatusPage({ route }: StatusPageProps) {
     setReplyError(null);
 
     try {
-      await api.createStatus({ status: text, visibility: "public", in_reply_to_id: replyingTo.id });
+      await api.createStatus({
+        status: values.status,
+        visibility: values.visibility,
+        sensitive: values.sensitive,
+        spoiler_text: values.spoilerText,
+        media_ids: values.mediaIds,
+        in_reply_to_id: replyingTo.id,
+      });
       setReplyingTo(null);
       await loadStatus();
     } catch (caughtError) {

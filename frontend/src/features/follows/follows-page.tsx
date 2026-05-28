@@ -1,12 +1,10 @@
-import type React from "react";
-import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
+import { AccountCombobox, normalizeRemoteQuery } from "@/features/accounts/account-combobox";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { htmlToPlainText } from "@/lib/text";
@@ -79,9 +77,29 @@ export function FollowsPage() {
     };
   }, [api]);
 
-  async function searchAccounts(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!api || !query.trim()) {
+  const searchKnownAccounts = useCallback(
+    async (searchQuery: string) => {
+      if (!api) {
+        return [];
+      }
+      return api.searchKnownAccounts(searchQuery);
+    },
+    [api],
+  );
+
+  async function loadSearchResults(accounts: MastodonAccount[]) {
+    if (!api) {
+      return;
+    }
+
+    const ids = accounts.map((account) => account.id);
+    const relationships = ids.length > 0 ? await api.relationships(ids) : [];
+    const relationshipsById = new Map(relationships.map((relationship) => [relationship.id, relationship]));
+    setResults(accounts.map((account) => ({ account, relationship: relationshipsById.get(account.id) })));
+  }
+
+  async function resolveRemoteAccount(searchQuery: string) {
+    if (!api || !searchQuery.trim()) {
       return;
     }
 
@@ -89,11 +107,8 @@ export function FollowsPage() {
     setError(null);
 
     try {
-      const search = await api.searchAccounts(normalizeAccountQuery(query));
-      const ids = search.accounts.map((account) => account.id);
-      const relationships = ids.length > 0 ? await api.relationships(ids) : [];
-      const relationshipsById = new Map(relationships.map((relationship) => [relationship.id, relationship]));
-      setResults(search.accounts.map((account) => ({ account, relationship: relationshipsById.get(account.id) })));
+      const search = await api.searchAccounts(normalizeRemoteQuery(searchQuery));
+      await loadSearchResults(search.accounts);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not search accounts.");
     } finally {
@@ -177,21 +192,15 @@ export function FollowsPage() {
 
           {activeTab === "search" ? (
             <div className="space-y-5">
-              <form className="flex flex-col gap-3 sm:flex-row" onSubmit={(event) => void searchAccounts(event)}>
-                <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                  <Input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    className="pl-9"
-                    placeholder="@user@example.org or actor URL"
-                    aria-label="Search accounts"
-                  />
-                </div>
-                <Button type="submit" disabled={isSearching || !query.trim()}>
-                  {isSearching ? "Searching..." : "Search"}
-                </Button>
-              </form>
+              <AccountCombobox
+                value={query}
+                onValueChange={setQuery}
+                searchKnownAccounts={searchKnownAccounts}
+                isResolving={isSearching}
+                placeholder="Search known accounts or enter @user@example.org"
+                onSelect={(account) => void loadSearchResults([account])}
+                onResolve={(searchQuery) => void resolveRemoteAccount(searchQuery)}
+              />
               <AccountList
                 accounts={results}
                 emptyTitle="No results"
@@ -282,19 +291,6 @@ function AccountList({ accounts, emptyTitle, emptyDescription, busyAccountId, on
       })}
     </div>
   );
-}
-
-function normalizeAccountQuery(value: string) {
-  const query = value.trim();
-  if (query.startsWith("http://") || query.startsWith("https://") || query.startsWith("@")) {
-    return query;
-  }
-
-  if (/^[^@\s]+@[^@\s]+$/.test(query)) {
-    return `@${query}`;
-  }
-
-  return query;
 }
 
 function LoadingRows() {
