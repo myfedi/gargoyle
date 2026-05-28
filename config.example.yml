@@ -7,3 +7,29 @@ port: 80
 tls: true
 sqlite:
   uri: "file::memory:?cache=shared"
+
+# Optional CORS support for browser UIs hosted on a different origin.
+# Prefer same-origin reverse proxying when possible. If this list is empty or
+# omitted, CORS is disabled. Wildcard origins are intentionally rejected.
+web:
+  cors:
+    allowed_origins: []
+    # Example for local Vite dev:
+    # allowed_origins:
+    #   - http://localhost:5173
+    allowed_methods:
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
+      - OPTIONS
+    allowed_headers:
+      - Authorization
+      - Content-Type
+    allow_credentials: false
+
+activitypub:
+  body_limit_bytes: 1048576
+  allow_http_remote: false
+  delivery_queue_size: 128

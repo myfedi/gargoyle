@@ -89,6 +89,22 @@ Compatibility notes:
 
 See [`compat/README.md`](compat/README.md) for the local GoToSocial compatibility setup and the validated flow checklist.
 
+### Browser UI hosting and CORS
+
+Mastodon-compatible browser UIs work best when served from the same origin as Gargoyle through a reverse proxy. If the UI is hosted on a separate origin, configure an explicit CORS allowlist:
+
+```yaml
+web:
+  cors:
+    allowed_origins:
+      - http://localhost:5173
+    allowed_methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+    allowed_headers: [Authorization, Content-Type]
+    allow_credentials: false
+```
+
+Wildcard CORS origins are rejected; only trusted UI origins should be listed.
+
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.

@@ -17,6 +17,17 @@ type ActivityPubConfig struct {
 	DeliveryQueueSize int  `mapstructure:"delivery_queue_size"`
 }
 
+type CORSConfig struct {
+	AllowedOrigins   []string `mapstructure:"allowed_origins"`
+	AllowedMethods   []string `mapstructure:"allowed_methods"`
+	AllowedHeaders   []string `mapstructure:"allowed_headers"`
+	AllowCredentials bool     `mapstructure:"allow_credentials"`
+}
+
+type WebConfig struct {
+	CORS CORSConfig `mapstructure:"cors"`
+}
+
 type Config struct {
 	Debug       bool              `mapstructure:"debug"`
 	Domain      string            `mapstructure:"domain"`
@@ -25,6 +36,7 @@ type Config struct {
 	Tls         bool              `mapstructure:"tls"`
 	Sqlite      *SqliteConfig     `mapstructure:"sqlite"`
 	ActivityPub ActivityPubConfig `mapstructure:"activitypub"`
+	Web         WebConfig         `mapstructure:"web"`
 }
 
 func (c Config) Host() string {
@@ -78,6 +90,9 @@ func NewConfig(configFile string) (*Config, error) {
 	viper.SetDefault("activitypub.body_limit_bytes", 1<<20)
 	viper.SetDefault("activitypub.allow_http_remote", false)
 	viper.SetDefault("activitypub.delivery_queue_size", 128)
+	viper.SetDefault("web.cors.allowed_methods", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
+	viper.SetDefault("web.cors.allowed_headers", []string{"Authorization", "Content-Type"})
+	viper.SetDefault("web.cors.allow_credentials", false)
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
@@ -92,6 +107,32 @@ func NewConfig(configFile string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+func verifyCORSConfig(cfg CORSConfig) error {
+	for _, origin := range cfg.AllowedOrigins {
+		if strings.TrimSpace(origin) == "" {
+			return fmt.Errorf("web.cors.allowed_origins cannot contain empty origins")
+		}
+		if origin == "*" {
+			return fmt.Errorf("web.cors.allowed_origins must not use wildcard origins")
+		}
+		if !strings.HasPrefix(origin, "http://") && !strings.HasPrefix(origin, "https://") {
+			return fmt.Errorf("web.cors.allowed_origins entries must include http:// or https://")
+		}
+		if strings.HasSuffix(origin, "/") {
+			return fmt.Errorf("web.cors.allowed_origins entries must not end with a slash")
+		}
+	}
+	if len(cfg.AllowedOrigins) > 0 {
+		if len(cfg.AllowedMethods) == 0 {
+			return fmt.Errorf("web.cors.allowed_methods cannot be empty when CORS is enabled")
+		}
+		if len(cfg.AllowedHeaders) == 0 {
+			return fmt.Errorf("web.cors.allowed_headers cannot be empty when CORS is enabled")
+		}
+	}
+	return nil
 }
 
 func verifyConfig(cfg *Config) error {
@@ -121,6 +162,9 @@ func verifyConfig(cfg *Config) error {
 	}
 	if cfg.ActivityPub.DeliveryQueueSize <= 0 {
 		return fmt.Errorf("activitypub.delivery_queue_size must be greater than 0")
+	}
+	if err := verifyCORSConfig(cfg.Web.CORS); err != nil {
+		return err
 	}
 
 	// verify database config

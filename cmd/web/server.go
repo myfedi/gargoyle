@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/myfedi/gargoyle/adapters"
 	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
@@ -19,6 +20,7 @@ import (
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers/users"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/myfedi/gargoyle/infrastructure/config"
 	"github.com/myfedi/gargoyle/mock"
 )
@@ -57,6 +59,14 @@ func main() {
 	// sets up the go-fiber server. The body limit protects ActivityPub endpoints
 	// from unbounded in-memory request bodies before handlers copy or parse them.
 	app := fiber.New(fiber.Config{BodyLimit: config.ActivityPub.BodyLimitBytes})
+	if len(config.Web.CORS.AllowedOrigins) > 0 {
+		app.Use(cors.New(cors.Config{
+			AllowOrigins:     strings.Join(config.Web.CORS.AllowedOrigins, ","),
+			AllowMethods:     strings.Join(config.Web.CORS.AllowedMethods, ","),
+			AllowHeaders:     strings.Join(config.Web.CORS.AllowedHeaders, ","),
+			AllowCredentials: config.Web.CORS.AllowCredentials,
+		}))
+	}
 
 	/// set up the routes
 
