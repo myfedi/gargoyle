@@ -25,6 +25,7 @@ type Config struct {
 	Host               string
 	Domain             string
 	ServerVersion      string
+	AccountsRepo       repos.AccountsRepo
 	NotesRepo          repos.NotesRepository
 	FollowsRepo        repos.FollowsRepository
 	MediaRepo          repos.MediaRepository
@@ -96,6 +97,9 @@ type Relationship struct {
 func NewUseCase(cfg Config) UseCase {
 	if cfg.Host == "" || cfg.Domain == "" {
 		panic("mastodon API use case requires Host and Domain")
+	}
+	if cfg.AccountsRepo == nil {
+		panic("mastodon API use case requires AccountsRepo")
 	}
 	if cfg.NotesRepo == nil {
 		panic("mastodon API use case requires NotesRepo")

@@ -84,11 +84,21 @@ func (u UseCase) resolveMentions(ctx context.Context, account *models.Account, c
 	mentions := make([]models.Account, 0, len(matches))
 	seen := map[string]bool{}
 	for _, match := range matches {
-		acct := match[1] + "@" + strings.ToLower(match[2])
+		username := match[1]
+		domain := strings.ToLower(match[2])
+		acct := username + "@" + domain
 		if seen[acct] {
 			continue
 		}
 		seen[acct] = true
+		if domain == strings.ToLower(u.cfg.Domain) {
+			local, err := u.cfg.AccountsRepo.GetLocalAccountByUsername(ctx, nil, username)
+			if err != nil {
+				return nil, domainerrors.New(domainerrors.ErrBadRequest, "mentioned account could not be resolved: "+acct)
+			}
+			mentions = append(mentions, *local)
+			continue
+		}
 		remote, err := u.resolveAndCacheRemoteAccount(ctx, acct, account)
 		if err != nil {
 			return nil, domainerrors.New(domainerrors.ErrBadRequest, "mentioned account could not be resolved: "+acct)
@@ -133,7 +143,7 @@ func mentionInboxes(mentions []models.Account) []string {
 	inboxes := make([]string, 0, len(mentions))
 	seen := map[string]bool{}
 	for _, mention := range mentions {
-		if mention.InboxURI == "" || seen[mention.InboxURI] {
+		if mention.Domain == nil || mention.InboxURI == "" || seen[mention.InboxURI] {
 			continue
 		}
 		seen[mention.InboxURI] = true

@@ -160,6 +160,7 @@ func main() {
 		Host:               host,
 		Domain:             config.Domain,
 		ServerVersion:      infra.ServerVersion,
+		AccountsRepo:       accountsRepo,
 		NotesRepo:          notesRepo,
 		FollowsRepo:        followsRepo,
 		MediaRepo:          mediaRepo,
