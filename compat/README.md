@@ -29,17 +29,16 @@ tls: false
 
 ### 3. Reverse proxy
 
-Example Caddy config:
+A ready-to-use Caddy config is included at [`Caddyfile.local`](Caddyfile.local):
 
-```caddyfile
-http://gargoyle.test {
-	reverse_proxy 127.0.0.1:3001
-}
-
-http://gts.test {
-	reverse_proxy 127.0.0.1:8080
-}
+```sh
+sudo caddy run --config compat/Caddyfile.local
 ```
+
+It proxies:
+
+- `http://gargoyle.test` -> `127.0.0.1:3001`
+- `http://gts.test` -> `127.0.0.1:8080`
 
 Run Gargoyle separately:
 

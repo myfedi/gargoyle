@@ -1,0 +1,7 @@
+http://gargoyle.test {
+	reverse_proxy 127.0.0.1:3001
+}
+
+http://gts.test {
+	reverse_proxy 127.0.0.1:8080
+}
