@@ -4,6 +4,7 @@ import type { MastodonAccount, MastodonInstance, MastodonRelationship, MastodonS
 export type CreateStatusInput = {
   status: string;
   visibility?: "public" | "unlisted" | "private" | "direct";
+  in_reply_to_id?: string;
 };
 
 export function createMastodonApi(accessToken: string) {

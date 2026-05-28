@@ -25,6 +25,7 @@ type StatusListProps = {
   emptyDescription: string;
   deletingStatusId?: string | null;
   onDelete?: (status: MastodonStatus) => Promise<boolean> | boolean;
+  onReply?: (status: MastodonStatus) => void;
 };
 
 export function StatusList({
@@ -34,6 +35,7 @@ export function StatusList({
   emptyDescription,
   deletingStatusId,
   onDelete,
+  onReply,
 }: StatusListProps) {
   const [statusPendingDeletion, setStatusPendingDeletion] = useState<MastodonStatus | null>(null);
 
@@ -48,6 +50,7 @@ export function StatusList({
       <div className="divide-y divide-border">
         {statuses.map((status) => {
           const canDelete = Boolean(onDelete && currentAccountId && status.account.id === currentAccountId);
+          const canReply = Boolean(onReply);
           return (
             <article key={status.id} className="py-4 first:pt-0 last:pb-0">
               <div className="flex items-start gap-3">
@@ -65,7 +68,7 @@ export function StatusList({
                     <StatusContent html={status.content} />
                   </div>
                 </div>
-                {canDelete ? (
+                {canDelete || canReply ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" aria-label="Post actions">
@@ -73,12 +76,19 @@ export function StatusList({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onSelect={() => setStatusPendingDeletion(status)}
-                      >
-                        Delete
-                      </DropdownMenuItem>
+                      {canReply ? (
+                        <DropdownMenuItem onSelect={() => onReply?.(status)}>
+                          Reply
+                        </DropdownMenuItem>
+                      ) : null}
+                      {canDelete ? (
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => setStatusPendingDeletion(status)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      ) : null}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 ) : null}

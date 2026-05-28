@@ -47,6 +47,8 @@ export type MastodonStatus = {
   replies_count: number;
   reblogs_count: number;
   favourites_count: number;
+  in_reply_to_id?: string | null;
+  in_reply_to_account_id?: string | null;
 };
 
 export type MastodonInstance = {

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
+import { ReplyComposer } from "@/features/status/reply-composer";
 import { StatusList } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { decodeRouteParam } from "@/lib/routes";
@@ -21,6 +22,9 @@ export function StatusPage({ route }: StatusPageProps) {
   const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<MastodonStatus | null>(null);
+  const [isReplying, setIsReplying] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
@@ -74,6 +78,25 @@ export function StatusPage({ route }: StatusPageProps) {
     }
   }
 
+  async function submitReply(text: string) {
+    if (!api || !replyingTo) {
+      return;
+    }
+
+    setIsReplying(true);
+    setReplyError(null);
+
+    try {
+      await api.createStatus({ status: text, visibility: "public", in_reply_to_id: replyingTo.id });
+      setReplyingTo(null);
+      await loadStatus();
+    } catch (caughtError) {
+      setReplyError(caughtError instanceof Error ? caughtError.message : "Could not post reply.");
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
   const fullThread = [...ancestors, ...(status ? [status] : []), ...descendants];
 
   return (
@@ -95,11 +118,25 @@ export function StatusPage({ route }: StatusPageProps) {
             emptyDescription="No post to show."
             deletingStatusId={deletingStatusId}
             onDelete={deleteStatus}
+            onReply={(nextStatus) => {
+              setReplyingTo(nextStatus);
+              setReplyError(null);
+            }}
           />
         ) : (
           <EmptyState title="Post not found" description="No post to show." />
         )}
       </Panel>
+
+      {replyingTo ? (
+        <ReplyComposer
+          status={replyingTo}
+          isSubmitting={isReplying}
+          error={replyError}
+          onCancel={() => setReplyingTo(null)}
+          onSubmit={submitReply}
+        />
+      ) : null}
 
       <Button variant="outline" onClick={() => window.history.back()}>Back</Button>
     </FeaturePage>
