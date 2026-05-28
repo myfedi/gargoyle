@@ -217,7 +217,13 @@ func (t httpActivityPubTransport) VerifyInbound(ctx context.Context, input activ
 	}
 
 	digest := input.Headers["digest"]
-	if digest != "" && !strings.EqualFold(digest, digestHeader(input.Body)) {
+	if digest == "" {
+		return domainerrors.New(domainerrors.ErrUnauthorized, "missing digest")
+	}
+	if !signedHeaderIncludes(headers, "digest") {
+		return domainerrors.New(domainerrors.ErrUnauthorized, "digest header is not signed")
+	}
+	if !strings.EqualFold(digest, digestHeader(input.Body)) {
 		return domainerrors.New(domainerrors.ErrUnauthorized, "digest mismatch")
 	}
 
@@ -291,6 +297,15 @@ func validKeyID(keyID string, actor string, doc *activitypub.RemoteActorDocument
 		return false
 	}
 	return strings.HasPrefix(keyID, actor+"#")
+}
+
+func signedHeaderIncludes(headers []string, target string) bool {
+	for _, header := range headers {
+		if strings.EqualFold(header, target) {
+			return true
+		}
+	}
+	return false
 }
 
 func digestHeader(body []byte) string {
