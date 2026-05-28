@@ -1,6 +1,7 @@
 package mastodon
 
 import (
+	"io"
 	"strings"
 	"time"
 
@@ -41,6 +42,9 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v2/search", h.search)
 	app.Get("/api/v1/accounts/search", h.search)
 	app.Get("/api/v1/accounts/relationships", h.relationships)
+	app.Post("/api/v2/media", h.uploadMedia)
+	app.Post("/api/v1/media", h.uploadMedia)
+	app.Get("/media/:id", h.media)
 	app.Get("/api/v1/accounts/:id/followers", h.followers)
 	app.Get("/api/v1/accounts/:id/following", h.following)
 	app.Get("/api/v1/accounts/:id/statuses", h.accountStatuses)
@@ -90,6 +94,53 @@ type instanceV2Response struct {
 func (h APIHandler) instanceV2(c *fiber.Ctx) error {
 	info := h.api.InstanceInfo()
 	return c.JSON(instanceV2Response{Domain: info.Domain, Title: info.Title, Version: info.ServerVersion, Description: info.Description})
+}
+
+type mediaAttachmentResponse struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	URL         string `json:"url"`
+	PreviewURL  string `json:"preview_url"`
+	Description string `json:"description"`
+}
+
+func (h APIHandler) uploadMedia(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	file, err := c.FormFile("file")
+	if err != nil {
+		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "media file is required"))
+	}
+	opened, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer opened.Close()
+	data, err := io.ReadAll(io.LimitReader(opened, 10<<20))
+	if err != nil {
+		return err
+	}
+	media, derr := h.api.UploadMedia(c.UserContext(), principal.Account, mastodonUC.UploadMediaInput{FileName: file.Filename, ContentType: file.Header.Get("Content-Type"), Data: data, Description: c.FormValue("description")})
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(h.mediaResponse(media))
+}
+
+func (h APIHandler) media(c *fiber.Ctx) error {
+	media, derr := h.api.GetMedia(c.UserContext(), c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	c.Set(fiber.HeaderContentType, media.ContentType)
+	return c.Send(media.Data)
+}
+
+func (h APIHandler) mediaResponse(media *models.MediaAttachment) mediaAttachmentResponse {
+	url := "/media/" + media.ID
+	return mediaAttachmentResponse{ID: media.ID, Type: "image", URL: url, PreviewURL: url, Description: media.Description}
 }
 
 type createStatusRequest struct {
@@ -359,29 +410,29 @@ func (h APIHandler) authenticate(c *fiber.Ctx) (*oauth.AuthenticatedUser, *domai
 }
 
 type statusResponse struct {
-	ID                 string          `json:"id"`
-	URI                string          `json:"uri"`
-	URL                string          `json:"url"`
-	CreatedAt          string          `json:"created_at"`
-	Account            accountResponse `json:"account"`
-	Content            string          `json:"content"`
-	Visibility         string          `json:"visibility"`
-	InReplyToID        *string         `json:"in_reply_to_id"`
-	InReplyToAccountID *string         `json:"in_reply_to_account_id"`
-	Sensitive          bool            `json:"sensitive"`
-	SpoilerText        string          `json:"spoiler_text"`
-	MediaAttachments   []any           `json:"media_attachments"`
-	Mentions           []any           `json:"mentions"`
-	Tags               []any           `json:"tags"`
-	Emojis             []any           `json:"emojis"`
-	RepliesCount       int             `json:"replies_count"`
-	ReblogsCount       int             `json:"reblogs_count"`
-	FavouritesCount    int             `json:"favourites_count"`
-	Favourited         bool            `json:"favourited"`
-	Reblogged          bool            `json:"reblogged"`
-	Muted              bool            `json:"muted"`
-	Bookmarked         bool            `json:"bookmarked"`
-	Pinned             bool            `json:"pinned"`
+	ID                 string                    `json:"id"`
+	URI                string                    `json:"uri"`
+	URL                string                    `json:"url"`
+	CreatedAt          string                    `json:"created_at"`
+	Account            accountResponse           `json:"account"`
+	Content            string                    `json:"content"`
+	Visibility         string                    `json:"visibility"`
+	InReplyToID        *string                   `json:"in_reply_to_id"`
+	InReplyToAccountID *string                   `json:"in_reply_to_account_id"`
+	Sensitive          bool                      `json:"sensitive"`
+	SpoilerText        string                    `json:"spoiler_text"`
+	MediaAttachments   []mediaAttachmentResponse `json:"media_attachments"`
+	Mentions           []any                     `json:"mentions"`
+	Tags               []any                     `json:"tags"`
+	Emojis             []any                     `json:"emojis"`
+	RepliesCount       int                       `json:"replies_count"`
+	ReblogsCount       int                       `json:"reblogs_count"`
+	FavouritesCount    int                       `json:"favourites_count"`
+	Favourited         bool                      `json:"favourited"`
+	Reblogged          bool                      `json:"reblogged"`
+	Muted              bool                      `json:"muted"`
+	Bookmarked         bool                      `json:"bookmarked"`
+	Pinned             bool                      `json:"pinned"`
 }
 
 func timelineOptions(c *fiber.Ctx) mastodonUC.TimelineOptions {
@@ -410,5 +461,5 @@ func noteToStatus(note models.Note, account *models.Account) statusResponse {
 	if visibility == "" {
 		visibility = "public"
 	}
-	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: visibility, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []any{}, Mentions: []any{}, Tags: []any{}, Emojis: []any{}}
+	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: visibility, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []any{}, Tags: []any{}, Emojis: []any{}}
 }

@@ -27,6 +27,7 @@ type Config struct {
 	ServerVersion      string
 	NotesRepo          repos.NotesRepository
 	FollowsRepo        repos.FollowsRepository
+	MediaRepo          repos.MediaRepository
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	IDGenerator        ports.IDGenerator
 	RemoteResolver     RemoteAccountResolver
@@ -96,6 +97,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.FollowsRepo == nil {
 		panic("mastodon API use case requires FollowsRepo")
+	}
+	if cfg.MediaRepo == nil {
+		panic("mastodon API use case requires MediaRepo")
 	}
 	if cfg.RemoteAccountsRepo == nil {
 		panic("mastodon API use case requires RemoteAccountsRepo")
