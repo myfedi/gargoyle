@@ -2,7 +2,6 @@ import {
   Home,
   Inbox,
   MessageSquareText,
-  RadioTower,
   Repeat2,
   Send,
   Settings,
@@ -52,12 +51,6 @@ export const navItems: NavItem[] = [
     label: "Delivery",
     description: "Remote delivery attempts and retries",
     icon: Repeat2,
-  },
-  {
-    href: "#/compatibility",
-    label: "Compatibility",
-    description: "Connection and federation health",
-    icon: RadioTower,
   },
   {
     href: "#/settings",

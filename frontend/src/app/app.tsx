@@ -5,7 +5,6 @@ import { LogOut, Menu } from "lucide-react";
 import { AuthProvider, useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { LoginPage } from "@/features/auth/login-page";
-import { CompatibilityPage } from "@/features/compatibility/compatibility-page";
 import { DeliveryPage } from "@/features/delivery/delivery-page";
 import { FollowsPage } from "@/features/follows/follows-page";
 import { InboxPage } from "@/features/inbox/inbox-page";
@@ -26,7 +25,6 @@ const routes = {
   "/inbox": InboxPage,
   "/outbox": OutboxPage,
   "/delivery": DeliveryPage,
-  "/compatibility": CompatibilityPage,
   "/settings": SettingsPage,
 } satisfies Record<string, React.ComponentType>;
 
