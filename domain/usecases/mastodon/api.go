@@ -28,6 +28,7 @@ type Config struct {
 	NotesRepo          repos.NotesRepository
 	FollowsRepo        repos.FollowsRepository
 	MediaRepo          repos.MediaRepository
+	MediaStorage       ports.MediaStorage
 	SocialRepo         repos.SocialRepository
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	IDGenerator        ports.IDGenerator
@@ -103,6 +104,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.MediaRepo == nil {
 		panic("mastodon API use case requires MediaRepo")
+	}
+	if cfg.MediaStorage == nil {
+		panic("mastodon API use case requires MediaStorage")
 	}
 	if cfg.SocialRepo == nil {
 		panic("mastodon API use case requires SocialRepo")

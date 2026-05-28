@@ -8,6 +8,10 @@ tls: true
 sqlite:
   uri: "file::memory:?cache=shared"
 
+media:
+  # Uploaded media bytes are stored on disk; only metadata is kept in SQLite.
+  storage_dir: "./media"
+
 # Optional CORS support for browser UIs hosted on a different origin.
 # Prefer same-origin reverse proxying when possible. If this list is empty or
 # omitted, CORS is disabled. Wildcard origins are intentionally rejected.

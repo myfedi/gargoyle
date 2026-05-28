@@ -29,8 +29,17 @@ func (u UseCase) UploadMedia(ctx context.Context, account *models.Account, input
 	if input.ContentType == "" {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "media content type is required")
 	}
-	media, err := u.cfg.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: input.FileName, ContentType: input.ContentType, Data: input.Data, Description: input.Description})
+	id, err := u.cfg.IDGenerator.NewID()
 	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	storagePath, err := u.cfg.MediaStorage.SaveMedia(ctx, id, input.FileName, input.Data)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	media, err := u.cfg.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: input.FileName, ContentType: input.ContentType, StoragePath: storagePath, Description: input.Description})
+	if err != nil {
+		_ = u.cfg.MediaStorage.DeleteMedia(ctx, storagePath)
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return media, nil
@@ -40,6 +49,13 @@ func (u UseCase) GetMedia(ctx context.Context, id string) (*models.MediaAttachme
 	media, err := u.cfg.MediaRepo.GetMediaAttachmentByID(ctx, nil, id)
 	if err != nil {
 		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
+	}
+	if media.StoragePath != "" {
+		data, err := u.cfg.MediaStorage.ReadMedia(ctx, media.StoragePath)
+		if err != nil {
+			return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
+		}
+		media.Data = data
 	}
 	return media, nil
 }
@@ -69,6 +85,9 @@ func (u UseCase) DeleteMedia(ctx context.Context, account *models.Account, id st
 		return domainerrors.New(domainerrors.ErrBadRequest, "media is already attached to a status")
 	}
 	if err := u.cfg.MediaRepo.DeleteMediaAttachment(ctx, nil, media.ID); err != nil {
+		return domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	if err := u.cfg.MediaStorage.DeleteMedia(ctx, media.StoragePath); err != nil {
 		return domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return nil

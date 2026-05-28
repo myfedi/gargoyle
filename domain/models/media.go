@@ -9,6 +9,7 @@ type MediaAttachment struct {
 	LocalAccountID string
 	FileName       string
 	ContentType    string
+	StoragePath    string
 	Data           []byte
 	Description    string
 }

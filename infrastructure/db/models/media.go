@@ -16,10 +16,10 @@ type MediaAttachment struct {
 	LocalAccountID string    `bun:"type:CHAR(26),nullzero,notnull"`
 	FileName       string
 	ContentType    string `bun:",nullzero,notnull"`
-	Data           []byte `bun:",nullzero,notnull"`
+	StoragePath    string
 	Description    string
 }
 
 func (m MediaAttachment) ToModel() models.MediaAttachment {
-	return models.MediaAttachment{ID: m.ID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, LocalAccountID: m.LocalAccountID, FileName: m.FileName, ContentType: m.ContentType, Data: m.Data, Description: m.Description}
+	return models.MediaAttachment{ID: m.ID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, LocalAccountID: m.LocalAccountID, FileName: m.FileName, ContentType: m.ContentType, StoragePath: m.StoragePath, Description: m.Description}
 }

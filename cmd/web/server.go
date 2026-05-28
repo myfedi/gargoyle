@@ -72,6 +72,7 @@ func main() {
 	followsRepo := repos.NewFollowsRepo(sqlite.Bun)
 	notesRepo := repos.NewNotesRepo(sqlite.Bun)
 	mediaRepo := repos.NewMediaRepo(sqlite.Bun)
+	mediaStorage := adapters.NewLocalMediaStorage(config.Media.StorageDir)
 	socialRepo := repos.NewSocialRepo(sqlite.Bun)
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
@@ -162,6 +163,7 @@ func main() {
 		NotesRepo:          notesRepo,
 		FollowsRepo:        followsRepo,
 		MediaRepo:          mediaRepo,
+		MediaStorage:       mediaStorage,
 		SocialRepo:         socialRepo,
 		RemoteAccountsRepo: remoteAccountsRepo,
 		IDGenerator:        adapters.NewULIDGenerator(),

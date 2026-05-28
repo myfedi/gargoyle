@@ -34,6 +34,10 @@ type WebConfig struct {
 	CORS CORSConfig `mapstructure:"cors"`
 }
 
+type MediaConfig struct {
+	StorageDir string `mapstructure:"storage_dir"`
+}
+
 type Config struct {
 	Debug       bool              `mapstructure:"debug"`
 	Domain      string            `mapstructure:"domain"`
@@ -43,6 +47,7 @@ type Config struct {
 	Sqlite      *SqliteConfig     `mapstructure:"sqlite"`
 	ActivityPub ActivityPubConfig `mapstructure:"activitypub"`
 	Web         WebConfig         `mapstructure:"web"`
+	Media       MediaConfig       `mapstructure:"media"`
 }
 
 func (c Config) Host() string {
@@ -98,6 +103,7 @@ func NewConfig(configFile string) (*Config, error) {
 	viper.SetDefault("web.cors.allowed_methods", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 	viper.SetDefault("web.cors.allowed_headers", []string{"Authorization", "Content-Type"})
 	viper.SetDefault("web.cors.allow_credentials", false)
+	viper.SetDefault("media.storage_dir", "./media")
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
@@ -194,6 +200,9 @@ func verifyConfig(cfg *Config) error {
 	}
 	if err := verifyCORSConfig(cfg.Web.CORS); err != nil {
 		return err
+	}
+	if strings.TrimSpace(cfg.Media.StorageDir) == "" {
+		return fmt.Errorf("media.storage_dir cannot be empty")
 	}
 
 	// verify database config

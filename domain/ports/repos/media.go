@@ -11,7 +11,7 @@ type CreateMediaAttachmentInput struct {
 	LocalAccountID string
 	FileName       string
 	ContentType    string
-	Data           []byte
+	StoragePath    string
 	Description    string
 }
 

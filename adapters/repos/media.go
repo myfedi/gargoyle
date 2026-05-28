@@ -40,7 +40,7 @@ func (r *MediaRepo) CreateMediaAttachment(ctx context.Context, tx *dbPorts.Tx, i
 	if err != nil {
 		return nil, err
 	}
-	row := &dbModels.MediaAttachment{ID: id, LocalAccountID: input.LocalAccountID, FileName: input.FileName, ContentType: input.ContentType, Data: input.Data, Description: input.Description}
+	row := &dbModels.MediaAttachment{ID: id, LocalAccountID: input.LocalAccountID, FileName: input.FileName, ContentType: input.ContentType, StoragePath: input.StoragePath, Description: input.Description}
 	if _, err := db.NewInsert().Model(row).Exec(ctx); err != nil {
 		return nil, err
 	}
