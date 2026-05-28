@@ -1,0 +1,33 @@
+package repos
+
+import (
+	"context"
+	"time"
+
+	"github.com/myfedi/gargoyle/domain/models"
+	"github.com/myfedi/gargoyle/domain/ports/db"
+)
+
+type CreateDeliveryJobInput struct {
+	AccountID     string
+	ActivityID    string
+	InboxURL      string
+	Payload       []byte
+	NextAttemptAt time.Time
+}
+
+type DeliveryJobsRepository interface {
+	CreateDeliveryJob(ctx context.Context, tx *db.Tx, input CreateDeliveryJobInput) (*models.DeliveryJob, error)
+	ListDueDeliveryJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.DeliveryJob, error)
+}
+
+type CreateFetchJobInput struct {
+	URL           string
+	Kind          string
+	NextAttemptAt time.Time
+}
+
+type FetchJobsRepository interface {
+	CreateFetchJob(ctx context.Context, tx *db.Tx, input CreateFetchJobInput) (*models.FetchJob, error)
+	ListDueFetchJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.FetchJob, error)
+}
