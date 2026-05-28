@@ -38,7 +38,7 @@ go run cmd/web/server.go ./config.yml
     -   [x] public key in actor document
     -   [x] compatibility-tested against GoToSocial
     -   [ ] compatibility-tested against Mastodon/Akkoma
--   [ ] inbox
+-   [x] inbox
     -   [x] `POST /users/:username/inbox`
     -   [x] signed request requirement in server mode
     -   [x] stores inbound activities
@@ -47,8 +47,8 @@ go run cmd/web/server.go ./config.yml
     -   [x] handles `Create` for `Note`s
     -   [x] handles `Delete` / `Update` for stored `Note`s
     -   [x] handles `Accept` / `Reject` for outbound follows
-    -   [ ] handles `Announce` / `Like`
--   [ ] outbox
+    -   [x] handles `Announce` / `Like` notifications for local posts
+-   [x] outbox
     -   [x] `GET /users/:username/outbox`
     -   [x] `POST /users/:username/outbox`
     -   [x] stores local activities
@@ -57,8 +57,8 @@ go run cmd/web/server.go ./config.yml
     -   [x] DB-backed pagination
     -   [x] sanitizes note content
     -   [x] generated stable ULID-based activity/object IDs
-    -   [ ] persistent delivery queue
-    -   [ ] auth/user-facing posting API
+    -   [x] persistent delivery queue
+    -   [x] auth/user-facing posting API
 -   [ ] followers/following
     -   [x] followers collection
     -   [x] inbound follow acceptance
@@ -68,7 +68,7 @@ go run cmd/web/server.go ./config.yml
 Implemented ActivityPub endpoints:
 
 -   `GET /users/:username` returns an ActivityPub actor.
--   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow`, `Undo Follow`, `Create`, `Delete`, `Update`, `Accept`, and `Reject`.
+-   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow`, `Undo Follow`, `Create`, `Delete`, `Update`, `Accept`, `Reject`, `Like`, and `Announce`.
 -   `GET /users/:username/outbox` returns stored outbox activities.
 -   `POST /users/:username/outbox` creates and stores local `Create`/`Note` activities and delivers them to followers.
 -   `GET /users/:username/followers` returns accepted followers.
@@ -129,7 +129,7 @@ go run cmd/cli/admin/main.go jobs --config ./config.yml --type fetch --status pe
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.
--   Media attachments, favourites, and boosts have Mastodon client API support, but their ActivityPub interoperability still needs broader real-server validation.
+-   Media attachments, favourites, boosts, mention delivery, and notifications have Mastodon client API and ActivityPub support, but still need broader real-server validation.
 -   Fetch and delivery queues have basic observability and duplicate fetch suppression, but need richer operational tooling.
 -   Some security limitations remain documented in [`LIMITATIONS.md`](LIMITATIONS.md).
 

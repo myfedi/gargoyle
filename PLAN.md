@@ -148,15 +148,16 @@ Useful for search, actor refresh, missing referenced objects, and remote status 
 - [x] Federate remote mentions in status addressing.
 - [x] Exclude non-public statuses from ActivityPub outbox collection reads.
 - [x] Exclude non-public statuses from public timelines.
-- [ ] Fully federate media attachments in ActivityPub payloads.
+- [x] Fully federate media attachments in ActivityPub payloads.
 - [ ] Add stricter object-level authorization for non-public status/object fetches as more ActivityPub object routes are added.
 
 ## Priority 7a: notifications and local visibility/access polish
 
-- [ ] Add local notification rows for mentions.
-- [ ] Add local notification rows for replies.
-- [ ] Add local notification rows for favourites and reblogs.
-- [ ] Suppress self-mention notifications.
+- [x] Add local notification rows for mentions.
+- [x] Add local notification rows for replies.
+- [x] Add local notification rows for favourites and reblogs.
+- [x] Suppress self-mention notifications.
+- [x] Add notification clear/dismiss endpoints.
 - [ ] Expand local read/access-control checks for followers-only and direct statuses beyond the current owner/public split.
 
 ## Priority 8: OAuth/session polish
