@@ -60,10 +60,11 @@ export function ComposeForm({
   const [isSearchingMentions, setIsSearchingMentions] = useState(false);
   const [mentionError, setMentionError] = useState<string | null>(null);
   const mentionQuery = currentMentionQuery(status, caretPosition);
+  const mentionSearchQuery = mentionQuery?.endsWith("@") ? mentionQuery.slice(0, -1) : mentionQuery;
   const remaining = maxLength - status.length;
 
   useEffect(() => {
-    if (!searchKnownAccounts || !mentionQuery || mentionQuery.length < 2) {
+    if (!searchKnownAccounts || !mentionSearchQuery || mentionSearchQuery.length < 2) {
       setMentionResults([]);
       setMentionError(null);
       return;
@@ -73,7 +74,7 @@ export function ComposeForm({
     const timeout = window.setTimeout(() => {
       setIsSearchingMentions(true);
       setMentionError(null);
-      searchKnownAccounts(mentionQuery)
+      searchKnownAccounts(mentionSearchQuery)
         .then((accounts) => {
           if (!cancelled) setMentionResults(accounts);
         })
@@ -89,7 +90,7 @@ export function ComposeForm({
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [mentionQuery, searchKnownAccounts]);
+  }, [mentionSearchQuery, searchKnownAccounts]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -202,7 +203,7 @@ export function ComposeForm({
           aria-label="Post content"
           rows={6}
         />
-        {mentionQuery && mentionQuery.length >= 2 ? (
+        {mentionSearchQuery && mentionSearchQuery.length >= 2 ? (
           <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-border bg-card shadow-lg">
             {isSearchingMentions ? (
               <p className="p-3 text-sm text-muted-foreground">Searching accounts...</p>
@@ -326,7 +327,7 @@ function currentMentionQuery(text: string, caretPosition: number) {
 
 function mentionToken(text: string, caretPosition: number) {
   const beforeCaret = text.slice(0, caretPosition);
-  const match = beforeCaret.match(/(^|\s)@([^\s@]*)$/);
+  const match = beforeCaret.match(/(^|\s)@(\S*)$/);
   if (!match || match.index === undefined) return null;
   const prefixLength = match[1].length;
   const start = match.index + prefixLength;
