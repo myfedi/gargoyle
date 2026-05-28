@@ -3,6 +3,7 @@ package repos
 import (
 	"context"
 	"errors"
+	"time"
 
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/domain/models"
@@ -88,4 +89,43 @@ func (r *OAuthRepo) GetAccessTokenByHash(ctx context.Context, tx *dbPorts.Tx, to
 	}
 	model := token.ToModel()
 	return &model, nil
+}
+
+func (r *OAuthRepo) CreateAuthorizationCode(ctx context.Context, tx *dbPorts.Tx, input repos.CreateOAuthAuthorizationCodeInput) (*models.OAuthAuthorizationCode, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	id, err := dbUtils.NewULID()
+	if err != nil {
+		return nil, err
+	}
+	code := &dbModels.OAuthAuthorizationCode{ID: id, ApplicationID: input.ApplicationID, UserID: input.UserID, CodeHash: input.CodeHash, RedirectURI: input.RedirectURI, Scopes: input.Scopes, CodeChallenge: input.CodeChallenge, CodeChallengeMethod: input.CodeChallengeMethod, ExpiresAt: input.ExpiresAt}
+	if _, err := db.NewInsert().Model(code).Exec(ctx); err != nil {
+		return nil, err
+	}
+	model := code.ToModel()
+	return &model, nil
+}
+
+func (r *OAuthRepo) GetAuthorizationCodeByHash(ctx context.Context, tx *dbPorts.Tx, codeHash string) (*models.OAuthAuthorizationCode, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	var code dbModels.OAuthAuthorizationCode
+	if err := db.NewSelect().Model(&code).Where("code_hash = ?", codeHash).Scan(ctx); err != nil {
+		return nil, err
+	}
+	model := code.ToModel()
+	return &model, nil
+}
+
+func (r *OAuthRepo) MarkAuthorizationCodeUsed(ctx context.Context, tx *dbPorts.Tx, id string, usedAt time.Time) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewUpdate().Model((*dbModels.OAuthAuthorizationCode)(nil)).Set("used_at = ?", usedAt).Set("updated_at = ?", usedAt).Where("id = ?", id).Exec(ctx)
+	return err
 }

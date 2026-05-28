@@ -27,3 +27,20 @@ type OAuthAccessToken struct {
 	Scopes        string
 	ExpiresAt     *time.Time
 }
+
+// OAuthAuthorizationCode is a short-lived browser OAuth grant exchanged for an
+// access token by Mastodon-compatible clients.
+type OAuthAuthorizationCode struct {
+	ID                  string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	ApplicationID       string
+	UserID              string
+	CodeHash            string
+	RedirectURI         string
+	Scopes              string
+	CodeChallenge       string
+	CodeChallengeMethod string
+	ExpiresAt           time.Time
+	UsedAt              *time.Time
+}
