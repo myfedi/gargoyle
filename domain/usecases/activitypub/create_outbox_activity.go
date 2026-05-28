@@ -53,6 +53,9 @@ func (u *CreateOutboxActivityUseCase) CreateOutboxActivity(ctx context.Context, 
 		if u.cfg.NotesRepo != nil {
 			if note, ok := ExtractNote(raw); ok {
 				replyID, replyURI := replyIDs(ctx, u.cfg.NotesRepo, &tx, note)
+				if err := enqueueMissingReplyFetch(ctx, u.cfg.FetchJobsRepo, &tx, account.ID, note, replyID); err != nil {
+					return err
+				}
 				_, err := u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: stored.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
 				if err != nil {
 					return err

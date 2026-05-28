@@ -150,6 +150,7 @@ func main() {
 		ActivitiesRepo:   activitiesRepo,
 		FollowsRepo:      followsRepo,
 		NotesRepo:        notesRepo,
+		FetchJobsRepo:    jobsRepo,
 		ContentSanitizer: contentSanitizer,
 	}
 	mastodonAPIUC := mastodonUsecases.NewUseCase(mastodonUsecases.Config{
@@ -168,7 +169,7 @@ func main() {
 
 	workerCtx := context.Background()
 	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Deliverer: userProfileHandler.ActivityDeliverer()}).Start(workerCtx)
-	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: jobsRepo}).Start(workerCtx)
+	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Fetcher: mastodon.NewRemoteObjectFetcher(nil, mastodonRemoteURLExceptions)}).Start(workerCtx)
 
 	/// run server
 

@@ -100,7 +100,7 @@ func (r *JobsRepo) CreateFetchJob(ctx context.Context, tx *dbPorts.Tx, input rep
 	if err != nil {
 		return nil, err
 	}
-	job := &dbModels.FetchJob{ID: id, URL: input.URL, Kind: input.Kind, NextAttemptAt: input.NextAttemptAt, Status: string(models.JobStatusPending)}
+	job := &dbModels.FetchJob{ID: id, URL: input.URL, Kind: input.Kind, AccountID: input.AccountID, NextAttemptAt: input.NextAttemptAt, Status: string(models.JobStatusPending)}
 	if _, err := db.NewInsert().Model(job).Exec(ctx); err != nil {
 		return nil, err
 	}

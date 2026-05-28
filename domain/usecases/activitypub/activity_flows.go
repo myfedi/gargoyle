@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -28,6 +29,7 @@ type ActivityPubFlowConfig struct {
 	ActivitiesRepo   repos.ActivitiesRepository
 	FollowsRepo      repos.FollowsRepository
 	NotesRepo        repos.NotesRepository
+	FetchJobsRepo    repos.FetchJobsRepository
 	ActorFetcher     apPorts.ActorFetcher
 	ContentSanitizer ports.ContentSanitizer
 }
@@ -129,6 +131,14 @@ func replyIDs(ctx context.Context, repo repos.NotesRepository, tx *db.Tx, note E
 		return nil, note.InReplyToURI
 	}
 	return &parent.ID, note.InReplyToURI
+}
+
+func enqueueMissingReplyFetch(ctx context.Context, repo repos.FetchJobsRepository, tx *db.Tx, accountID string, note ExtractedNote, replyID *string) error {
+	if repo == nil || note.InReplyToURI == nil || *note.InReplyToURI == "" || replyID != nil {
+		return nil
+	}
+	_, err := repo.CreateFetchJob(ctx, tx, repos.CreateFetchJobInput{URL: *note.InReplyToURI, Kind: "activitypub_object", AccountID: accountID, NextAttemptAt: time.Now().UTC()})
+	return err
 }
 
 func localAccount(ctx context.Context, repo repos.AccountsRepo, username string) (*models.Account, *domainerrors.DomainError) {

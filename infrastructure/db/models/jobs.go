@@ -36,6 +36,7 @@ type FetchJob struct {
 	UpdatedAt     time.Time `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 	URL           string    `bun:",nullzero,notnull"`
 	Kind          string    `bun:",nullzero,notnull"`
+	AccountID     string    `bun:"type:CHAR(26),nullzero,notnull"`
 	Attempts      int       `bun:",notnull,default:0"`
 	NextAttemptAt time.Time `bun:"type:timestamptz,nullzero,notnull"`
 	LastError     *string
@@ -44,5 +45,5 @@ type FetchJob struct {
 }
 
 func (j FetchJob) ToModel() models.FetchJob {
-	return models.FetchJob{ID: j.ID, CreatedAt: j.CreatedAt, UpdatedAt: j.UpdatedAt, URL: j.URL, Kind: j.Kind, Attempts: j.Attempts, NextAttemptAt: j.NextAttemptAt, LastError: j.LastError, Status: models.JobStatus(j.Status), FetchedAt: j.FetchedAt}
+	return models.FetchJob{ID: j.ID, CreatedAt: j.CreatedAt, UpdatedAt: j.UpdatedAt, URL: j.URL, Kind: j.Kind, AccountID: j.AccountID, Attempts: j.Attempts, NextAttemptAt: j.NextAttemptAt, LastError: j.LastError, Status: models.JobStatus(j.Status), FetchedAt: j.FetchedAt}
 }

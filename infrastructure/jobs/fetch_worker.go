@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/myfedi/gargoyle/domain/ports"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 )
 
@@ -12,12 +13,16 @@ import (
 // unknown jobs retryable instead of silently dropping them.
 type FetchWorker struct {
 	jobs      repos.FetchJobsRepository
+	accounts  repos.AccountsRepo
+	fetcher   ports.RemoteObjectFetcher
 	interval  time.Duration
 	batchSize int
 }
 
 type FetchWorkerConfig struct {
 	JobsRepo  repos.FetchJobsRepository
+	Accounts  repos.AccountsRepo
+	Fetcher   ports.RemoteObjectFetcher
 	Interval  time.Duration
 	BatchSize int
 }
@@ -26,13 +31,19 @@ func NewFetchWorker(cfg FetchWorkerConfig) *FetchWorker {
 	if cfg.JobsRepo == nil {
 		panic("fetch worker requires JobsRepo")
 	}
+	if cfg.Accounts == nil {
+		panic("fetch worker requires Accounts")
+	}
+	if cfg.Fetcher == nil {
+		panic("fetch worker requires Fetcher")
+	}
 	if cfg.Interval <= 0 {
 		cfg.Interval = 30 * time.Second
 	}
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 25
 	}
-	return &FetchWorker{jobs: cfg.JobsRepo, interval: cfg.Interval, batchSize: cfg.BatchSize}
+	return &FetchWorker{jobs: cfg.JobsRepo, accounts: cfg.Accounts, fetcher: cfg.Fetcher, interval: cfg.Interval, batchSize: cfg.BatchSize}
 }
 
 func (w *FetchWorker) Start(ctx context.Context) {
@@ -56,6 +67,15 @@ func (w *FetchWorker) ProcessOnce(ctx context.Context) {
 		return
 	}
 	for _, job := range due {
-		_ = w.jobs.MarkFetchJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), "no fetch handler registered for kind "+job.Kind)
+		account, err := w.accounts.GetAccountByID(ctx, nil, job.AccountID)
+		if err != nil {
+			_ = w.jobs.MarkFetchJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), err.Error())
+			continue
+		}
+		if err := w.fetcher.FetchObject(ctx, job.URL, account); err != nil {
+			_ = w.jobs.MarkFetchJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), err.Error())
+			continue
+		}
+		_ = w.jobs.MarkFetchJobFetched(ctx, nil, job.ID, time.Now().UTC())
 	}
 }

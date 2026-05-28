@@ -26,6 +26,7 @@ type DeliveryJobsRepository interface {
 type CreateFetchJobInput struct {
 	URL           string
 	Kind          string
+	AccountID     string
 	NextAttemptAt time.Time
 }
 

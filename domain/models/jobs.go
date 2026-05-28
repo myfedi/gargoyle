@@ -32,6 +32,7 @@ type FetchJob struct {
 	UpdatedAt     time.Time
 	URL           string
 	Kind          string
+	AccountID     string
 	Attempts      int
 	NextAttemptAt time.Time
 	LastError     *string

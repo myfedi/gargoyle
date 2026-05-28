@@ -1,0 +1,1 @@
+ALTER TABLE fetch_jobs ADD COLUMN account_id CHAR(26) NOT NULL DEFAULT '';
