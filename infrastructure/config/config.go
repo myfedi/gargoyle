@@ -11,13 +11,20 @@ type SqliteConfig struct {
 	Uri string `mapstructure:"uri"`
 }
 
+type ActivityPubConfig struct {
+	BodyLimitBytes    int  `mapstructure:"body_limit_bytes"`
+	AllowHTTPRemote   bool `mapstructure:"allow_http_remote"`
+	DeliveryQueueSize int  `mapstructure:"delivery_queue_size"`
+}
+
 type Config struct {
-	Debug      bool          `mapstructure:"debug"`
-	Domain     string        `mapstructure:"domain"`
-	PublicHost string        `mapstructure:"public_host"`
-	Port       int           `mapstructure:"port"`
-	Tls        bool          `mapstructure:"tls"`
-	Sqlite     *SqliteConfig `mapstructure:"sqlite"`
+	Debug       bool              `mapstructure:"debug"`
+	Domain      string            `mapstructure:"domain"`
+	PublicHost  string            `mapstructure:"public_host"`
+	Port        int               `mapstructure:"port"`
+	Tls         bool              `mapstructure:"tls"`
+	Sqlite      *SqliteConfig     `mapstructure:"sqlite"`
+	ActivityPub ActivityPubConfig `mapstructure:"activitypub"`
 }
 
 func (c Config) Host() string {
@@ -68,6 +75,9 @@ func NewConfig(configFile string) (*Config, error) {
 
 	// defaults
 	viper.SetDefault("debug", false)
+	viper.SetDefault("activitypub.body_limit_bytes", 1<<20)
+	viper.SetDefault("activitypub.allow_http_remote", false)
+	viper.SetDefault("activitypub.delivery_queue_size", 128)
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
@@ -105,6 +115,12 @@ func verifyConfig(cfg *Config) error {
 	}
 	if cfg.Port <= 0 || cfg.Port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")
+	}
+	if cfg.ActivityPub.BodyLimitBytes <= 0 {
+		return fmt.Errorf("activitypub.body_limit_bytes must be greater than 0")
+	}
+	if cfg.ActivityPub.DeliveryQueueSize <= 0 {
+		return fmt.Errorf("activitypub.delivery_queue_size must be greater than 0")
 	}
 
 	// verify database config

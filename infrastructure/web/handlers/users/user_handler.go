@@ -20,7 +20,11 @@ import (
 	"github.com/myfedi/gargoyle/infrastructure/web"
 )
 
-const maxActivityPubBodyBytes = 1 << 20
+type deliveryJob struct {
+	body    []byte
+	inbox   string
+	account models.Account
+}
 
 // UsersWebHandlerConfig wires HTTP infrastructure to ActivityPub use cases.
 // Required dependencies are validated in NewUsersWebHandler so configuration
@@ -37,6 +41,9 @@ type UsersWebHandlerConfig struct {
 	SignatureVerifier  activitypub.SignatureVerifier
 	ContentSanitizer   ports.ContentSanitizer
 	HTTPClient         *http.Client
+	BodyLimitBytes     int
+	AllowHTTPRemote    bool
+	DeliveryQueueSize  int
 	RequireSignedInbox bool
 	AllowUnsignedInbox bool
 	DeliveryRetries    int
@@ -51,6 +58,7 @@ type UsersWebHandler struct {
 	createFollowingUC      apUsecases.CreateFollowingUseCase
 	createOutboxActivityUC apUsecases.CreateOutboxActivityUseCase
 	handleInboxActivityUC  apUsecases.HandleInboxActivityUseCase
+	deliveryQueue          chan deliveryJob
 }
 
 // NewWebfingerWebHandler creates a new Webfinger handler with the given dependencies.
@@ -80,22 +88,37 @@ func validateUsersWebHandlerConfig(cfg UsersWebHandlerConfig) {
 	if cfg.ContentSanitizer == nil {
 		panic("users web handler requires ContentSanitizer")
 	}
+	if cfg.BodyLimitBytes <= 0 {
+		panic("users web handler requires positive BodyLimitBytes")
+	}
+	if cfg.DeliveryQueueSize <= 0 {
+		panic("users web handler requires positive DeliveryQueueSize")
+	}
 }
 
-func ensureBodySize(body []byte) *domainerrors.DomainError {
-	if len(body) > maxActivityPubBodyBytes {
+func ensureBodySize(body []byte, limit int) *domainerrors.DomainError {
+	if len(body) > limit {
 		return domainerrors.New(domainerrors.ErrBadRequest, "request body too large")
 	}
 	return nil
 }
 
-func (h *UsersWebHandler) queueDelivery(body []byte, inbox string, account models.Account) {
-	payload := append([]byte(nil), body...)
-	go func() {
+func (h *UsersWebHandler) queueDelivery(body []byte, inbox string, account models.Account) *domainerrors.DomainError {
+	job := deliveryJob{body: append([]byte(nil), body...), inbox: inbox, account: account}
+	select {
+	case h.deliveryQueue <- job:
+		return nil
+	default:
+		return domainerrors.New(domainerrors.ErrInternal, "delivery queue is full")
+	}
+}
+
+func (h *UsersWebHandler) runDeliveryWorker() {
+	for job := range h.deliveryQueue {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		h.cfg.Deliverer.Deliver(ctx, payload, inbox, account)
-	}()
+		h.cfg.Deliverer.Deliver(ctx, job.body, job.inbox, job.account)
+		cancel()
+	}
 }
 
 func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
@@ -104,7 +127,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		AccountsRepo: cfg.AccountsRepo,
 		Serializer:   cfg.Serializer,
 	})
-	transport := httpActivityPubTransport{client: cfg.HTTPClient, retries: cfg.DeliveryRetries}
+	transport := httpActivityPubTransport{client: cfg.HTTPClient, retries: cfg.DeliveryRetries, allowHTTPRemote: cfg.AllowHTTPRemote}
 	if cfg.ActorFetcher == nil {
 		cfg.ActorFetcher = transport
 	}
@@ -123,7 +146,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		ActorFetcher:     cfg.ActorFetcher,
 		ContentSanitizer: cfg.ContentSanitizer,
 	}
-	return &UsersWebHandler{
+	h := &UsersWebHandler{
 		cfg:                    cfg,
 		handler:                handler,
 		getOutbox:              apUsecases.NewGetOutboxUseCase(flowCfg),
@@ -132,7 +155,10 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		createFollowingUC:      apUsecases.NewCreateFollowingUseCase(flowCfg),
 		createOutboxActivityUC: apUsecases.NewCreateOutboxActivityUseCase(flowCfg),
 		handleInboxActivityUC:  apUsecases.NewHandleInboxActivityUseCase(flowCfg),
+		deliveryQueue:          make(chan deliveryJob, cfg.DeliveryQueueSize),
 	}
+	go h.runDeliveryWorker()
+	return h
 }
 
 // SetupHostMeta initializes the hostmeta route for the Fiber application.
@@ -217,7 +243,7 @@ func (h *UsersWebHandler) followingCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
-	if err := ensureBodySize(c.Body()); err != nil {
+	if err := ensureBodySize(c.Body(), h.cfg.BodyLimitBytes); err != nil {
 		return web.HandleDomainError(c, err)
 	}
 	var input struct {
@@ -239,7 +265,9 @@ func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	if res.Inbox != "" {
-		h.queueDelivery(res.RawJSON, res.Inbox, res.Account)
+		if err := h.queueDelivery(res.RawJSON, res.Inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }
@@ -269,7 +297,7 @@ func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
-	if err := ensureBodySize(c.Body()); err != nil {
+	if err := ensureBodySize(c.Body(), h.cfg.BodyLimitBytes); err != nil {
 		return web.HandleDomainError(c, err)
 	}
 	raw := append([]byte(nil), c.Body()...)
@@ -286,13 +314,15 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	if len(res.AcceptJSON) > 0 && res.AcceptInbox != "" {
-		h.queueDelivery(res.AcceptJSON, res.AcceptInbox, res.Account)
+		if err := h.queueDelivery(res.AcceptJSON, res.AcceptInbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
 	}
 	return c.SendStatus(fiber.StatusAccepted)
 }
 
 func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
-	if err := ensureBodySize(c.Body()); err != nil {
+	if err := ensureBodySize(c.Body(), h.cfg.BodyLimitBytes); err != nil {
 		return web.HandleDomainError(c, err)
 	}
 	activityID, err := dbUtils.NewULID()
@@ -308,7 +338,9 @@ func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	for _, inbox := range res.FollowerInboxes {
-		h.queueDelivery(res.RawJSON, inbox, res.Account)
+		if err := h.queueDelivery(res.RawJSON, inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }

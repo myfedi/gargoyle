@@ -30,8 +30,9 @@ import (
 // I/O: actor fetching, signed delivery, and inbound HTTP-signature checks. The
 // web handler depends on the domain ports, not these concrete methods.
 type httpActivityPubTransport struct {
-	client  *http.Client
-	retries int
+	client          *http.Client
+	retries         int
+	allowHTTPRemote bool
 }
 
 func (t httpActivityPubTransport) httpClient() *http.Client {
@@ -48,18 +49,18 @@ func (t httpActivityPubTransport) httpClient() *http.Client {
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
-			return validateRemoteURL(req.Context(), req.URL.String())
+			return validateRemoteURL(req.Context(), req.URL.String(), t.allowHTTPRemote)
 		}
 	}
 	return client
 }
 
-func validateRemoteURL(ctx context.Context, raw string) error {
+func validateRemoteURL(ctx context.Context, raw string, allowHTTP bool) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err
 	}
-	if u.Scheme != "https" && u.Scheme != "http" {
+	if u.Scheme != "https" && !(allowHTTP && u.Scheme == "http") {
 		return errors.New("unsupported remote URL scheme")
 	}
 	if u.Hostname() == "" || u.User != nil {
@@ -97,7 +98,7 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 	if actor == "" {
 		return nil, errors.New("empty actor")
 	}
-	if err := validateRemoteURL(ctx, actor); err != nil {
+	if err := validateRemoteURL(ctx, actor, t.allowHTTPRemote); err != nil {
 		return nil, err
 	}
 	client := t.httpClient()
@@ -129,7 +130,7 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 }
 
 func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbox string, account models.Account) {
-	if err := validateRemoteURL(ctx, inbox); err != nil {
+	if err := validateRemoteURL(ctx, inbox, t.allowHTTPRemote); err != nil {
 		return
 	}
 	client := t.httpClient()

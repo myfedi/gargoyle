@@ -50,7 +50,7 @@ func main() {
 
 	// sets up the go-fiber server. The body limit protects ActivityPub endpoints
 	// from unbounded in-memory request bodies before handlers copy or parse them.
-	app := fiber.New(fiber.Config{BodyLimit: 1 << 20})
+	app := fiber.New(fiber.Config{BodyLimit: config.ActivityPub.BodyLimitBytes})
 
 	/// set up the routes
 
@@ -89,6 +89,9 @@ func main() {
 		NotesRepo:          notesRepo,
 		Serializer:         actorSerializer,
 		ContentSanitizer:   contentSanitizer,
+		BodyLimitBytes:     config.ActivityPub.BodyLimitBytes,
+		AllowHTTPRemote:    config.ActivityPub.AllowHTTPRemote,
+		DeliveryQueueSize:  config.ActivityPub.DeliveryQueueSize,
 		RequireSignedInbox: true,
 		DeliveryRetries:    3,
 	})

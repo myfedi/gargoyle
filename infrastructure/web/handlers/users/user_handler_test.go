@@ -194,6 +194,8 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
 		})},
+		BodyLimitBytes:     1 << 20,
+		DeliveryQueueSize:  16,
 		AllowUnsignedInbox: true,
 		DeliveryRetries:    1,
 	})
@@ -273,6 +275,8 @@ func TestUserProfileHandlerCreatesNoteFromOutboxPost(t *testing.T) {
 		NotesRepo:          notes,
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		DeliveryQueueSize:  16,
 		AllowUnsignedInbox: true,
 		DeliveryRetries:    1,
 	})
@@ -329,6 +333,8 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 		NotesRepo:          notes,
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		DeliveryQueueSize:  16,
 		AllowUnsignedInbox: true,
 		DeliveryRetries:    1,
 	})
