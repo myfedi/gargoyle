@@ -163,7 +163,11 @@ func appToResponse(app *models.OAuthApplication) appResponse {
 
 func accountToResponse(account *models.Account) accountResponse {
 	created := account.CreatedAt.UTC().Format(time.RFC3339)
-	return accountResponse{ID: account.ID, Username: account.Username, Acct: account.Username, DisplayName: stringValue(account.DisplayName), Locked: false, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: stringValue(account.URL), Avatar: "", AvatarStatic: "", Header: "", HeaderStatic: ""}
+	acct := account.Username
+	if account.Domain != nil && *account.Domain != "" {
+		acct = account.Username + "@" + *account.Domain
+	}
+	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: false, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: stringValue(account.URL), Avatar: "", AvatarStatic: "", Header: "", HeaderStatic: ""}
 }
 
 func htmlEscape(value string) string {
