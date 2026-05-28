@@ -1,5 +1,5 @@
 import { ApiClient } from "@/lib/api";
-import type { MastodonAccount, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonRelationship, MastodonSearchResults, MastodonStatus } from "@/types/mastodon";
+import type { MastodonAccount, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonRelationship, MastodonSearchResults, MastodonStatus } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
@@ -117,6 +117,15 @@ export function createMastodonApi(accessToken: string) {
     },
     deleteNotification(id: string) {
       return client.request<Record<string, never>>(`/api/v1/notifications/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
+    conversations(limit = 40) {
+      return client.request<MastodonConversation[]>(`/api/v1/conversations?limit=${limit}`);
+    },
+    markConversationRead(id: string) {
+      return client.request<MastodonConversation>(`/api/v1/conversations/${encodeURIComponent(id)}/read`, { method: "POST" });
+    },
+    deleteConversation(id: string) {
+      return client.request<Record<string, never>>(`/api/v1/conversations/${encodeURIComponent(id)}`, { method: "DELETE" });
     },
     favourites(limit = 40) {
       return client.request<MastodonStatus[]>(`/api/v1/favourites?limit=${limit}`);

@@ -72,6 +72,13 @@ export type MastodonNotification = {
   status?: MastodonStatus;
 };
 
+export type MastodonConversation = {
+  id: string;
+  unread: boolean;
+  accounts: MastodonAccount[];
+  last_status?: MastodonStatus | null;
+};
+
 export type MastodonInstance = {
   uri?: string;
   domain?: string;
