@@ -43,9 +43,14 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/accounts/relationships", h.relationships)
 	app.Get("/api/v1/accounts/:id/followers", h.followers)
 	app.Get("/api/v1/accounts/:id/following", h.following)
+	app.Get("/api/v1/accounts/:id/statuses", h.accountStatuses)
 	app.Post("/api/v1/accounts/:id/follow", h.followAccount)
 	app.Post("/api/v1/accounts/:id/unfollow", h.unfollowAccount)
+	app.Get("/api/v1/accounts/:id", h.account)
 	app.Post("/api/v1/statuses", h.createStatus)
+	app.Get("/api/v1/statuses/:id/context", h.statusContext)
+	app.Get("/api/v1/statuses/:id", h.status)
+	app.Delete("/api/v1/statuses/:id", h.deleteStatus)
 	app.Get("/api/v1/timelines/home", h.homeTimeline)
 	app.Get("/api/v1/timelines/public", h.publicTimeline)
 }
@@ -179,6 +184,18 @@ func (h APIHandler) relationships(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+func (h APIHandler) account(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	account, derr := h.api.GetAccount(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(accountToResponse(account))
+}
+
 func (h APIHandler) accountList(c *fiber.Ctx, accounts []models.Account) error {
 	resp := make([]accountResponse, 0, len(accounts))
 	for _, account := range accounts {
@@ -189,6 +206,18 @@ func (h APIHandler) accountList(c *fiber.Ctx, accounts []models.Account) error {
 		resp = append(resp, acct)
 	}
 	return c.JSON(resp)
+}
+
+func (h APIHandler) accountStatuses(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	items, derr := h.api.AccountStatuses(c.UserContext(), principal.Account, c.Params("id"), c.QueryInt("limit"), c.Query("max_id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(timelineItemsToStatuses(items))
 }
 
 func (h APIHandler) followers(c *fiber.Ctx) error {
@@ -247,6 +276,52 @@ func (h APIHandler) unfollowAccount(c *fiber.Ctx) error {
 		}
 	}
 	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: false, Requested: false, ShowingReblogs: true})
+}
+
+func (h APIHandler) status(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	item, derr := h.api.GetStatus(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(noteToStatus(item.Note, &item.Account))
+}
+
+func (h APIHandler) deleteStatus(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	res, derr := h.api.DeleteStatus(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	for _, inbox := range res.FollowerInboxes {
+		if err := h.queueDelivery(res.RawJSON, inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
+type contextResponse struct {
+	Ancestors   []statusResponse `json:"ancestors"`
+	Descendants []statusResponse `json:"descendants"`
+}
+
+func (h APIHandler) statusContext(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	ctxResp, derr := h.api.StatusContext(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(contextResponse{Ancestors: timelineItemsToStatuses(ctxResp.Ancestors), Descendants: timelineItemsToStatuses(ctxResp.Descendants)})
 }
 
 func (h APIHandler) homeTimeline(c *fiber.Ctx) error {

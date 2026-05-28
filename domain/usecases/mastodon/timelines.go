@@ -14,7 +14,7 @@ func (u UseCase) HomeTimeline(ctx context.Context, account *models.Account) ([]T
 	if derr := requireAccount(account); derr != nil {
 		return nil, derr
 	}
-	notes, err := u.cfg.NotesRepo.ListLocalNotes(ctx, nil, account.ID)
+	notes, err := u.cfg.NotesRepo.ListLocalNotesPaged(ctx, nil, account.ID, 40, "")
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}

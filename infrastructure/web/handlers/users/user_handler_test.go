@@ -102,6 +102,15 @@ func (f *fakeNotesRepo) CreateNote(ctx context.Context, tx *db.Tx, input repos.C
 	f.notes = append(f.notes, note)
 	return &note, nil
 }
+func (f *fakeNotesRepo) GetNoteByID(ctx context.Context, tx *db.Tx, id string) (*models.Note, error) {
+	for _, note := range f.notes {
+		if note.ID == id {
+			return &note, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
 func (f *fakeNotesRepo) GetNoteByURI(ctx context.Context, tx *db.Tx, uri string) (*models.Note, error) {
 	for _, note := range f.notes {
 		if note.URI == uri {
@@ -120,6 +129,15 @@ func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri stri
 	}
 	return nil
 }
+func (f *fakeNotesRepo) DeleteNoteByID(ctx context.Context, tx *db.Tx, id string) error {
+	for i, note := range f.notes {
+		if note.ID == id {
+			f.notes = append(f.notes[:i], f.notes[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
 func (f *fakeNotesRepo) DeleteNoteByURI(ctx context.Context, tx *db.Tx, uri string) error {
 	for i, note := range f.notes {
 		if note.URI == uri {
@@ -130,6 +148,12 @@ func (f *fakeNotesRepo) DeleteNoteByURI(ctx context.Context, tx *db.Tx, uri stri
 	return nil
 }
 func (f *fakeNotesRepo) ListLocalNotes(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Note, error) {
+	return f.notes, nil
+}
+func (f *fakeNotesRepo) ListLocalNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error) {
+	return f.notes, nil
+}
+func (f *fakeNotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
 	return f.notes, nil
 }
 

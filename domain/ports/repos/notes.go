@@ -21,8 +21,12 @@ type CreateNoteInput struct {
 type NotesRepository interface {
 	PostsRepository
 	CreateNote(ctx context.Context, tx *db.Tx, input CreateNoteInput) (*models.Note, error)
+	GetNoteByID(ctx context.Context, tx *db.Tx, id string) (*models.Note, error)
 	GetNoteByURI(ctx context.Context, tx *db.Tx, uri string) (*models.Note, error)
 	UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri string, content string, plainText string) error
+	DeleteNoteByID(ctx context.Context, tx *db.Tx, id string) error
 	DeleteNoteByURI(ctx context.Context, tx *db.Tx, uri string) error
 	ListLocalNotes(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Note, error)
+	ListLocalNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error)
+	ListAttributedNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error)
 }
