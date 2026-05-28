@@ -24,8 +24,8 @@ Frontend gaps to work through next:
    - Show attempts, next retry, delivered time, and last error
    - Retry or cancel failed delivery when backend supports it
 
-5. Posts page
-   - Refresh timeline after posting without manual reload
+5. Timeline page
+   - Local and global tabs currently share the public timeline until the backend distinguishes them
    - Add visibility selection if backend supports it
    - Add delete post if backend supports it
    - Add better empty/error states after real data testing
