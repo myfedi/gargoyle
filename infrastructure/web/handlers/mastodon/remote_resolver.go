@@ -18,17 +18,22 @@ import (
 
 // RemoteAccountResolver discovers ActivityPub actors through WebFinger and
 // actor fetches for Mastodon-compatible account search/follow endpoints.
-type RemoteAccountResolver struct {
-	client             *http.Client
-	allowHTTPRemote    bool
-	allowPrivateRemote bool
+type RemoteURLException struct {
+	Host           string
+	AllowHTTP      bool
+	AllowPrivateIP bool
 }
 
-func NewRemoteAccountResolver(client *http.Client, allowHTTPRemote bool, allowPrivateRemote bool) RemoteAccountResolver {
+type RemoteAccountResolver struct {
+	client     *http.Client
+	exceptions []RemoteURLException
+}
+
+func NewRemoteAccountResolver(client *http.Client, exceptions []RemoteURLException) RemoteAccountResolver {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
-	return RemoteAccountResolver{client: client, allowHTTPRemote: allowHTTPRemote, allowPrivateRemote: allowPrivateRemote}
+	return RemoteAccountResolver{client: client, exceptions: exceptions}
 }
 
 func (r RemoteAccountResolver) ResolveAccount(ctx context.Context, query string, signer *models.Account) (*models.Account, error) {
@@ -49,11 +54,11 @@ func (r RemoteAccountResolver) actorURL(ctx context.Context, query string) (stri
 		return "", errors.New("account search requires @user@host or actor URL")
 	}
 	scheme := "https"
-	if r.allowHTTPRemote {
+	if remoteURLExceptionForHost(parts[1], r.exceptions).AllowHTTP {
 		scheme = "http"
 	}
 	wfURL := fmt.Sprintf("%s://%s/.well-known/webfinger?resource=%s", scheme, parts[1], url.QueryEscape("acct:"+query))
-	if err := validateRemoteURL(ctx, wfURL, r.allowHTTPRemote, r.allowPrivateRemote); err != nil {
+	if err := validateRemoteURL(ctx, wfURL, r.exceptions); err != nil {
 		return "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wfURL, nil)
@@ -88,7 +93,7 @@ func (r RemoteAccountResolver) actorURL(ctx context.Context, query string) (stri
 }
 
 func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string) (*models.Account, error) {
-	if err := validateRemoteURL(ctx, actorURL, r.allowHTTPRemote, r.allowPrivateRemote); err != nil {
+	if err := validateRemoteURL(ctx, actorURL, r.exceptions); err != nil {
 		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, actorURL, nil)
@@ -137,12 +142,13 @@ func mastodonAccountID(actor string) string {
 	return "remote:" + base64.RawURLEncoding.EncodeToString([]byte(actor))
 }
 
-func validateRemoteURL(ctx context.Context, raw string, allowHTTP bool, allowPrivate bool) error {
+func validateRemoteURL(ctx context.Context, raw string, exceptions []RemoteURLException) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err
 	}
-	if u.Scheme != "https" && !(allowHTTP && u.Scheme == "http") {
+	exception := remoteURLExceptionForHost(u.Hostname(), exceptions)
+	if u.Scheme != "https" && !(exception.AllowHTTP && u.Scheme == "http") {
 		return errors.New("unsupported remote URL scheme")
 	}
 	if u.Hostname() == "" || u.User != nil {
@@ -153,11 +159,20 @@ func validateRemoteURL(ctx context.Context, raw string, allowHTTP bool, allowPri
 		return err
 	}
 	for _, ip := range ips {
-		if !allowPrivate && (ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsPrivate()) {
+		if !exception.AllowPrivateIP && (ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsPrivate()) {
 			return errors.New("remote URL resolves to private address")
 		}
 	}
 	return nil
+}
+
+func remoteURLExceptionForHost(host string, exceptions []RemoteURLException) RemoteURLException {
+	for _, exception := range exceptions {
+		if strings.EqualFold(exception.Host, host) {
+			return exception
+		}
+	}
+	return RemoteURLException{}
 }
 
 func stringURL(value any) string {

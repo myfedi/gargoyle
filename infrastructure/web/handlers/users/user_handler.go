@@ -30,24 +30,23 @@ type deliveryJob struct {
 // Required dependencies are validated in NewUsersWebHandler so configuration
 // mistakes fail at startup instead of during request handling.
 type UsersWebHandlerConfig struct {
-	TxProvider         db.TxProvider
-	AccountsRepo       repos.AccountsRepo
-	ActivitiesRepo     repos.ActivitiesRepository
-	FollowsRepo        repos.FollowsRepository
-	NotesRepo          repos.NotesRepository
-	Serializer         activitypub.ActorSerializer
-	ActorFetcher       activitypub.ActorFetcher
-	Deliverer          activitypub.ActivityDeliverer
-	SignatureVerifier  activitypub.SignatureVerifier
-	ContentSanitizer   ports.ContentSanitizer
-	HTTPClient         *http.Client
-	BodyLimitBytes     int
-	AllowHTTPRemote    bool
-	AllowPrivateRemote bool
-	DeliveryQueueSize  int
-	RequireSignedInbox bool
-	AllowUnsignedInbox bool
-	DeliveryRetries    int
+	TxProvider          db.TxProvider
+	AccountsRepo        repos.AccountsRepo
+	ActivitiesRepo      repos.ActivitiesRepository
+	FollowsRepo         repos.FollowsRepository
+	NotesRepo           repos.NotesRepository
+	Serializer          activitypub.ActorSerializer
+	ActorFetcher        activitypub.ActorFetcher
+	Deliverer           activitypub.ActivityDeliverer
+	SignatureVerifier   activitypub.SignatureVerifier
+	ContentSanitizer    ports.ContentSanitizer
+	HTTPClient          *http.Client
+	BodyLimitBytes      int
+	RemoteURLExceptions []RemoteURLException
+	DeliveryQueueSize   int
+	RequireSignedInbox  bool
+	AllowUnsignedInbox  bool
+	DeliveryRetries     int
 }
 
 type UsersWebHandler struct {
@@ -135,7 +134,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		AccountsRepo: cfg.AccountsRepo,
 		Serializer:   cfg.Serializer,
 	})
-	transport := httpActivityPubTransport{client: cfg.HTTPClient, retries: cfg.DeliveryRetries, allowHTTPRemote: cfg.AllowHTTPRemote, allowPrivateRemote: cfg.AllowPrivateRemote}
+	transport := httpActivityPubTransport{client: cfg.HTTPClient, retries: cfg.DeliveryRetries, exceptions: cfg.RemoteURLExceptions}
 	if cfg.ActorFetcher == nil {
 		cfg.ActorFetcher = transport
 	}

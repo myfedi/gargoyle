@@ -25,6 +25,22 @@ import (
 	"github.com/myfedi/gargoyle/mock"
 )
 
+func usersRemoteURLExceptions(exceptions []config.ActivityPubRemoteURLException) []users.RemoteURLException {
+	res := make([]users.RemoteURLException, 0, len(exceptions))
+	for _, exception := range exceptions {
+		res = append(res, users.RemoteURLException{Host: exception.Host, AllowHTTP: exception.AllowHTTP, AllowPrivateIP: exception.AllowPrivateIP})
+	}
+	return res
+}
+
+func mastodonRemoteURLExceptions(exceptions []config.ActivityPubRemoteURLException) []mastodon.RemoteURLException {
+	res := make([]mastodon.RemoteURLException, 0, len(exceptions))
+	for _, exception := range exceptions {
+		res = append(res, mastodon.RemoteURLException{Host: exception.Host, AllowHTTP: exception.AllowHTTP, AllowPrivateIP: exception.AllowPrivateIP})
+	}
+	return res
+}
+
 func main() {
 	/// config
 	argsWithoutProg := os.Args[1:]
@@ -97,20 +113,21 @@ func main() {
 	// set up userprofile handler
 	actorSerializer := apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{})
 	contentSanitizer := adapters.NewContentSanitizer()
+	userRemoteURLExceptions := usersRemoteURLExceptions(config.ActivityPub.RemoteURLExceptions)
+	mastodonRemoteURLExceptions := mastodonRemoteURLExceptions(config.ActivityPub.RemoteURLExceptions)
 	userProfileHandler := users.NewUsersWebHandler(users.UsersWebHandlerConfig{
-		TxProvider:         txProvider,
-		AccountsRepo:       accountsRepo,
-		ActivitiesRepo:     activitiesRepo,
-		FollowsRepo:        followsRepo,
-		NotesRepo:          notesRepo,
-		Serializer:         actorSerializer,
-		ContentSanitizer:   contentSanitizer,
-		BodyLimitBytes:     config.ActivityPub.BodyLimitBytes,
-		AllowHTTPRemote:    config.ActivityPub.AllowHTTPRemote,
-		AllowPrivateRemote: config.ActivityPub.AllowPrivateRemote,
-		DeliveryQueueSize:  config.ActivityPub.DeliveryQueueSize,
-		RequireSignedInbox: true,
-		DeliveryRetries:    3,
+		TxProvider:          txProvider,
+		AccountsRepo:        accountsRepo,
+		ActivitiesRepo:      activitiesRepo,
+		FollowsRepo:         followsRepo,
+		NotesRepo:           notesRepo,
+		Serializer:          actorSerializer,
+		ContentSanitizer:    contentSanitizer,
+		BodyLimitBytes:      config.ActivityPub.BodyLimitBytes,
+		RemoteURLExceptions: userRemoteURLExceptions,
+		DeliveryQueueSize:   config.ActivityPub.DeliveryQueueSize,
+		RequireSignedInbox:  true,
+		DeliveryRetries:     3,
 	})
 	userProfileHandler.SetupUserProfileHandler(app)
 
@@ -137,7 +154,7 @@ func main() {
 		NotesRepo:         notesRepo,
 		FollowsRepo:       followsRepo,
 		IDGenerator:       adapters.NewULIDGenerator(),
-		RemoteResolver:    mastodon.NewRemoteAccountResolver(nil, config.ActivityPub.AllowHTTPRemote, config.ActivityPub.AllowPrivateRemote),
+		RemoteResolver:    mastodon.NewRemoteAccountResolver(nil, mastodonRemoteURLExceptions),
 		CreateOutboxUC:    apUsecases.NewCreateOutboxActivityUseCase(mastodonFlowCfg),
 		CreateFollowingUC: apUsecases.NewCreateFollowingUseCase(mastodonFlowCfg),
 	})

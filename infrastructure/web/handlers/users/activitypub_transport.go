@@ -29,11 +29,16 @@ import (
 // httpActivityPubTransport is the infrastructure adapter for remote ActivityPub
 // I/O: actor fetching, signed delivery, and inbound HTTP-signature checks. The
 // web handler depends on the domain ports, not these concrete methods.
+type RemoteURLException struct {
+	Host           string
+	AllowHTTP      bool
+	AllowPrivateIP bool
+}
+
 type httpActivityPubTransport struct {
-	client             *http.Client
-	retries            int
-	allowHTTPRemote    bool
-	allowPrivateRemote bool
+	client     *http.Client
+	retries    int
+	exceptions []RemoteURLException
 }
 
 func (t httpActivityPubTransport) httpClient() *http.Client {
@@ -50,18 +55,19 @@ func (t httpActivityPubTransport) httpClient() *http.Client {
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
-			return validateRemoteURL(req.Context(), req.URL.String(), t.allowHTTPRemote, t.allowPrivateRemote)
+			return validateRemoteURL(req.Context(), req.URL.String(), t.exceptions)
 		}
 	}
 	return client
 }
 
-func validateRemoteURL(ctx context.Context, raw string, allowHTTP bool, allowPrivate bool) error {
+func validateRemoteURL(ctx context.Context, raw string, exceptions []RemoteURLException) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err
 	}
-	if u.Scheme != "https" && !(allowHTTP && u.Scheme == "http") {
+	exception := remoteURLExceptionForHost(u.Hostname(), exceptions)
+	if u.Scheme != "https" && !(exception.AllowHTTP && u.Scheme == "http") {
 		return errors.New("unsupported remote URL scheme")
 	}
 	if u.Hostname() == "" || u.User != nil {
@@ -72,11 +78,20 @@ func validateRemoteURL(ctx context.Context, raw string, allowHTTP bool, allowPri
 		return err
 	}
 	for _, ip := range ips {
-		if !allowPrivate && !isPublicIP(ip) {
+		if !exception.AllowPrivateIP && !isPublicIP(ip) {
 			return errors.New("remote URL resolves to private address")
 		}
 	}
 	return nil
+}
+
+func remoteURLExceptionForHost(host string, exceptions []RemoteURLException) RemoteURLException {
+	for _, exception := range exceptions {
+		if strings.EqualFold(exception.Host, host) {
+			return exception
+		}
+	}
+	return RemoteURLException{}
 }
 
 func isPublicIP(ip net.IP) bool {
@@ -99,7 +114,7 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 	if actor == "" {
 		return nil, errors.New("empty actor")
 	}
-	if err := validateRemoteURL(ctx, actor, t.allowHTTPRemote, t.allowPrivateRemote); err != nil {
+	if err := validateRemoteURL(ctx, actor, t.exceptions); err != nil {
 		return nil, err
 	}
 	client := t.httpClient()
@@ -131,7 +146,7 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 }
 
 func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbox string, account models.Account) {
-	if err := validateRemoteURL(ctx, inbox, t.allowHTTPRemote, t.allowPrivateRemote); err != nil {
+	if err := validateRemoteURL(ctx, inbox, t.exceptions); err != nil {
 		return
 	}
 	client := t.httpClient()

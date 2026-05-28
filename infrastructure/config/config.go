@@ -11,11 +11,16 @@ type SqliteConfig struct {
 	Uri string `mapstructure:"uri"`
 }
 
+type ActivityPubRemoteURLException struct {
+	Host           string `mapstructure:"host"`
+	AllowHTTP      bool   `mapstructure:"allow_http"`
+	AllowPrivateIP bool   `mapstructure:"allow_private_ip"`
+}
+
 type ActivityPubConfig struct {
-	BodyLimitBytes     int  `mapstructure:"body_limit_bytes"`
-	AllowHTTPRemote    bool `mapstructure:"allow_http_remote"`
-	AllowPrivateRemote bool `mapstructure:"allow_private_remote"`
-	DeliveryQueueSize  int  `mapstructure:"delivery_queue_size"`
+	BodyLimitBytes      int                             `mapstructure:"body_limit_bytes"`
+	RemoteURLExceptions []ActivityPubRemoteURLException `mapstructure:"remote_url_exceptions"`
+	DeliveryQueueSize   int                             `mapstructure:"delivery_queue_size"`
 }
 
 type CORSConfig struct {
@@ -89,8 +94,6 @@ func NewConfig(configFile string) (*Config, error) {
 	// defaults
 	viper.SetDefault("debug", false)
 	viper.SetDefault("activitypub.body_limit_bytes", 1<<20)
-	viper.SetDefault("activitypub.allow_http_remote", false)
-	viper.SetDefault("activitypub.allow_private_remote", false)
 	viper.SetDefault("activitypub.delivery_queue_size", 128)
 	viper.SetDefault("web.cors.allowed_methods", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 	viper.SetDefault("web.cors.allowed_headers", []string{"Authorization", "Content-Type"})
@@ -109,6 +112,27 @@ func NewConfig(configFile string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+func verifyRemoteURLExceptions(exceptions []ActivityPubRemoteURLException) error {
+	seen := map[string]bool{}
+	for _, exception := range exceptions {
+		host := strings.TrimSpace(exception.Host)
+		if host == "" {
+			return fmt.Errorf("activitypub.remote_url_exceptions.host cannot be empty")
+		}
+		if strings.Contains(host, "://") || strings.Contains(host, "/") {
+			return fmt.Errorf("activitypub.remote_url_exceptions.host must be a hostname, not a URL")
+		}
+		if host == "*" {
+			return fmt.Errorf("activitypub.remote_url_exceptions.host must not be wildcard")
+		}
+		if seen[host] {
+			return fmt.Errorf("duplicate activitypub.remote_url_exceptions host %q", host)
+		}
+		seen[host] = true
+	}
+	return nil
 }
 
 func verifyCORSConfig(cfg CORSConfig) error {
@@ -164,6 +188,9 @@ func verifyConfig(cfg *Config) error {
 	}
 	if cfg.ActivityPub.DeliveryQueueSize <= 0 {
 		return fmt.Errorf("activitypub.delivery_queue_size must be greater than 0")
+	}
+	if err := verifyRemoteURLExceptions(cfg.ActivityPub.RemoteURLExceptions); err != nil {
+		return err
 	}
 	if err := verifyCORSConfig(cfg.Web.CORS); err != nil {
 		return err

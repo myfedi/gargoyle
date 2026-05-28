@@ -105,15 +105,17 @@ web:
 
 Wildcard CORS origins are rejected; only trusted UI origins should be listed.
 
-For local Fediverse compatibility setups that resolve peers such as `gts.test` to loopback/private addresses, opt in explicitly:
+For local Fediverse compatibility setups that resolve peers such as `gts.test` to loopback/private addresses, opt in with exact per-host exceptions:
 
 ```yaml
 activitypub:
-  allow_http_remote: true
-  allow_private_remote: true
+  remote_url_exceptions:
+    - host: gts.test
+      allow_http: true
+      allow_private_ip: true
 ```
 
-Do not enable private remote fetching for untrusted production deployments.
+Do not allow private remote fetching for untrusted production hosts.
 
 Known gaps before claiming broad compatibility:
 
