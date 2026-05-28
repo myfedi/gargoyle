@@ -16,11 +16,19 @@ export function createMastodonApi(accessToken: string) {
     instance() {
       return client.request<MastodonInstance>("/api/v1/instance");
     },
-    homeTimeline() {
-      return client.request<MastodonStatus[]>("/api/v1/timelines/home");
+    homeTimeline(options: { limit?: number; maxId?: string } = {}) {
+      const params = timelineParams(options);
+      return client.request<MastodonStatus[]>(`/api/v1/timelines/home?${params.toString()}`);
     },
-    publicTimeline() {
-      return client.request<MastodonStatus[]>("/api/v1/timelines/public");
+    publicTimeline(options: { limit?: number; maxId?: string; local?: boolean; remote?: boolean } = {}) {
+      const params = timelineParams(options);
+      if (options.local) {
+        params.set("local", "true");
+      }
+      if (options.remote) {
+        params.set("remote", "true");
+      }
+      return client.request<MastodonStatus[]>(`/api/v1/timelines/public?${params.toString()}`);
     },
     createStatus(input: CreateStatusInput) {
       return client.request<MastodonStatus>("/api/v1/statuses", {
@@ -77,4 +85,12 @@ export function createMastodonApi(accessToken: string) {
       });
     },
   };
+}
+
+function timelineParams(options: { limit?: number; maxId?: string }) {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
+  if (options.maxId) {
+    params.set("max_id", options.maxId);
+  }
+  return params;
 }

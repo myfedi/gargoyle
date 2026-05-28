@@ -13,8 +13,11 @@ import type { MastodonAccount, MastodonStatus } from "@/types/mastodon";
 const maxPostLength = 500;
 const timelineTabs = [
   { value: "home", label: "Home" },
-  { value: "public", label: "Public" },
+  { value: "local", label: "Local" },
+  { value: "global", label: "Global" },
 ] as const;
+
+const timelineLimit = 20;
 
 type TimelineTab = (typeof timelineTabs)[number]["value"];
 
@@ -26,6 +29,7 @@ export function PostsPage() {
   const [statusText, setStatusText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isPosting, setIsPosting] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -46,7 +50,7 @@ export function PostsPage() {
       try {
         const [nextCurrentAccount, nextStatuses] = await Promise.all([
           api.verifyCredentials(),
-          timeline === "home" ? api.homeTimeline() : api.publicTimeline(),
+          loadTimelinePage(timeline),
         ]);
         setCurrentAccount(nextCurrentAccount);
         setStatuses(nextStatuses);
@@ -62,6 +66,39 @@ export function PostsPage() {
   useEffect(() => {
     void loadTimeline(activeTimeline);
   }, [activeTimeline, loadTimeline]);
+
+  async function loadMore() {
+    if (!api || statuses.length === 0) {
+      return;
+    }
+
+    setIsLoadingMore(true);
+    setTimelineError(null);
+
+    try {
+      const nextStatuses = await loadTimelinePage(activeTimeline, statuses.at(-1)?.id);
+      setStatuses((current) => [...current, ...nextStatuses]);
+    } catch (caughtError) {
+      setTimelineError(caughtError instanceof Error ? caughtError.message : "Could not load more posts.");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
+
+  function loadTimelinePage(timeline: TimelineTab, maxId?: string) {
+    if (!api) {
+      return Promise.resolve([]);
+    }
+
+    const options = { limit: timelineLimit, maxId };
+    if (timeline === "home") {
+      return api.homeTimeline(options);
+    }
+    if (timeline === "local") {
+      return api.publicTimeline({ ...options, local: true });
+    }
+    return api.publicTimeline({ ...options, remote: true });
+  }
 
   async function deleteStatus(status: MastodonStatus) {
     if (!api) {
@@ -150,13 +187,20 @@ export function PostsPage() {
         ) : statuses.length === 0 ? (
           <EmptyState title="No posts" description="Nothing to show here yet." />
         ) : (
-          <StatusList
-            statuses={statuses}
-            currentAccountId={currentAccount?.id}
-            emptyTitle="No posts"
-            emptyDescription="Nothing to show here yet."
-            onDelete={deleteStatus}
-          />
+          <>
+            <StatusList
+              statuses={statuses}
+              currentAccountId={currentAccount?.id}
+              emptyTitle="No posts"
+              emptyDescription="Nothing to show here yet."
+              onDelete={deleteStatus}
+            />
+            <div className="mt-5">
+              <Button variant="outline" onClick={() => void loadMore()} disabled={isLoadingMore}>
+                {isLoadingMore ? "Loading..." : "Load more"}
+              </Button>
+            </div>
+          </>
         )}
       </Panel>
     </FeaturePage>
