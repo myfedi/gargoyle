@@ -406,5 +406,9 @@ func noteToStatus(note models.Note, account *models.Account) statusResponse {
 	if created.IsZero() {
 		created = time.Now().UTC()
 	}
-	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: "public", InReplyToID: note.InReplyToID, Sensitive: false, MediaAttachments: []any{}, Mentions: []any{}, Tags: []any{}, Emojis: []any{}}
+	visibility := note.Visibility
+	if visibility == "" {
+		visibility = "public"
+	}
+	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: visibility, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []any{}, Mentions: []any{}, Tags: []any{}, Emojis: []any{}}
 }

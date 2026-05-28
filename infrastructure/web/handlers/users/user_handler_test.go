@@ -98,7 +98,7 @@ func (f *fakeNotesRepo) GetLocalPostsCount(ctx context.Context) (int, error) {
 	return len(f.notes), nil
 }
 func (f *fakeNotesRepo) CreateNote(ctx context.Context, tx *db.Tx, input repos.CreateNoteInput) (*models.Note, error) {
-	note := models.Note{ID: "note-1", LocalAccountID: input.LocalAccountID, ActivityID: input.ActivityID, URI: input.URI, Content: input.Content, PlainText: input.PlainText, AttributedTo: input.AttributedTo, InReplyToID: input.InReplyToID, InReplyToURI: input.InReplyToURI, PublishedAt: input.PublishedAt}
+	note := models.Note{ID: "note-1", LocalAccountID: input.LocalAccountID, ActivityID: input.ActivityID, URI: input.URI, Content: input.Content, PlainText: input.PlainText, Visibility: input.Visibility, Sensitive: input.Sensitive, SpoilerText: input.SpoilerText, AttributedTo: input.AttributedTo, InReplyToID: input.InReplyToID, InReplyToURI: input.InReplyToURI, PublishedAt: input.PublishedAt}
 	f.notes = append(f.notes, note)
 	return &note, nil
 }

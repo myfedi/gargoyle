@@ -13,7 +13,7 @@ This is the working roadmap for making Gargoyle usable with a Mastodon-compatibl
 - [x] Outbox at `GET/POST /users/:username/outbox`.
 - [x] Followers/following ActivityPub collections.
 - [x] Basic local and inbound Note persistence.
-- [x] Basic signed outbound delivery through an in-memory queue.
+- [x] Signed outbound delivery through durable delivery jobs.
 - [x] Inbound `Follow`, `Undo Follow`, `Create`, `Delete`, `Update`, `Accept`, `Reject` handling.
 - [x] GoToSocial basic compatibility has been validated previously.
 
@@ -25,10 +25,13 @@ This is the working roadmap for making Gargoyle usable with a Mastodon-compatibl
 - [x] `GET /api/v1/accounts/verify_credentials`.
 - [x] `GET /api/v1/instance` and `GET /api/v2/instance`.
 - [x] `POST /api/v1/statuses`.
-- [x] `GET /api/v1/timelines/home` and `GET /api/v1/timelines/public` basic local timeline.
+- [x] `GET /api/v1/timelines/home` and `GET /api/v1/timelines/public` with local/remote filters and pagination.
 - [x] `GET /api/v2/search` and `GET /api/v1/accounts/search` for remote account lookup.
 - [x] `POST /api/v1/accounts/:id/follow`.
 - [x] `GET /api/v1/accounts/relationships`.
+- [x] `GET /api/v1/accounts/:id` and `GET /api/v1/accounts/:id/statuses`.
+- [x] `GET /api/v1/statuses/:id`, `DELETE /api/v1/statuses/:id`, and `GET /api/v1/statuses/:id/context`.
+- [x] Reply posting with `in_reply_to_id` and ActivityPub `inReplyTo`.
 - [x] Configurable CORS allowlist for separate browser UI origins.
 
 ### Security/configuration
@@ -61,8 +64,8 @@ Needed for real UI social graph flows.
   - [x] Prefer cached remote account profiles and refresh when missing.
 - [x] `GET /api/v1/accounts/:id/following`.
   - [x] Return accepted outbound follows.
-- [ ] `GET /api/v1/accounts/:id`.
-- [ ] `GET /api/v1/accounts/:id/statuses`.
+- [x] `GET /api/v1/accounts/:id`.
+- [x] `GET /api/v1/accounts/:id/statuses`.
 
 ## Priority 3: remote account cache/read model
 
@@ -87,15 +90,16 @@ Current follow/search can resolve remote actors, but follows mostly store actor 
 
 Current home timeline returns the local user's own notes. Real use needs followed remote posts.
 
-- [ ] Ensure inbound Notes from followed actors are stored against the local account timeline.
-- [ ] Include own posts and followed remote posts.
-- [ ] Add Mastodon pagination params:
-  - [ ] `limit`
-  - [ ] `max_id`
+- [x] Ensure inbound Notes from followed actors are stored against the local account timeline.
+- [x] Include own posts and followed remote posts.
+- [x] Add Mastodon pagination params:
+  - [x] `limit`
+  - [x] `max_id`
   - [ ] `since_id`
   - [ ] `min_id`
-- [ ] Add stable ordering by published/created/id.
-- [ ] Decide local/public/home semantics.
+- [x] Add stable ordering by published/created/id.
+- [x] Decide current local/public/home semantics.
+- [ ] Implement full Mastodon `since_id` / `min_id` behavior.
 
 ## Priority 5: durable delivery queue
 
@@ -127,18 +131,20 @@ Useful for search, actor refresh, missing referenced objects, and remote status 
 - [x] Add fetch job repository port.
 - [x] Add fetch worker shell with retry/backoff for registered jobs.
 - [ ] Queue actor refreshes.
-- [ ] Queue missing object/status fetches from inbound activities.
+- [x] Queue missing reply-parent object fetches from inbound/outbound notes.
+- [x] Persist hydrated remote reply parents as local notes.
+- [ ] Add de-duplication for repeated fetch jobs.
 
 ## Priority 7: posting/status compatibility
 
-- [ ] `GET /api/v1/statuses/:id`.
-- [ ] `DELETE /api/v1/statuses/:id`.
-- [ ] `GET /api/v1/statuses/:id/context`.
-- [ ] Support `visibility`.
-- [ ] Support `sensitive`.
-- [ ] Support `spoiler_text`.
-- [ ] Support `in_reply_to_id`.
-- [ ] Media upload later.
+- [x] `GET /api/v1/statuses/:id`.
+- [x] `DELETE /api/v1/statuses/:id`.
+- [x] `GET /api/v1/statuses/:id/context`.
+- [ ] Persist and federate `visibility`.
+- [ ] Persist and render `sensitive`.
+- [ ] Persist and render `spoiler_text`.
+- [x] Support `in_reply_to_id`.
+- [ ] Media upload.
 
 ## Priority 8: OAuth/session polish
 

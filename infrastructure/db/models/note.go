@@ -13,6 +13,9 @@ type Note struct {
 	URI            string    `bun:",nullzero,notnull,unique"`
 	Content        string    `bun:",nullzero,notnull"`
 	PlainText      string    `bun:",nullzero"`
+	Visibility     string    `bun:",nullzero,notnull,default:'public'"`
+	Sensitive      bool      `bun:",notnull,default:false"`
+	SpoilerText    string    `bun:",nullzero"`
 	AttributedTo   string    `bun:",nullzero,notnull"`
 	InReplyToID    *string   `bun:"type:CHAR(26),nullzero"`
 	InReplyToURI   *string   `bun:",nullzero"`
@@ -28,6 +31,9 @@ func (n Note) ToModel() domainmodels.Note {
 		URI:            n.URI,
 		Content:        n.Content,
 		PlainText:      n.PlainText,
+		Visibility:     n.Visibility,
+		Sensitive:      n.Sensitive,
+		SpoilerText:    n.SpoilerText,
 		AttributedTo:   n.AttributedTo,
 		InReplyToID:    n.InReplyToID,
 		InReplyToURI:   n.InReplyToURI,

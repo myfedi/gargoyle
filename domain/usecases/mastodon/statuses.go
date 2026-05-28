@@ -28,7 +28,11 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	noteDoc := map[string]any{"type": "Note", "content": input.Content}
+	visibility := normalizedVisibility(input.Visibility)
+	noteDoc := map[string]any{"type": "Note", "content": input.Content, "visibility": visibility, "sensitive": input.Sensitive}
+	if input.SpoilerText != "" {
+		noteDoc["summary"] = input.SpoilerText
+	}
 	if input.InReplyToID != "" {
 		parent, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, input.InReplyToID)
 		if err != nil || parent.LocalAccountID != account.ID {
@@ -52,5 +56,17 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+	note.Visibility = visibility
+	note.Sensitive = input.Sensitive
+	note.SpoilerText = input.SpoilerText
 	return &CreateStatusResult{Note: *note, Account: res.Account, RawJSON: res.RawJSON, FollowerInboxes: res.FollowerInboxes}, nil
+}
+
+func normalizedVisibility(visibility string) string {
+	switch visibility {
+	case "public", "unlisted", "private", "direct":
+		return visibility
+	default:
+		return "public"
+	}
 }

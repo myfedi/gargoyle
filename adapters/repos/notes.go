@@ -19,6 +19,13 @@ func NewNotesRepo(db *bun.DB) *NotesRepo { return &NotesRepo{db: db} }
 
 var _ repos.NotesRepository = &NotesRepo{}
 
+func noteVisibility(visibility string) string {
+	if visibility == "" {
+		return "public"
+	}
+	return visibility
+}
+
 func (r *NotesRepo) GetLocalPostsCount(ctx context.Context) (int, error) {
 	return r.db.NewSelect().Model((*dbModels.Note)(nil)).Count(ctx)
 }
@@ -44,6 +51,9 @@ func (r *NotesRepo) CreateNote(ctx context.Context, tx *dbPorts.Tx, input repos.
 		URI:            input.URI,
 		Content:        input.Content,
 		PlainText:      input.PlainText,
+		Visibility:     noteVisibility(input.Visibility),
+		Sensitive:      input.Sensitive,
+		SpoilerText:    input.SpoilerText,
 		AttributedTo:   input.AttributedTo,
 		InReplyToID:    input.InReplyToID,
 		InReplyToURI:   input.InReplyToURI,

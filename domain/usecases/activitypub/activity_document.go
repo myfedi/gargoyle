@@ -139,9 +139,21 @@ func SanitizeObjectContent(object map[string]any, sanitizer ports.ContentSanitiz
 type ExtractedNote struct {
 	URI          string
 	Content      string
+	Visibility   string
+	Sensitive    bool
+	SpoilerText  string
 	AttributedTo string
 	InReplyToURI *string
 	PublishedAt  time.Time
+}
+
+func normalizedExtractedVisibility(visibility string) string {
+	switch visibility {
+	case "public", "unlisted", "private", "direct":
+		return visibility
+	default:
+		return "public"
+	}
 }
 
 // ExtractNote returns the Note embedded in a Create activity, when present.
@@ -157,6 +169,9 @@ func ExtractNote(raw []byte) (ExtractedNote, bool) {
 		ID           string  `json:"id"`
 		Type         string  `json:"type"`
 		Content      string  `json:"content"`
+		Summary      string  `json:"summary"`
+		Visibility   string  `json:"visibility"`
+		Sensitive    bool    `json:"sensitive"`
 		AttributedTo string  `json:"attributedTo"`
 		InReplyTo    *string `json:"inReplyTo"`
 		Published    string  `json:"published"`
@@ -168,7 +183,7 @@ func ExtractNote(raw []byte) (ExtractedNote, bool) {
 	if err != nil {
 		publishedAt = time.Now().UTC()
 	}
-	return ExtractedNote{URI: note.ID, Content: note.Content, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, PublishedAt: publishedAt}, true
+	return ExtractedNote{URI: note.ID, Content: note.Content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, PublishedAt: publishedAt}, true
 }
 
 // ExtractNoteObject returns a Note from an activity object, used for Updates.
@@ -183,6 +198,9 @@ func ExtractNoteObject(raw []byte) (ExtractedNote, bool) {
 		ID           string  `json:"id"`
 		Type         string  `json:"type"`
 		Content      string  `json:"content"`
+		Summary      string  `json:"summary"`
+		Visibility   string  `json:"visibility"`
+		Sensitive    bool    `json:"sensitive"`
 		AttributedTo string  `json:"attributedTo"`
 		InReplyTo    *string `json:"inReplyTo"`
 		Published    string  `json:"published"`
@@ -194,7 +212,7 @@ func ExtractNoteObject(raw []byte) (ExtractedNote, bool) {
 	if err != nil {
 		publishedAt = time.Now().UTC()
 	}
-	return ExtractedNote{URI: note.ID, Content: note.Content, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, PublishedAt: publishedAt}, true
+	return ExtractedNote{URI: note.ID, Content: note.Content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, PublishedAt: publishedAt}, true
 }
 
 // ExtractedFollowObject is the normalized Follow object embedded in Accept/Reject activities.

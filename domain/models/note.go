@@ -9,6 +9,9 @@ type Note struct {
 	URI            string
 	Content        string
 	PlainText      string
+	Visibility     string
+	Sensitive      bool
+	SpoilerText    string
 	AttributedTo   string
 	InReplyToID    *string
 	InReplyToURI   *string

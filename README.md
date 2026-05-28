@@ -77,7 +77,7 @@ Implemented ActivityPub endpoints:
 
 ## Federation
 
-The server now has the basic pieces for federation: actor discovery, signed inbox requirement, follow acceptance, signed outbound delivery, stored notes, and outbox/followers collections.
+The server now has the basic pieces for federation and Mastodon-compatible clients: actor discovery, signed inbox requirement, follow acceptance, durable signed delivery jobs, stored local/remote notes, reply threads, OAuth/PKCE login, account search, follow/unfollow, timelines, account profiles, status detail/delete, and followers/following collections.
 
 Compatibility notes:
 
@@ -117,11 +117,13 @@ activitypub:
 
 Do not allow private remote fetching for untrusted production hosts.
 
+Implemented Mastodon-compatible client endpoints include OAuth app registration and authorization-code PKCE, account verification/search/follow/unfollow/relationships/followers/following/profile/statuses, status create/detail/delete/context, and home/public timelines with local/remote filters.
+
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.
--   Delivery is still in-process; there is no persistent delivery queue yet.
--   Inbox side effects for `Announce` and `Like` are not implemented yet.
--   Outbound follow still needs broader real-server compatibility testing.
+-   Visibility, sensitive/spoiler text, media uploads, notifications, favourites, and boosts still need full client API and ActivityPub semantics.
+-   Fetch and delivery queues need operational observability and duplicate-job suppression.
+-   Some security limitations remain documented in [`LIMITATIONS.md`](LIMITATIONS.md).
 
 For more, see https://github.com/BasixKOR/awesome-activitypub
