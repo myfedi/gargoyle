@@ -29,3 +29,9 @@ Gargoyle persists outgoing follow requests while they are pending, and exposes t
 It intentionally does not expose pending outgoing follows through `/api/v1/accounts/:id/following`, because that endpoint conventionally represents accepted follows. Mastodon-compatible APIs generally expose incoming follow requests for approval, but do not provide a standard global list of outgoing pending follow requests.
 
 A UI that needs to display pending state should query relationships for accounts it is already rendering, rather than depend on a Gargoyle-specific pending-follow list.
+
+## Direct statuses without recipients
+
+Gargoyle currently accepts Mastodon `visibility=direct` statuses even when the content contains no resolvable mentions. Such a status is stored locally with empty ActivityPub `to` and `cc` recipient lists, which is not useful and may be ignored or rejected by other servers.
+
+A stricter Mastodon-compatible implementation should reject direct statuses unless at least one local or remote mentioned account resolves successfully, or should otherwise require explicit recipients.
