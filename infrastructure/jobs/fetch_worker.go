@@ -4,17 +4,17 @@ import (
 	"context"
 	"time"
 
-	"github.com/myfedi/gargoyle/domain/ports"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
+	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 )
 
-// FetchWorker is the durable fetch queue runner. Fetch execution is intentionally
-// kept minimal until concrete fetch job kinds are introduced; this worker marks
-// unknown jobs retryable instead of silently dropping them.
+// FetchWorker processes durable remote fetch jobs. It delegates object parsing
+// and persistence to a domain use case so the worker stays an infrastructure
+// scheduler rather than owning ActivityPub hydration rules.
 type FetchWorker struct {
 	jobs      repos.FetchJobsRepository
 	accounts  repos.AccountsRepo
-	fetcher   ports.RemoteObjectFetcher
+	hydrater  apUsecases.HydrateRemoteObjectUseCase
 	interval  time.Duration
 	batchSize int
 }
@@ -22,7 +22,7 @@ type FetchWorker struct {
 type FetchWorkerConfig struct {
 	JobsRepo  repos.FetchJobsRepository
 	Accounts  repos.AccountsRepo
-	Fetcher   ports.RemoteObjectFetcher
+	Hydrater  apUsecases.HydrateRemoteObjectUseCase
 	Interval  time.Duration
 	BatchSize int
 }
@@ -34,16 +34,13 @@ func NewFetchWorker(cfg FetchWorkerConfig) *FetchWorker {
 	if cfg.Accounts == nil {
 		panic("fetch worker requires Accounts")
 	}
-	if cfg.Fetcher == nil {
-		panic("fetch worker requires Fetcher")
-	}
 	if cfg.Interval <= 0 {
 		cfg.Interval = 30 * time.Second
 	}
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 25
 	}
-	return &FetchWorker{jobs: cfg.JobsRepo, accounts: cfg.Accounts, fetcher: cfg.Fetcher, interval: cfg.Interval, batchSize: cfg.BatchSize}
+	return &FetchWorker{jobs: cfg.JobsRepo, accounts: cfg.Accounts, hydrater: cfg.Hydrater, interval: cfg.Interval, batchSize: cfg.BatchSize}
 }
 
 func (w *FetchWorker) Start(ctx context.Context) {
@@ -72,7 +69,7 @@ func (w *FetchWorker) ProcessOnce(ctx context.Context) {
 			_ = w.jobs.MarkFetchJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), err.Error())
 			continue
 		}
-		if err := w.fetcher.FetchObject(ctx, job.URL, account); err != nil {
+		if err := w.hydrater.HydrateRemoteObject(ctx, *account, job.URL); err != nil {
 			_ = w.jobs.MarkFetchJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), err.Error())
 			continue
 		}
