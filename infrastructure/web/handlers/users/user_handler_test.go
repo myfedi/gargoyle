@@ -179,6 +179,9 @@ func (f *fakeFollowsRepo) CountFollowers(ctx context.Context, tx *db.Tx, localAc
 	return len(f.followers), nil
 }
 func (f *fakeFollowsRepo) ListFollowing(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error) {
+	return f.ListFollowingIncludingPending(ctx, tx, localAccountID)
+}
+func (f *fakeFollowsRepo) ListFollowingIncludingPending(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error) {
 	res := []models.Follow{}
 	for _, follow := range f.followers {
 		if follow.Direction == "following" {

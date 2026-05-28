@@ -251,17 +251,27 @@ func (r *FollowsRepo) ListFollowersPaged(ctx context.Context, tx *dbPorts.Tx, lo
 }
 
 func (r *FollowsRepo) ListFollowing(ctx context.Context, tx *dbPorts.Tx, localAccountID string) ([]models.Follow, error) {
+	return r.listFollowing(ctx, tx, localAccountID, true)
+}
+
+func (r *FollowsRepo) ListFollowingIncludingPending(ctx context.Context, tx *dbPorts.Tx, localAccountID string) ([]models.Follow, error) {
+	return r.listFollowing(ctx, tx, localAccountID, false)
+}
+
+func (r *FollowsRepo) listFollowing(ctx context.Context, tx *dbPorts.Tx, localAccountID string, acceptedOnly bool) ([]models.Follow, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return nil, err
 	}
 	var follows []dbModels.Follow
-	err = db.NewSelect().Model(&follows).
+	query := db.NewSelect().Model(&follows).
 		Where("local_account_id = ?", localAccountID).
 		Where("direction = ?", "following").
-		Where("accepted_at IS NOT NULL").
-		Order("created_at DESC").
-		Scan(ctx)
+		Order("created_at DESC")
+	if acceptedOnly {
+		query = query.Where("accepted_at IS NOT NULL")
+	}
+	err = query.Scan(ctx)
 	if err != nil {
 		return nil, err
 	}

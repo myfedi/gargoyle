@@ -10,26 +10,29 @@ import (
 // Relationships returns whether the authenticated local account follows each
 // requested account ID. Remote account IDs encode actor URIs so callers can use
 // Mastodon-compatible IDs without a remote account cache yet.
-func (u UseCase) Relationships(ctx context.Context, localAccount *models.Account, ids []string) (map[string]bool, *domainerrors.DomainError) {
+func (u UseCase) Relationships(ctx context.Context, localAccount *models.Account, ids []string) (map[string]Relationship, *domainerrors.DomainError) {
 	if derr := requireAccount(localAccount); derr != nil {
 		return nil, derr
 	}
-	following, err := u.cfg.FollowsRepo.ListFollowing(ctx, nil, localAccount.ID)
+	following, err := u.cfg.FollowsRepo.ListFollowingIncludingPending(ctx, nil, localAccount.ID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	byActor := map[string]bool{}
+	byActor := map[string]models.Follow{}
 	for _, follow := range following {
-		byActor[follow.RemoteActor] = true
+		byActor[follow.RemoteActor] = follow
 	}
-	res := map[string]bool{}
+	res := map[string]Relationship{}
 	for _, id := range ids {
+		rel := Relationship{ID: id}
 		actor, err := RemoteActorFromAccountID(id)
-		if err != nil {
-			res[id] = false
-			continue
+		if err == nil {
+			if follow, ok := byActor[actor]; ok {
+				rel.Following = follow.AcceptedAt != nil
+				rel.Requested = follow.AcceptedAt == nil
+			}
 		}
-		res[id] = byActor[actor]
+		res[id] = rel
 	}
 	return res, nil
 }

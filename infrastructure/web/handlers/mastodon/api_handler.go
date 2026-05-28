@@ -164,7 +164,7 @@ func (h APIHandler) relationships(c *fiber.Ctx) error {
 		ids = c.Query("id")
 	}
 	idList := strings.Split(ids, ",")
-	following, derr := h.api.Relationships(c.UserContext(), principal.Account, idList)
+	relationships, derr := h.api.Relationships(c.UserContext(), principal.Account, idList)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -173,7 +173,8 @@ func (h APIHandler) relationships(c *fiber.Ctx) error {
 		if id == "" {
 			continue
 		}
-		resp = append(resp, relationshipResponse{ID: id, Following: following[id], ShowingReblogs: true})
+		rel := relationships[id]
+		resp = append(resp, relationshipResponse{ID: id, Following: rel.Following, Requested: rel.Requested, ShowingReblogs: true})
 	}
 	return c.JSON(resp)
 }

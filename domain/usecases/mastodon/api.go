@@ -60,6 +60,12 @@ type FollowAccountResult struct {
 	Inbox   string
 }
 
+type Relationship struct {
+	ID        string
+	Following bool
+	Requested bool
+}
+
 func NewUseCase(cfg Config) UseCase {
 	if cfg.Host == "" || cfg.Domain == "" {
 		panic("mastodon API use case requires Host and Domain")
