@@ -9,7 +9,6 @@ import { DeliveryPage } from "@/features/delivery/delivery-page";
 import { FollowsPage } from "@/features/follows/follows-page";
 import { InboxPage } from "@/features/inbox/inbox-page";
 import { OutboxPage } from "@/features/outbox/outbox-page";
-import { OverviewPage } from "@/features/overview/overview-page";
 import { PostsPage } from "@/features/posts/posts-page";
 import { SettingsPage } from "@/features/settings/settings-page";
 import { ApiError } from "@/lib/api";
@@ -19,7 +18,7 @@ import type { MastodonAccount } from "@/types/mastodon";
 import { navItems } from "./navigation";
 
 const routes = {
-  "/": OverviewPage,
+  "/": PostsPage,
   "/posts": PostsPage,
   "/follows": FollowsPage,
   "/inbox": InboxPage,
@@ -42,7 +41,7 @@ function AuthenticatedApp() {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const route = useHashRoute();
-  const Page = routes[route as keyof typeof routes] ?? OverviewPage;
+  const Page = routes[route as keyof typeof routes] ?? PostsPage;
   const currentItem = useMemo(
     () => navItems.find((item) => item.href === `#${route}`) ?? navItems[0],
     [route],

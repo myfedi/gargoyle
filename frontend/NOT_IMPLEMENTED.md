@@ -30,14 +30,17 @@ Frontend gaps to work through next:
    - Add delete post if backend supports it
    - Add better empty/error states after real data testing
 
-6. Compatibility page
+6. Overview page
+   - Removed. Timeline is the default page.
+
+7. Compatibility page
    - Removed until there is a concrete user-facing purpose for it
 
-7. Navigation and shell
+8. Navigation and shell
    - Improve mobile navigation after testing on device widths
    - Add active account switcher only if multiple accounts become supported
 
-8. Auth/session
+9. Auth/session
    - Decide whether refresh tokens are supported
    - Handle expired tokens explicitly
    - Add revocation/sign-out endpoint if backend supports it

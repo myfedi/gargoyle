@@ -1,5 +1,4 @@
 import {
-  Home,
   Inbox,
   MessageSquareText,
   Repeat2,
@@ -12,20 +11,14 @@ export type NavItem = {
   href: string;
   label: string;
   description: string;
-  icon: typeof Home;
+  icon: typeof MessageSquareText;
 };
 
 export const navItems: NavItem[] = [
   {
     href: "#/",
-    label: "Overview",
-    description: "Instance health and recent activity",
-    icon: Home,
-  },
-  {
-    href: "#/posts",
-    label: "Posts",
-    description: "Write and manage local notes",
+    label: "Timeline",
+    description: "Posts and recent activity",
     icon: MessageSquareText,
   },
   {
