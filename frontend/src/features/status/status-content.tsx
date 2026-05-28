@@ -92,6 +92,13 @@ function createMentionLookup(mentions: MastodonMention[]): MentionLookup {
     byAcct.set(normalizeMentionAcct(`@${mention.username}`), mention);
     if (mention.url) {
       byUrl.set(normalizeUrl(mention.url), mention);
+      const host = urlHost(mention.url);
+      if (host) {
+        byAcct.set(normalizeMentionAcct(`${mention.username}@${host}`), mention);
+        byAcct.set(normalizeMentionAcct(`${mention.acct}@${host}`), mention);
+        byAcct.set(normalizeMentionAcct(`@${mention.username}@${host}`), mention);
+        byAcct.set(normalizeMentionAcct(`@${mention.acct}@${host}`), mention);
+      }
     }
   }
 
@@ -155,6 +162,14 @@ function linkifyMentions(parts: ContentPart[], lookup: MentionLookup) {
 
 function normalizeMentionAcct(value: string) {
   return value.trim().replace(/^@/, "").toLowerCase();
+}
+
+function urlHost(value: string) {
+  try {
+    return new URL(value).host.toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 function normalizeUrl(value: string) {
