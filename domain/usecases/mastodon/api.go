@@ -54,6 +54,11 @@ type CreateStatusResult struct {
 	FollowerInboxes []string
 }
 
+type TimelineItem struct {
+	Note    models.Note
+	Account models.Account
+}
+
 type FollowAccountResult struct {
 	Account models.Account
 	RawJSON []byte

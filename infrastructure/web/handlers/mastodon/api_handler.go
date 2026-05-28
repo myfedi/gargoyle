@@ -254,11 +254,11 @@ func (h APIHandler) homeTimeline(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	notes, derr := h.api.HomeTimeline(c.UserContext(), principal.Account)
+	items, derr := h.api.HomeTimeline(c.UserContext(), principal.Account)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(notesToStatuses(notes, principal.Account))
+	return c.JSON(timelineItemsToStatuses(items))
 }
 
 func (h APIHandler) publicTimeline(c *fiber.Ctx) error {
@@ -266,11 +266,11 @@ func (h APIHandler) publicTimeline(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	notes, derr := h.api.PublicTimeline(c.UserContext(), principal.Account)
+	items, derr := h.api.PublicTimeline(c.UserContext(), principal.Account)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(notesToStatuses(notes, principal.Account))
+	return c.JSON(timelineItemsToStatuses(items))
 }
 
 func (h APIHandler) authenticate(c *fiber.Ctx) (*oauth.AuthenticatedUser, *domainerrors.DomainError) {
@@ -303,10 +303,10 @@ type statusResponse struct {
 	Pinned           bool            `json:"pinned"`
 }
 
-func notesToStatuses(notes []models.Note, account *models.Account) []statusResponse {
-	statuses := make([]statusResponse, 0, len(notes))
-	for _, note := range notes {
-		statuses = append(statuses, noteToStatus(note, account))
+func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
+	statuses := make([]statusResponse, 0, len(items))
+	for _, item := range items {
+		statuses = append(statuses, noteToStatus(item.Note, &item.Account))
 	}
 	return statuses
 }

@@ -7,10 +7,10 @@ import (
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
 )
 
-// HomeTimeline currently returns locally stored notes for the authenticated
-// account. The method boundary is intentionally separate from HTTP so it can be
-// expanded into a real followed-account timeline without handler changes.
-func (u UseCase) HomeTimeline(ctx context.Context, account *models.Account) ([]models.Note, *domainerrors.DomainError) {
+// HomeTimeline returns notes addressed to the authenticated account. Each item
+// carries the account that authored the note so Mastodon responses can render
+// remote statuses as remote authors instead of as the local timeline owner.
+func (u UseCase) HomeTimeline(ctx context.Context, account *models.Account) ([]TimelineItem, *domainerrors.DomainError) {
 	if derr := requireAccount(account); derr != nil {
 		return nil, derr
 	}
@@ -18,9 +18,32 @@ func (u UseCase) HomeTimeline(ctx context.Context, account *models.Account) ([]m
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	return notes, nil
+	items := make([]TimelineItem, 0, len(notes))
+	for _, note := range notes {
+		author, derr := u.noteAuthor(ctx, account, note)
+		if derr != nil {
+			return nil, derr
+		}
+		items = append(items, TimelineItem{Note: note, Account: *author})
+	}
+	return items, nil
 }
 
-func (u UseCase) PublicTimeline(ctx context.Context, account *models.Account) ([]models.Note, *domainerrors.DomainError) {
+func (u UseCase) PublicTimeline(ctx context.Context, account *models.Account) ([]TimelineItem, *domainerrors.DomainError) {
 	return u.HomeTimeline(ctx, account)
+}
+
+func (u UseCase) noteAuthor(ctx context.Context, localAccount *models.Account, note models.Note) (*models.Account, *domainerrors.DomainError) {
+	if note.AttributedTo == "" || note.AttributedTo == localAccount.URI {
+		return localAccount, nil
+	}
+	remote, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, note.AttributedTo)
+	if err == nil {
+		return remote, nil
+	}
+	remote, err = u.resolveAndCacheRemoteAccount(ctx, note.AttributedTo, localAccount)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return remote, nil
 }
