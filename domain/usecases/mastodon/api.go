@@ -3,6 +3,7 @@ package mastodon
 import (
 	"context"
 	"encoding/base64"
+	"net/url"
 	"strings"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -93,6 +94,11 @@ func AccountIDForRemoteActor(actor string) string {
 }
 
 func RemoteActorFromAccountID(id string) (string, error) {
+	unescaped, err := url.PathUnescape(id)
+	if err != nil {
+		return "", err
+	}
+	id = unescaped
 	if !strings.HasPrefix(id, "remote:") {
 		return id, nil
 	}
