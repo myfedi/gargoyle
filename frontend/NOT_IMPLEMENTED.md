@@ -3,11 +3,8 @@
 Frontend gaps to work through next:
 
 1. Follows page
-   - List followers
-   - List following
-   - Follow an account
-   - Unfollow an account
-   - Search or resolve remote accounts
+   - Test against real remote accounts
+   - Add pagination if backend supports it
 
 2. Inbox page
    - Show incoming follows, mentions, updates, deletes, accepts, and rejects
