@@ -12,6 +12,7 @@ import { FollowsPage } from "@/features/follows/follows-page";
 import { NotificationsPage } from "@/features/notifications/notifications-page";
 import { StatusCollectionPage } from "@/features/collections/status-collection-page";
 import { PostsPage } from "@/features/posts/posts-page";
+import { MyProfilePage } from "@/features/profile/my-profile-page";
 import { SettingsPage } from "@/features/settings/settings-page";
 import { StatusPage } from "@/features/status/status-page";
 import { ApiError } from "@/lib/api";
@@ -23,6 +24,7 @@ import { navItems } from "./navigation";
 const routes = {
   "/": PostsPage,
   "/posts": PostsPage,
+  "/profile": MyProfilePage,
   "/follows": FollowsPage,
   "/notifications": NotificationsPage,
   "/bookmarks": () => <StatusCollectionPage type="bookmarks" />,

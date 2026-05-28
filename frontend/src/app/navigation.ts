@@ -1,11 +1,9 @@
 import {
-  Bookmark,
-  Heart,
   Mail,
   MessageSquareText,
   Repeat2,
   Settings,
-  Users,
+  UserCircle,
 } from "lucide-react";
 
 export type NavItem = {
@@ -23,22 +21,10 @@ export const navItems: NavItem[] = [
     icon: MessageSquareText,
   },
   {
-    href: "#/follows",
-    label: "Follows",
-    description: "People following and followed by this instance",
-    icon: Users,
-  },
-  {
-    href: "#/bookmarks",
-    label: "Bookmarks",
-    description: "Saved posts",
-    icon: Bookmark,
-  },
-  {
-    href: "#/favourites",
-    label: "Favourites",
-    description: "Favourited posts",
-    icon: Heart,
+    href: "#/profile",
+    label: "My profile",
+    description: "Profile, follows, bookmarks, and favourites",
+    icon: UserCircle,
   },
   {
     href: "#/direct",
