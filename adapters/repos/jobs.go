@@ -69,6 +69,28 @@ func (r *JobsRepo) ListDueDeliveryJobs(ctx context.Context, tx *dbPorts.Tx, now 
 	return jobs, nil
 }
 
+func (r *JobsRepo) MarkDeliveryJobDelivered(ctx context.Context, tx *dbPorts.Tx, id string, deliveredAt time.Time) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewUpdate().Model((*dbModels.DeliveryJob)(nil)).Set("status = ?", string(models.JobStatusDone)).Set("delivered_at = ?", deliveredAt).Set("updated_at = ?", deliveredAt).Where("id = ?", id).Exec(ctx)
+	return err
+}
+
+func (r *JobsRepo) MarkDeliveryJobFailed(ctx context.Context, tx *dbPorts.Tx, id string, attempts int, nextAttemptAt time.Time, lastError string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	status := string(models.JobStatusPending)
+	if attempts >= 10 {
+		status = string(models.JobStatusFailed)
+	}
+	_, err = db.NewUpdate().Model((*dbModels.DeliveryJob)(nil)).Set("status = ?", status).Set("attempts = ?", attempts).Set("next_attempt_at = ?", nextAttemptAt).Set("last_error = ?", lastError).Set("updated_at = ?", time.Now().UTC()).Where("id = ?", id).Exec(ctx)
+	return err
+}
+
 func (r *JobsRepo) CreateFetchJob(ctx context.Context, tx *dbPorts.Tx, input repos.CreateFetchJobInput) (*models.FetchJob, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
@@ -104,4 +126,26 @@ func (r *JobsRepo) ListDueFetchJobs(ctx context.Context, tx *dbPorts.Tx, now tim
 		jobs = append(jobs, row.ToModel())
 	}
 	return jobs, nil
+}
+
+func (r *JobsRepo) MarkFetchJobFetched(ctx context.Context, tx *dbPorts.Tx, id string, fetchedAt time.Time) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewUpdate().Model((*dbModels.FetchJob)(nil)).Set("status = ?", string(models.JobStatusDone)).Set("fetched_at = ?", fetchedAt).Set("updated_at = ?", fetchedAt).Where("id = ?", id).Exec(ctx)
+	return err
+}
+
+func (r *JobsRepo) MarkFetchJobFailed(ctx context.Context, tx *dbPorts.Tx, id string, attempts int, nextAttemptAt time.Time, lastError string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	status := string(models.JobStatusPending)
+	if attempts >= 10 {
+		status = string(models.JobStatusFailed)
+	}
+	_, err = db.NewUpdate().Model((*dbModels.FetchJob)(nil)).Set("status = ?", status).Set("attempts = ?", attempts).Set("next_attempt_at = ?", nextAttemptAt).Set("last_error = ?", lastError).Set("updated_at = ?", time.Now().UTC()).Where("id = ?", id).Exec(ctx)
+	return err
 }

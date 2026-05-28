@@ -113,10 +113,10 @@ The current delivery queue is in-memory and not durable.
   - [x] status
   - [x] created_at / updated_at
 - [x] Add delivery job repository port.
-- [ ] Enqueue jobs from use cases after DB commit.
-- [ ] Add worker that claims due jobs.
-- [ ] Retry with exponential backoff.
-- [ ] Mark permanent failure/dead-letter after max attempts.
+- [x] Enqueue jobs from HTTP adapters after use case commits.
+- [x] Add worker that processes due jobs.
+- [x] Retry with exponential backoff.
+- [x] Mark permanent failure/dead-letter after max attempts.
 - [ ] Document worker operation.
 
 ## Priority 6: durable fetch queue
@@ -125,7 +125,7 @@ Useful for search, actor refresh, missing referenced objects, and remote status 
 
 - [x] Add `fetch_jobs` table.
 - [x] Add fetch job repository port.
-- [ ] Add fetch worker with retry/backoff.
+- [x] Add fetch worker shell with retry/backoff for registered jobs.
 - [ ] Queue actor refreshes.
 - [ ] Queue missing object/status fetches from inbound activities.
 

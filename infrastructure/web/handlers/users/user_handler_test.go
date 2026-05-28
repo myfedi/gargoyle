@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/myfedi/gargoyle/adapters"
@@ -18,11 +19,30 @@ import (
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 )
 
+type fakeDeliveryJobsRepo struct{}
+
+func (f fakeDeliveryJobsRepo) CreateDeliveryJob(ctx context.Context, tx *db.Tx, input repos.CreateDeliveryJobInput) (*models.DeliveryJob, error) {
+	return &models.DeliveryJob{ID: "job-1", AccountID: input.AccountID, InboxURL: input.InboxURL, Payload: input.Payload, NextAttemptAt: input.NextAttemptAt}, nil
+}
+func (f fakeDeliveryJobsRepo) ListDueDeliveryJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.DeliveryJob, error) {
+	return nil, nil
+}
+func (f fakeDeliveryJobsRepo) MarkDeliveryJobDelivered(ctx context.Context, tx *db.Tx, id string, deliveredAt time.Time) error {
+	return nil
+}
+func (f fakeDeliveryJobsRepo) MarkDeliveryJobFailed(ctx context.Context, tx *db.Tx, id string, attempts int, nextAttemptAt time.Time, lastError string) error {
+	return nil
+}
+
 type fakeAccountsRepo struct{ err error }
 
 func (f fakeAccountsRepo) CreateAccount(ctx context.Context, tx *db.Tx, input repos.CreateAccountInput) (*models.Account, error) {
 	return nil, nil
 }
+func (f fakeAccountsRepo) GetAccountByID(ctx context.Context, tx *db.Tx, id string) (*models.Account, error) {
+	return nil, sql.ErrNoRows
+}
+
 func (f fakeAccountsRepo) GetAccountByUserID(ctx context.Context, tx *db.Tx, userID string) (*models.Account, error) {
 	return nil, nil
 }
@@ -192,6 +212,7 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		ActivitiesRepo:   activities,
 		FollowsRepo:      follows,
 		NotesRepo:        &fakeNotesRepo{},
+		DeliveryJobsRepo: fakeDeliveryJobsRepo{},
 		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer: adapters.NewContentSanitizer(),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -276,6 +297,7 @@ func TestUserProfileHandlerCreatesNoteFromOutboxPost(t *testing.T) {
 		ActivitiesRepo:     &fakeActivitiesRepo{},
 		FollowsRepo:        &fakeFollowsRepo{},
 		NotesRepo:          notes,
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
 		BodyLimitBytes:     1 << 20,
@@ -334,6 +356,7 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 		ActivitiesRepo:     &fakeActivitiesRepo{},
 		FollowsRepo:        &fakeFollowsRepo{},
 		NotesRepo:          notes,
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
 		BodyLimitBytes:     1 << 20,

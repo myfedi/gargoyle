@@ -32,7 +32,7 @@ type ActorFetcher interface {
 // Delivery is intentionally outside database transactions and may retry/fail
 // independently from committed local state.
 type ActivityDeliverer interface {
-	Deliver(ctx context.Context, body []byte, inbox string, account models.Account)
+	Deliver(ctx context.Context, body []byte, inbox string, account models.Account) error
 }
 
 // SignatureVerificationInput is the infrastructure-neutral request data needed

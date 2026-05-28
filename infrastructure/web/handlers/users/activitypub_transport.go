@@ -145,9 +145,9 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 	return &activitypub.RemoteActorDocument{Inbox: actorDoc.Inbox, PublicKey: activitypub.RemoteActorPublicKey{ID: actorDoc.PublicKey.ID, Owner: actorDoc.PublicKey.Owner, PublicKeyPem: actorDoc.PublicKey.PublicKeyPem}}, nil
 }
 
-func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbox string, account models.Account) {
+func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbox string, account models.Account) error {
 	if err := validateRemoteURL(ctx, inbox, t.exceptions); err != nil {
-		return
+		return err
 	}
 	client := t.httpClient()
 	retries := t.retries
@@ -157,7 +157,7 @@ func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbo
 	for attempt := 0; attempt < retries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, inbox, bytes.NewReader(body))
 		if err != nil {
-			return
+			return err
 		}
 		req.Header.Set("Content-Type", "application/activity+json")
 		req.Header.Set("Accept", "application/activity+json")
@@ -167,11 +167,13 @@ func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbo
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 			_ = resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				return
+				return nil
 			}
+			err = fmt.Errorf("delivery failed with status %d", resp.StatusCode)
 		}
 		time.Sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
 	}
+	return errors.New("delivery failed after retries")
 }
 
 func signOutboundRequest(req *http.Request, body []byte, account models.Account) {

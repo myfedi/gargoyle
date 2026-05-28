@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/myfedi/gargoyle/domain/usecases/oauth"
 	infra "github.com/myfedi/gargoyle/infrastructure"
 	"github.com/myfedi/gargoyle/infrastructure/db"
+	"github.com/myfedi/gargoyle/infrastructure/jobs"
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers"
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers/mastodon"
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers/users"
@@ -71,6 +73,7 @@ func main() {
 	notesRepo := repos.NewNotesRepo(sqlite.Bun)
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
+	jobsRepo := repos.NewJobsRepo(sqlite.Bun)
 	txProvider := dbAdapters.NewBunTxProvider(sqlite.Bun)
 
 	// sets up the go-fiber server. The body limit protects ActivityPub endpoints
@@ -122,6 +125,7 @@ func main() {
 		ActivitiesRepo:      activitiesRepo,
 		FollowsRepo:         followsRepo,
 		NotesRepo:           notesRepo,
+		DeliveryJobsRepo:    jobsRepo,
 		Serializer:          actorSerializer,
 		ContentSanitizer:    contentSanitizer,
 		BodyLimitBytes:      config.ActivityPub.BodyLimitBytes,
@@ -161,6 +165,10 @@ func main() {
 		CreateFollowingUC:  apUsecases.NewCreateFollowingUseCase(mastodonFlowCfg),
 	})
 	mastodon.NewAPIHandler(mastodon.APIHandlerConfig{OAuth: oauthUC, API: mastodonAPIUC, QueueDelivery: userProfileHandler.QueueDelivery}).Setup(app)
+
+	workerCtx := context.Background()
+	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Deliverer: userProfileHandler.ActivityDeliverer()}).Start(workerCtx)
+	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: jobsRepo}).Start(workerCtx)
 
 	/// run server
 

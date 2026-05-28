@@ -67,6 +67,24 @@ func (r *AccountsRepo) CreateAccount(ctx context.Context, tx *dbPorts.Tx, input 
 	return &model, nil
 }
 
+func (r *AccountsRepo) GetAccountByID(ctx context.Context, tx *dbPorts.Tx, id string) (*models.Account, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
+	var account dbModels.Account
+	if err := db.NewSelect().Model(&account).Where("id = ?", id).Scan(ctx); err != nil {
+		return nil, err
+	}
+	model := account.ToModel()
+	return &model, nil
+}
+
 func (r *AccountsRepo) GetAccountByUserID(ctx context.Context, tx *dbPorts.Tx, userID string) (*models.Account, error) {
 	db := r.db
 	if tx != nil {

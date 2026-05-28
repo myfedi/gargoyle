@@ -20,12 +20,6 @@ import (
 	"github.com/myfedi/gargoyle/infrastructure/web"
 )
 
-type deliveryJob struct {
-	body    []byte
-	inbox   string
-	account models.Account
-}
-
 // UsersWebHandlerConfig wires HTTP infrastructure to ActivityPub use cases.
 // Required dependencies are validated in NewUsersWebHandler so configuration
 // mistakes fail at startup instead of during request handling.
@@ -35,6 +29,7 @@ type UsersWebHandlerConfig struct {
 	ActivitiesRepo      repos.ActivitiesRepository
 	FollowsRepo         repos.FollowsRepository
 	NotesRepo           repos.NotesRepository
+	DeliveryJobsRepo    repos.DeliveryJobsRepository
 	Serializer          activitypub.ActorSerializer
 	ActorFetcher        activitypub.ActorFetcher
 	Deliverer           activitypub.ActivityDeliverer
@@ -58,7 +53,6 @@ type UsersWebHandler struct {
 	createFollowingUC      apUsecases.CreateFollowingUseCase
 	createOutboxActivityUC apUsecases.CreateOutboxActivityUseCase
 	handleInboxActivityUC  apUsecases.HandleInboxActivityUseCase
-	deliveryQueue          chan deliveryJob
 }
 
 // NewWebfingerWebHandler creates a new Webfinger handler with the given dependencies.
@@ -79,6 +73,9 @@ func validateUsersWebHandlerConfig(cfg UsersWebHandlerConfig) {
 	if cfg.NotesRepo == nil {
 		panic("users web handler requires NotesRepo")
 	}
+	if cfg.DeliveryJobsRepo == nil {
+		panic("users web handler requires DeliveryJobsRepo")
+	}
 	if cfg.Serializer == nil {
 		panic("users web handler requires Serializer")
 	}
@@ -91,9 +88,6 @@ func validateUsersWebHandlerConfig(cfg UsersWebHandlerConfig) {
 	if cfg.BodyLimitBytes <= 0 {
 		panic("users web handler requires positive BodyLimitBytes")
 	}
-	if cfg.DeliveryQueueSize <= 0 {
-		panic("users web handler requires positive DeliveryQueueSize")
-	}
 }
 
 func ensureBodySize(body []byte, limit int) *domainerrors.DomainError {
@@ -101,6 +95,12 @@ func ensureBodySize(body []byte, limit int) *domainerrors.DomainError {
 		return domainerrors.New(domainerrors.ErrBadRequest, "request body too large")
 	}
 	return nil
+}
+
+// ActivityDeliverer exposes the configured delivery adapter to process-level
+// workers without making other handlers know about HTTP-signature transport.
+func (h *UsersWebHandler) ActivityDeliverer() activitypub.ActivityDeliverer {
+	return h.cfg.Deliverer
 }
 
 // QueueDelivery enqueues a committed ActivityPub payload for asynchronous
@@ -111,21 +111,11 @@ func (h *UsersWebHandler) QueueDelivery(body []byte, inbox string, account model
 }
 
 func (h *UsersWebHandler) queueDelivery(body []byte, inbox string, account models.Account) *domainerrors.DomainError {
-	job := deliveryJob{body: append([]byte(nil), body...), inbox: inbox, account: account}
-	select {
-	case h.deliveryQueue <- job:
-		return nil
-	default:
-		return domainerrors.New(domainerrors.ErrInternal, "delivery queue is full")
+	_, err := h.cfg.DeliveryJobsRepo.CreateDeliveryJob(context.Background(), nil, repos.CreateDeliveryJobInput{AccountID: account.ID, InboxURL: inbox, Payload: append([]byte(nil), body...), NextAttemptAt: time.Now().UTC()})
+	if err != nil {
+		return domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-}
-
-func (h *UsersWebHandler) runDeliveryWorker() {
-	for job := range h.deliveryQueue {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		h.cfg.Deliverer.Deliver(ctx, job.body, job.inbox, job.account)
-		cancel()
-	}
+	return nil
 }
 
 func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
@@ -162,9 +152,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		createFollowingUC:      apUsecases.NewCreateFollowingUseCase(flowCfg),
 		createOutboxActivityUC: apUsecases.NewCreateOutboxActivityUseCase(flowCfg),
 		handleInboxActivityUC:  apUsecases.NewHandleInboxActivityUseCase(flowCfg),
-		deliveryQueue:          make(chan deliveryJob, cfg.DeliveryQueueSize),
 	}
-	go h.runDeliveryWorker()
 	return h
 }
 
