@@ -44,28 +44,23 @@ This is the working roadmap for making Gargoyle usable with a Mastodon-compatibl
 
 The current `domain/usecases/mastodon.UseCase` is becoming too broad. Split it before implementing more client API workflows.
 
-- [ ] `InstanceUseCase` or `GetInstanceUseCase`.
-- [ ] `CreateStatusUseCase`.
-- [ ] `TimelineUseCase`.
-- [ ] `SearchAccountsUseCase`.
-- [ ] `FollowAccountUseCase`.
-- [ ] `RelationshipsUseCase`.
-- [ ] Keep HTTP response shape mapping in `infrastructure/web/handlers/mastodon`.
-- [ ] Keep ActivityPub federation side effects routed through ActivityPub use cases.
+- [x] Split implementation across focused files for instance/status/timeline/account/relationship workflows.
+- [x] Keep HTTP response shape mapping in `infrastructure/web/handlers/mastodon`.
+- [x] Keep ActivityPub federation side effects routed through ActivityPub use cases.
+- [ ] Optionally split the facade into separate exported use case structs if this package grows further.
 
 ## Priority 2: missing Mastodon follow/account endpoints
 
 Needed for real UI social graph flows.
 
-- [ ] `POST /api/v1/accounts/:id/unfollow`.
-  - [ ] Add outbound `Undo Follow` use case if needed.
-  - [ ] Delete outbound following row.
-  - [ ] Deliver signed Undo to remote inbox after commit.
-- [ ] `GET /api/v1/accounts/:id/followers`.
-  - [ ] Return local account followers in Mastodon account JSON.
-  - [ ] Decide whether to fetch live remote actor profiles or use cached remote accounts.
-- [ ] `GET /api/v1/accounts/:id/following`.
-  - [ ] Return accepted outbound follows.
+- [x] `POST /api/v1/accounts/:id/unfollow`.
+  - [x] Delete outbound following row.
+  - [x] Return signed Undo for delivery after commit.
+- [x] `GET /api/v1/accounts/:id/followers`.
+  - [x] Return local account followers in Mastodon account JSON.
+  - [x] Prefer cached remote account profiles and refresh when missing.
+- [x] `GET /api/v1/accounts/:id/following`.
+  - [x] Return accepted outbound follows.
 - [ ] `GET /api/v1/accounts/:id`.
 - [ ] `GET /api/v1/accounts/:id/statuses`.
 
@@ -73,19 +68,20 @@ Needed for real UI social graph flows.
 
 Current follow/search can resolve remote actors, but follows mostly store actor URI/inbox. A usable UI needs profile metadata without live fetching on every request.
 
-- [ ] Add remote account cache model/table or extend account storage semantics.
-- [ ] Persist remote actor fields:
-  - [ ] actor URI
-  - [ ] username/domain/acct
-  - [ ] display name
-  - [ ] summary
-  - [ ] URL
-  - [ ] inbox/outbox/followers/following
-  - [ ] public key
-  - [ ] fetched_at
-- [ ] Add repository port for remote account lookup/upsert.
-- [ ] Make search/follow use the cache with refresh-on-stale behavior.
-- [ ] Update relationships/followers/following endpoints to return cached profile data.
+- [x] Add remote account cache model/table.
+- [x] Persist remote actor fields:
+  - [x] actor URI
+  - [x] username/domain/acct
+  - [x] display name
+  - [x] summary
+  - [x] URL
+  - [x] inbox/outbox/followers/following
+  - [x] public key
+  - [x] fetched_at
+- [x] Add repository port for remote account lookup/upsert.
+- [x] Make search/follow cache resolved remote accounts.
+- [x] Update followers/following endpoints to prefer cached profile data.
+- [ ] Add stale-cache refresh policy instead of only refresh-on-miss.
 
 ## Priority 4: real home timeline
 
@@ -105,18 +101,18 @@ Current home timeline returns the local user's own notes. Real use needs followe
 
 The current delivery queue is in-memory and not durable.
 
-- [ ] Add `delivery_jobs` table:
-  - [ ] id
-  - [ ] account_id
-  - [ ] activity_id
-  - [ ] inbox_url
-  - [ ] payload
-  - [ ] attempts
-  - [ ] next_attempt_at
-  - [ ] last_error
-  - [ ] status
-  - [ ] created_at / updated_at
-- [ ] Add delivery job repository port.
+- [x] Add `delivery_jobs` table:
+  - [x] id
+  - [x] account_id
+  - [x] activity_id
+  - [x] inbox_url
+  - [x] payload
+  - [x] attempts
+  - [x] next_attempt_at
+  - [x] last_error
+  - [x] status
+  - [x] created_at / updated_at
+- [x] Add delivery job repository port.
 - [ ] Enqueue jobs from use cases after DB commit.
 - [ ] Add worker that claims due jobs.
 - [ ] Retry with exponential backoff.
@@ -127,7 +123,8 @@ The current delivery queue is in-memory and not durable.
 
 Useful for search, actor refresh, missing referenced objects, and remote status hydration.
 
-- [ ] Add `fetch_jobs` table.
+- [x] Add `fetch_jobs` table.
+- [x] Add fetch job repository port.
 - [ ] Add fetch worker with retry/backoff.
 - [ ] Queue actor refreshes.
 - [ ] Queue missing object/status fetches from inbound activities.
