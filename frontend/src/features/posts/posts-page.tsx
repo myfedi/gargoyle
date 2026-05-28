@@ -6,7 +6,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
 import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
-import { StatusList } from "@/features/status/status-list";
+import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
+import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import type { MastodonAccount, MastodonStatus } from "@/types/mastodon";
 
@@ -28,6 +29,7 @@ export function PostsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPosting, setIsPosting] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MastodonStatus | null>(null);
@@ -98,6 +100,24 @@ export function PostsPage() {
       return api.publicTimeline({ ...options, local: true });
     }
     return api.publicTimeline({ ...options, remote: true });
+  }
+
+  async function runAction(action: StatusAction, status: MastodonStatus) {
+    if (!api) {
+      return;
+    }
+
+    setActingStatusId(status.id);
+    setTimelineError(null);
+
+    try {
+      const nextStatus = await runStatusAction(api, action, status);
+      setStatuses((current) => replaceStatus(current, nextStatus));
+    } catch (caughtError) {
+      setTimelineError(caughtError instanceof Error ? caughtError.message : "Could not update post.");
+    } finally {
+      setActingStatusId(null);
+    }
   }
 
   async function deleteStatus(status: MastodonStatus) {
@@ -231,6 +251,8 @@ export function PostsPage() {
               emptyTitle="No posts"
               emptyDescription="Nothing to show here yet."
               onDelete={deleteStatus}
+              actingStatusId={actingStatusId}
+              onAction={runAction}
               onReply={(status) => {
                 setReplyingTo(status);
                 setReplyError(null);

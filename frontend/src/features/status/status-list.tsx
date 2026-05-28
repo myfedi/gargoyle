@@ -18,14 +18,18 @@ import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime, htmlToPlainText } from "@/lib/text";
 import type { MastodonMediaAttachment, MastodonStatus } from "@/types/mastodon";
 
+export type StatusAction = "bookmark" | "unbookmark" | "favourite" | "unfavourite" | "reblog" | "unreblog";
+
 type StatusListProps = {
   statuses: MastodonStatus[];
   currentAccountId?: string;
   emptyTitle: string;
   emptyDescription: string;
   deletingStatusId?: string | null;
+  actingStatusId?: string | null;
   onDelete?: (status: MastodonStatus) => Promise<boolean> | boolean;
   onReply?: (status: MastodonStatus) => void;
+  onAction?: (action: StatusAction, status: MastodonStatus) => Promise<void> | void;
 };
 
 export function StatusList({
@@ -34,8 +38,10 @@ export function StatusList({
   emptyTitle,
   emptyDescription,
   deletingStatusId,
+  actingStatusId,
   onDelete,
   onReply,
+  onAction,
 }: StatusListProps) {
   const [statusPendingDeletion, setStatusPendingDeletion] = useState<MastodonStatus | null>(null);
   const [mediaPreview, setMediaPreview] = useState<MastodonMediaAttachment | null>(null);
@@ -52,6 +58,8 @@ export function StatusList({
         {statuses.map((status) => {
           const canDelete = Boolean(onDelete && currentAccountId && status.account.id === currentAccountId);
           const canReply = Boolean(onReply);
+          const canInteract = Boolean(onAction);
+          const isActing = actingStatusId === status.id;
           return (
             <article key={status.id} className="py-4 first:pt-0 last:pb-0">
               <div className="flex items-start gap-3">
@@ -70,26 +78,33 @@ export function StatusList({
                   <div className="mt-2">
                     <StatusContent html={status.content} />
                   </div>
+                  <StatusStats status={status} />
                   <StatusMedia attachments={status.media_attachments ?? []} onPreview={setMediaPreview} />
                 </div>
-                {canDelete || canReply ? (
+                {canDelete || canReply || canInteract ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="Post actions">
+                      <Button variant="ghost" size="icon" aria-label="Post actions" disabled={isActing}>
                         <MoreHorizontal className="size-4" aria-hidden="true" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      {canReply ? (
-                        <DropdownMenuItem onSelect={() => onReply?.(status)}>
-                          Reply
-                        </DropdownMenuItem>
+                      {canReply ? <DropdownMenuItem onSelect={() => onReply?.(status)}>Reply</DropdownMenuItem> : null}
+                      {canInteract ? (
+                        <>
+                          <DropdownMenuItem onSelect={() => void onAction?.(status.bookmarked ? "unbookmark" : "bookmark", status)}>
+                            {status.bookmarked ? "Remove bookmark" : "Bookmark"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void onAction?.(status.favourited ? "unfavourite" : "favourite", status)}>
+                            {status.favourited ? "Remove favourite" : "Favourite"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => void onAction?.(status.reblogged ? "unreblog" : "reblog", status)}>
+                            {status.reblogged ? "Undo boost" : "Boost"}
+                          </DropdownMenuItem>
+                        </>
                       ) : null}
                       {canDelete ? (
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onSelect={() => setStatusPendingDeletion(status)}
-                        >
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setStatusPendingDeletion(status)}>
                           Delete
                         </DropdownMenuItem>
                       ) : null}
@@ -165,6 +180,23 @@ function StatusMeta({ status }: { status: MastodonStatus }) {
       {status.spoiler_text ? <span className="rounded-full bg-secondary px-2 py-0.5 text-secondary-foreground">CW</span> : null}
     </div>
   );
+}
+
+function StatusStats({ status }: { status: MastodonStatus }) {
+  const stats = [
+    status.replies_count > 0 ? `${status.replies_count} replies` : null,
+    status.reblogs_count > 0 ? `${status.reblogs_count} boosts` : null,
+    status.favourites_count > 0 ? `${status.favourites_count} favourites` : null,
+    status.bookmarked ? "Bookmarked" : null,
+    status.favourited ? "Favourited" : null,
+    status.reblogged ? "Boosted" : null,
+  ].filter(Boolean);
+
+  if (stats.length === 0) {
+    return null;
+  }
+
+  return <p className="mt-2 text-xs text-muted-foreground">{stats.join(" · ")}</p>;
 }
 
 function StatusMedia({ attachments, onPreview }: { attachments: MastodonMediaAttachment[]; onPreview: (attachment: MastodonMediaAttachment) => void }) {

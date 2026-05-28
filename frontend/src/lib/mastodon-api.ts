@@ -1,5 +1,5 @@
 import { ApiClient } from "@/lib/api";
-import type { MastodonAccount, MastodonInstance, MastodonMediaAttachment, MastodonRelationship, MastodonSearchResults, MastodonStatus } from "@/types/mastodon";
+import type { MastodonAccount, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonRelationship, MastodonSearchResults, MastodonStatus } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
@@ -87,6 +87,36 @@ export function createMastodonApi(accessToken: string) {
       return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
+    },
+    favouriteStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/favourite`, { method: "POST" });
+    },
+    unfavouriteStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/unfavourite`, { method: "POST" });
+    },
+    bookmarkStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/bookmark`, { method: "POST" });
+    },
+    unbookmarkStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/unbookmark`, { method: "POST" });
+    },
+    reblogStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/reblog`, { method: "POST" });
+    },
+    unreblogStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/unreblog`, { method: "POST" });
+    },
+    notifications(limit = 40) {
+      return client.request<MastodonNotification[]>(`/api/v1/notifications?limit=${limit}`);
+    },
+    clearNotifications() {
+      return client.request<Record<string, never>>("/api/v1/notifications/clear", { method: "POST" });
+    },
+    favourites(limit = 40) {
+      return client.request<MastodonStatus[]>(`/api/v1/favourites?limit=${limit}`);
+    },
+    bookmarks(limit = 40) {
+      return client.request<MastodonStatus[]>(`/api/v1/bookmarks?limit=${limit}`);
     },
     searchKnownAccounts(query: string, limit = 8) {
       const params = new URLSearchParams({ q: query, limit: String(limit) });

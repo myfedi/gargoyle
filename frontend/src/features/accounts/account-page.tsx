@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { FeaturePage, FieldRow, Panel } from "@/features/shared";
-import { StatusList } from "@/features/status/status-list";
+import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
+import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { decodeRouteParam } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
@@ -22,6 +23,7 @@ export function AccountPage({ route }: AccountPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
+  const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
@@ -70,6 +72,24 @@ export function AccountPage({ route }: AccountPageProps) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not load more posts.");
     } finally {
       setIsLoadingMore(false);
+    }
+  }
+
+  async function runAction(action: StatusAction, status: MastodonStatus) {
+    if (!api) {
+      return;
+    }
+
+    setActingStatusId(status.id);
+    setError(null);
+
+    try {
+      const nextStatus = await runStatusAction(api, action, status);
+      setStatuses((current) => replaceStatus(current, nextStatus));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not update post.");
+    } finally {
+      setActingStatusId(null);
     }
   }
 
@@ -128,7 +148,9 @@ export function AccountPage({ route }: AccountPageProps) {
               emptyTitle="No posts"
               emptyDescription="No posts to show."
               deletingStatusId={deletingStatusId}
+              actingStatusId={actingStatusId}
               onDelete={deleteStatus}
+              onAction={runAction}
             />
             {statuses.length > 0 ? (
               <div className="mt-5">

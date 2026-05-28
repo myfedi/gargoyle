@@ -55,9 +55,20 @@ export type MastodonStatus = {
   replies_count: number;
   reblogs_count: number;
   favourites_count: number;
+  favourited?: boolean;
+  reblogged?: boolean;
+  bookmarked?: boolean;
   media_attachments?: MastodonMediaAttachment[];
   in_reply_to_id?: string | null;
   in_reply_to_account_id?: string | null;
+};
+
+export type MastodonNotification = {
+  id: string;
+  type: string;
+  created_at: string;
+  account: MastodonAccount;
+  status?: MastodonStatus;
 };
 
 export type MastodonInstance = {

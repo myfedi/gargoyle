@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
 import type { ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
-import { StatusList } from "@/features/status/status-list";
+import { runStatusAction } from "@/features/status/status-actions";
+import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { decodeRouteParam } from "@/lib/routes";
 import type { MastodonAccount, MastodonStatus } from "@/types/mastodon";
@@ -23,6 +24,7 @@ export function StatusPage({ route }: StatusPageProps) {
   const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
+  const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MastodonStatus | null>(null);
   const [isReplying, setIsReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
@@ -58,6 +60,26 @@ export function StatusPage({ route }: StatusPageProps) {
   useEffect(() => {
     void loadStatus();
   }, [loadStatus]);
+
+  async function runAction(action: StatusAction, statusToUpdate: MastodonStatus) {
+    if (!api) {
+      return;
+    }
+
+    setActingStatusId(statusToUpdate.id);
+    setError(null);
+
+    try {
+      const nextStatus = await runStatusAction(api, action, statusToUpdate);
+      setStatus((current) => current?.id === nextStatus.id ? nextStatus : current);
+      setAncestors((current) => current.map((item) => item.id === nextStatus.id ? nextStatus : item));
+      setDescendants((current) => current.map((item) => item.id === nextStatus.id ? nextStatus : item));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not update post.");
+    } finally {
+      setActingStatusId(null);
+    }
+  }
 
   async function deleteStatus(statusToDelete: MastodonStatus) {
     if (!api) {
@@ -125,7 +147,9 @@ export function StatusPage({ route }: StatusPageProps) {
             emptyTitle="Post not found"
             emptyDescription="No post to show."
             deletingStatusId={deletingStatusId}
+            actingStatusId={actingStatusId}
             onDelete={deleteStatus}
+            onAction={runAction}
             onReply={(nextStatus) => {
               setReplyingTo(nextStatus);
               setReplyError(null);
