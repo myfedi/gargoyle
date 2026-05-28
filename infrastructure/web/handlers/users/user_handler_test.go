@@ -91,7 +91,13 @@ func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *
 	}
 	return f.activities[offset:end], nil
 }
+func (f *fakeActivitiesRepo) ListPublicOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
+	return f.ListOutboxActivitiesPaged(ctx, tx, localAccountID, limit, offset)
+}
 func (f *fakeActivitiesRepo) CountOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) (int, error) {
+	return len(f.activities), nil
+}
+func (f *fakeActivitiesRepo) CountPublicOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) (int, error) {
 	return len(f.activities), nil
 }
 

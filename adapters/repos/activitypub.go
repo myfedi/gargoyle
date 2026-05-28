@@ -64,26 +64,52 @@ func (r *ActivitiesRepo) CountOutboxActivities(ctx context.Context, tx *dbPorts.
 		Count(ctx)
 }
 
+func (r *ActivitiesRepo) CountPublicOutboxActivities(ctx context.Context, tx *dbPorts.Tx, localAccountID string) (int, error) {
+	db, err := unwrapDB(r.db, tx)
+	if err != nil {
+		return 0, err
+	}
+	return db.NewSelect().
+		Model((*dbModels.Activity)(nil)).
+		Join("JOIN notes AS note ON note.activity_id = activity.id").
+		Where("activity.local_account_id = ?", localAccountID).
+		Where("activity.direction = ?", string(models.ActivityDirectionOutbox)).
+		Where("note.visibility = ?", "public").
+		Count(ctx)
+}
+
 func (r *ActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return nil, err
 	}
+	return r.listOutboxActivities(ctx, db, localAccountID, limit, offset, false)
+}
 
-	var activities []dbModels.Activity
-	query := db.NewSelect().
-		Model(&activities).
-		Where("local_account_id = ?", localAccountID).
-		Where("direction = ?", string(models.ActivityDirectionOutbox)).
-		Order("created_at DESC")
-	if limit > 0 {
-		query = query.Limit(limit).Offset(offset)
-	}
-	err = query.Scan(ctx)
+func (r *ActivitiesRepo) ListPublicOutboxActivitiesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
+	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return nil, err
 	}
+	return r.listOutboxActivities(ctx, db, localAccountID, limit, offset, true)
+}
 
+func (r *ActivitiesRepo) listOutboxActivities(ctx context.Context, db bun.IDB, localAccountID string, limit int, offset int, publicOnly bool) ([]models.Activity, error) {
+	var activities []dbModels.Activity
+	query := db.NewSelect().
+		Model(&activities).
+		Where("activity.local_account_id = ?", localAccountID).
+		Where("activity.direction = ?", string(models.ActivityDirectionOutbox)).
+		Order("activity.created_at DESC")
+	if publicOnly {
+		query = query.Join("JOIN notes AS note ON note.activity_id = activity.id").Where("note.visibility = ?", "public")
+	}
+	if limit > 0 {
+		query = query.Limit(limit).Offset(offset)
+	}
+	if err := query.Scan(ctx); err != nil {
+		return nil, err
+	}
 	res := make([]models.Activity, 0, len(activities))
 	for _, activity := range activities {
 		res = append(res, activity.ToModel())

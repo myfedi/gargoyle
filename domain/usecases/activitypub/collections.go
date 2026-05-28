@@ -33,11 +33,11 @@ func (u *GetOutboxUseCase) GetOutbox(ctx context.Context, username string, page 
 	if derr != nil {
 		return nil, derr
 	}
-	activities, err := u.cfg.ActivitiesRepo.ListOutboxActivitiesPaged(ctx, nil, account.ID, page.Limit, page.Offset)
+	activities, err := u.cfg.ActivitiesRepo.ListPublicOutboxActivitiesPaged(ctx, nil, account.ID, page.Limit, page.Offset)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	total, err := u.cfg.ActivitiesRepo.CountOutboxActivities(ctx, nil, account.ID)
+	total, err := u.cfg.ActivitiesRepo.CountPublicOutboxActivities(ctx, nil, account.ID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}

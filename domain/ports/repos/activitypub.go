@@ -20,7 +20,9 @@ type ActivitiesRepository interface {
 	CreateActivity(ctx context.Context, tx *db.Tx, input CreateActivityInput) (*models.Activity, error)
 	ListOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Activity, error)
 	ListOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error)
+	ListPublicOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error)
 	CountOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) (int, error)
+	CountPublicOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) (int, error)
 }
 
 type CreateFollowInput struct {
