@@ -329,7 +329,7 @@ func (h APIHandler) homeTimeline(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	items, derr := h.api.HomeTimeline(c.UserContext(), principal.Account)
+	items, derr := h.api.HomeTimeline(c.UserContext(), principal.Account, timelineOptions(c))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -341,7 +341,7 @@ func (h APIHandler) publicTimeline(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	items, derr := h.api.PublicTimeline(c.UserContext(), principal.Account)
+	items, derr := h.api.PublicTimeline(c.UserContext(), principal.Account, timelineOptions(c))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -376,6 +376,10 @@ type statusResponse struct {
 	Muted            bool            `json:"muted"`
 	Bookmarked       bool            `json:"bookmarked"`
 	Pinned           bool            `json:"pinned"`
+}
+
+func timelineOptions(c *fiber.Ctx) mastodonUC.TimelineOptions {
+	return mastodonUC.TimelineOptions{Limit: c.QueryInt("limit"), MaxID: c.Query("max_id"), LocalOnly: c.QueryBool("local"), RemoteOnly: c.QueryBool("remote")}
 }
 
 func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {

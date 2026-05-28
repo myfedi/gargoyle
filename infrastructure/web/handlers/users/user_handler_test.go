@@ -153,6 +153,12 @@ func (f *fakeNotesRepo) ListLocalNotes(ctx context.Context, tx *db.Tx, localAcco
 func (f *fakeNotesRepo) ListLocalNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error) {
 	return f.notes, nil
 }
+func (f *fakeNotesRepo) ListKnownLocalTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
+	return f.notes, nil
+}
+func (f *fakeNotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
+	return f.notes, nil
+}
 func (f *fakeNotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
 	return f.notes, nil
 }

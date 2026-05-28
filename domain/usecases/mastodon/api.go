@@ -59,6 +59,13 @@ type TimelineItem struct {
 	Account models.Account
 }
 
+type TimelineOptions struct {
+	Limit      int
+	MaxID      string
+	LocalOnly  bool
+	RemoteOnly bool
+}
+
 type FollowAccountResult struct {
 	Account models.Account
 	RawJSON []byte

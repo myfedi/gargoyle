@@ -145,14 +145,32 @@ func (r *NotesRepo) ListLocalNotes(ctx context.Context, tx *dbPorts.Tx, localAcc
 }
 
 func (r *NotesRepo) ListLocalNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error) {
-	return r.listNotes(ctx, tx, localAccountID, "", limit, maxID)
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, limit: limit, maxID: maxID})
+}
+
+func (r *NotesRepo) ListKnownLocalTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, localActorPrefix: localActorPrefix, localOnly: true, limit: limit, maxID: maxID})
+}
+
+func (r *NotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, localActorPrefix: localActorPrefix, remoteOnly: true, limit: limit, maxID: maxID})
 }
 
 func (r *NotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
-	return r.listNotes(ctx, tx, localAccountID, attributedTo, limit, maxID)
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, attributedTo: attributedTo, limit: limit, maxID: maxID})
 }
 
-func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
+type noteListFilter struct {
+	localAccountID   string
+	attributedTo     string
+	localActorPrefix string
+	localOnly        bool
+	remoteOnly       bool
+	limit            int
+	maxID            string
+}
+
+func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, filter noteListFilter) ([]models.Note, error) {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)
@@ -163,15 +181,21 @@ func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, localAccountI
 	}
 
 	var notes []dbModels.Note
-	query := db.NewSelect().Model(&notes).Where("local_account_id = ?", localAccountID).Order("published_at DESC", "id DESC")
-	if attributedTo != "" {
-		query = query.Where("attributed_to = ?", attributedTo)
+	query := db.NewSelect().Model(&notes).Where("local_account_id = ?", filter.localAccountID).Order("published_at DESC", "id DESC")
+	if filter.attributedTo != "" {
+		query = query.Where("attributed_to = ?", filter.attributedTo)
 	}
-	if maxID != "" {
-		query = query.Where("id < ?", maxID)
+	if filter.localOnly {
+		query = query.Where("attributed_to LIKE ?", filter.localActorPrefix+"%")
 	}
-	if limit > 0 {
-		query = query.Limit(limit)
+	if filter.remoteOnly {
+		query = query.Where("attributed_to NOT LIKE ?", filter.localActorPrefix+"%")
+	}
+	if filter.maxID != "" {
+		query = query.Where("id < ?", filter.maxID)
+	}
+	if filter.limit > 0 {
+		query = query.Limit(filter.limit)
 	}
 	err := query.Scan(ctx)
 	if err != nil {
