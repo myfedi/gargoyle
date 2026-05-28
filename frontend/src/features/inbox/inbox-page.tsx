@@ -2,16 +2,11 @@ import { EmptyState, FeaturePage, Panel } from "@/features/shared";
 
 export function InboxPage() {
   return (
-    <FeaturePage
-      eyebrow="Federation"
-      title="Inbox"
-      description="Incoming federation activity, summarized for people instead of protocol spelunking."
-      status="needs-api"
-    >
-      <Panel title="Incoming activity" description="Follows, mentions, updates, and other arrivals will be collected here.">
+    <FeaturePage eyebrow="Federation" title="Inbox" description="Incoming federation activity.">
+      <Panel title="Not implemented">
         <EmptyState
-          title="No incoming activity yet"
-          description="When other servers interact with this instance, this page will help you understand what arrived and whether it needs attention."
+          title="Inbox view is not implemented"
+          description="Needed: incoming follows, mentions, updates, deletes, accepts, rejects, filters, and inspect view."
         />
       </Panel>
     </FeaturePage>

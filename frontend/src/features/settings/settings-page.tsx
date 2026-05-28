@@ -5,29 +5,24 @@ export function SettingsPage() {
   const oauth = getOAuthConfig();
 
   return (
-    <FeaturePage
-      eyebrow="Instance"
-      title="Settings"
-      description="Review how this console connects to your Gargoyle instance."
-      status="ready"
-    >
+    <FeaturePage eyebrow="Instance" title="Settings" description="Connection settings.">
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Connection" description="Where this console sends requests while you use it.">
+        <Panel title="Server">
           <dl>
-            <FieldRow label="Server" value={getApiBaseUrl() || "Same origin"} />
+            <FieldRow label="Base URL" value={getApiBaseUrl() || "Same origin"} />
           </dl>
         </Panel>
 
-        <Panel title="Authorization" description="The sign-in details this console uses for Gargoyle.">
+        <Panel title="Sign-in">
           {oauth ? (
             <dl>
               <FieldRow label="Client" value={<code className="text-xs">{oauth.clientId}</code>} />
-              <FieldRow label="Sign-in page" value={oauth.authorizationEndpoint} />
-              <FieldRow label="Return address" value={oauth.redirectUri} />
+              <FieldRow label="Authorize URL" value={oauth.authorizationEndpoint} />
+              <FieldRow label="Redirect URI" value={oauth.redirectUri} />
               <FieldRow label="Permissions" value={oauth.scopes.join(" ")} />
             </dl>
           ) : (
-            <p className="text-sm text-muted-foreground">Sign-in is not configured yet.</p>
+            <p className="text-sm text-muted-foreground">Sign-in is not configured.</p>
           )}
         </Panel>
       </div>

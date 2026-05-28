@@ -12,7 +12,7 @@ import type { MastodonStatus } from "@/types/mastodon";
 const maxPostLength = 500;
 
 export function PostsPage() {
-  const { session, signOut } = useAuth();
+  const { session } = useAuth();
   const [statuses, setStatuses] = useState<MastodonStatus[]>([]);
   const [statusText, setStatusText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -78,34 +78,28 @@ export function PostsPage() {
     <FeaturePage
       eyebrow="Publishing"
       title="Posts"
-      description="Write from your instance and keep an eye on recent local activity. Gargoyle keeps the protocol machinery out of the way while you post."
+      description="Write posts and review recent activity."
       status="ready"
     >
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_1fr]">
-        <Panel title="New post" description="Share a public note from this Gargoyle account.">
-          <form className="space-y-4" onSubmit={(event) => void submitPost(event)}>
-            <Textarea
-              value={statusText}
-              onChange={(event) => setStatusText(event.target.value)}
-              placeholder="What would you like to share?"
-              aria-label="Post content"
-              rows={6}
-            />
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className={remaining < 0 ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-                {remaining} characters remaining
-              </p>
-              <Button type="submit" disabled={isPosting || !statusText.trim() || remaining < 0}>
-                {isPosting ? "Publishing..." : "Publish"}
-              </Button>
-            </div>
-          </form>
-        </Panel>
-
-        <Panel title="Account" description="Sign out when you are done managing this instance.">
-          <Button variant="outline" onClick={signOut}>Sign out</Button>
-        </Panel>
-      </div>
+      <Panel title="New post">
+        <form className="space-y-4" onSubmit={(event) => void submitPost(event)}>
+          <Textarea
+            value={statusText}
+            onChange={(event) => setStatusText(event.target.value)}
+            placeholder="What would you like to share?"
+            aria-label="Post content"
+            rows={6}
+          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className={remaining < 0 ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+              {remaining} characters remaining
+            </p>
+            <Button type="submit" disabled={isPosting || !statusText.trim() || remaining < 0}>
+              {isPosting ? "Publishing..." : "Publish"}
+            </Button>
+          </div>
+        </form>
+      </Panel>
 
       <Panel title="Recent posts" description="The latest activity visible to this account.">
         {error ? (

@@ -140,9 +140,6 @@ function AuthenticatedApp() {
               })}
             </nav>
             <div className="mt-auto space-y-3">
-              <div className="rounded-lg border border-border bg-background p-3 text-sm text-muted-foreground">
-                Your posts and federation activity stay behind your Gargoyle login.
-              </div>
               <Button variant="outline" className="w-full justify-start" onClick={signOut}>
                 <LogOut className="size-4" aria-hidden="true" />
                 Sign out

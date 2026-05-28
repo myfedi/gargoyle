@@ -1,36 +1,28 @@
-import { Badge } from "@/components/ui/badge";
 import { FeaturePage, Panel } from "@/features/shared";
 
-const checks = [
-  { label: "Sign-in", state: "healthy" },
-  { label: "Account access", state: "healthy" },
-  { label: "Publishing", state: "healthy" },
-  { label: "Home timeline", state: "healthy" },
-  { label: "Public timeline", state: "healthy" },
-  { label: "Follow management", state: "later" },
-  { label: "Delivery tracking", state: "later" },
-];
+const implemented = ["Sign-in", "Account check", "Publishing", "Home timeline", "Public timeline"];
+const notImplemented = ["Follow management", "Inbox activity view", "Outbox activity view", "Delivery tracking"];
 
 export function CompatibilityPage() {
   return (
-    <FeaturePage
-      eyebrow="Health"
-      title="Compatibility"
-      description="A plain-language view of what this console can do today and what still needs attention."
-      status="ready"
-    >
-      <Panel title="Console readiness" description="Useful when you are testing this instance against other fediverse software.">
-        <div className="divide-y divide-border">
-          {checks.map((check) => (
-            <div key={check.label} className="flex items-center justify-between gap-4 py-3 text-sm first:pt-0 last:pb-0">
-              <span>{check.label}</span>
-              <Badge variant={check.state === "healthy" ? "success" : "warning"}>
-                {check.state === "healthy" ? "Ready" : "Later"}
-              </Badge>
-            </div>
-          ))}
-        </div>
-      </Panel>
+    <FeaturePage eyebrow="Health" title="Compatibility" description="Current frontend coverage.">
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Panel title="Implemented">
+          <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+            {implemented.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </Panel>
+
+        <Panel title="Not implemented">
+          <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+            {notImplemented.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </Panel>
+      </div>
     </FeaturePage>
   );
 }

@@ -2,7 +2,6 @@ import type React from "react";
 
 import { Inbox } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -17,17 +16,10 @@ type FeaturePageProps = {
   children?: React.ReactNode;
 };
 
-const statusLabels: Record<FeatureStatus, string> = {
-  ready: "Ready",
-  planned: "Later",
-  "needs-api": "Coming soon",
-};
-
 export function FeaturePage({
   eyebrow,
   title,
   description,
-  status = "planned",
   primaryAction,
   children,
 }: FeaturePageProps) {
@@ -35,12 +27,7 @@ export function FeaturePage({
     <section className="space-y-8">
       <div className="flex flex-col gap-5 border-b border-border pb-7 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-muted-foreground">{eyebrow}</p>
-            <Badge variant={status === "ready" ? "success" : status === "needs-api" ? "warning" : "secondary"}>
-              {statusLabels[status]}
-            </Badge>
-          </div>
+          <p className="text-sm font-medium text-muted-foreground">{eyebrow}</p>
           <div className="space-y-2">
             <h1 className="text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
             <p className="max-w-2xl text-base leading-7 text-muted-foreground">{description}</p>

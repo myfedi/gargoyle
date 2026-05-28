@@ -2,16 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Activity, CircleCheck, Clock, ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/app/auth-context";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState, FeaturePage, FieldRow, Panel } from "@/features/shared";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import type { MastodonInstance } from "@/types/mastodon";
 
-const readinessItems = [
-  { label: "Sign-in", value: "Ready", icon: ShieldCheck, variant: "success" as const },
-  { label: "Account", value: "Connected", icon: CircleCheck, variant: "success" as const },
-  { label: "Posts", value: "Publishing enabled", icon: Activity, variant: "secondary" as const },
-  { label: "Delivery", value: "Coming soon", icon: Clock, variant: "warning" as const },
+const summaryItems = [
+  { label: "Sign-in", value: "Working", icon: ShieldCheck },
+  { label: "Account", value: "Connected", icon: CircleCheck },
+  { label: "Posts", value: "Can publish", icon: Activity },
+  { label: "Delivery", value: "Not implemented", icon: Clock },
 ];
 
 export function OverviewPage() {
@@ -47,22 +46,18 @@ export function OverviewPage() {
 
   return (
     <FeaturePage
-      eyebrow="Instance console"
-      title="Your Gargoyle surface"
-      description="A small-instance control room for publishing, account access, and federation health. Start with the essentials, then dig into operational details when something needs attention."
-      status="ready"
+      eyebrow="Instance"
+      title="Overview"
+      description="Instance status and account activity."
       primaryAction="Write a post"
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {readinessItems.map((item) => {
+        {summaryItems.map((item) => {
           const Icon = item.icon;
           return (
-            <Panel key={item.label} title={item.label} className="min-h-36">
+            <Panel key={item.label} title={item.label} className="min-h-32">
               <div className="flex items-center justify-between gap-3">
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">{item.value}</p>
-                  <Badge variant={item.variant}>{item.variant === "warning" ? "Later" : "Healthy"}</Badge>
-                </div>
+                <p className="text-sm text-muted-foreground">{item.value}</p>
                 <span className="rounded-md bg-secondary p-2 text-secondary-foreground">
                   <Icon className="size-4" aria-hidden="true" />
                 </span>
@@ -72,7 +67,7 @@ export function OverviewPage() {
         })}
       </div>
 
-      <Panel title="Instance" description="Public details for this Gargoyle home.">
+      <Panel title="Instance">
         {error ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
             {error}
@@ -82,10 +77,10 @@ export function OverviewPage() {
             <FieldRow label="Title" value={instance.title} />
             <FieldRow label="Domain" value={instance.uri ?? instance.domain ?? "Unknown"} />
             <FieldRow label="Version" value={instance.version} />
-            <FieldRow label="Description" value={instance.short_description ?? instance.description ?? "No description published."} />
+            <FieldRow label="Description" value={instance.short_description ?? instance.description ?? "No description."} />
           </dl>
         ) : (
-          <EmptyState title="Loading instance" description="Fetching the latest details for this Gargoyle home." />
+          <EmptyState title="Loading instance" description="Fetching instance details." />
         )}
       </Panel>
     </FeaturePage>
