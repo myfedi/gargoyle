@@ -62,6 +62,25 @@ func (r *SocialRepo) InteractionExists(ctx context.Context, tx *dbPorts.Tx, loca
 	}
 	return db.NewSelect().Model((*dbModels.StatusInteraction)(nil)).Where("local_account_id = ?", localAccountID).Where("note_id = ?", noteID).Where("type = ?", typ).Exists(ctx)
 }
+func (r *SocialRepo) ListInteractions(ctx context.Context, tx *dbPorts.Tx, localAccountID string, typ string, limit int) ([]models.StatusInteraction, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 40 {
+		limit = 20
+	}
+	var rows []dbModels.StatusInteraction
+	if err := db.NewSelect().Model(&rows).Where("local_account_id = ?", localAccountID).Where("type = ?", typ).Order("created_at DESC").Limit(limit).Scan(ctx); err != nil {
+		return nil, err
+	}
+	res := make([]models.StatusInteraction, 0, len(rows))
+	for _, row := range rows {
+		res = append(res, row.ToModel())
+	}
+	return res, nil
+}
+
 func (r *SocialRepo) CreateNotification(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actorAccountID string, typ string, statusID *string) (*models.Notification, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {

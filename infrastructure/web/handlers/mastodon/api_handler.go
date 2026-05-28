@@ -45,6 +45,17 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/accounts/relationships", h.relationships)
 	app.Get("/api/v1/notifications", h.notifications)
 	app.Post("/api/v1/notifications/clear", h.clearNotifications)
+	app.Get("/api/v1/favourites", h.favouriteStatuses)
+	app.Get("/api/v1/bookmarks", h.bookmarkedStatuses)
+	app.Get("/api/v1/preferences", h.preferences)
+	app.Get("/api/v1/custom_emojis", h.customEmojis)
+	app.Get("/api/v1/announcements", h.emptyList)
+	app.Get("/api/v1/trends/tags", h.emptyList)
+	app.Get("/api/v1/trends/statuses", h.emptyList)
+	app.Get("/api/v1/trends/links", h.emptyList)
+	app.Get("/api/v1/lists", h.emptyList)
+	app.Get("/api/v1/filters", h.emptyList)
+	app.Get("/api/v2/filters", h.emptyList)
 	app.Post("/api/v2/media", h.uploadMedia)
 	app.Post("/api/v1/media", h.uploadMedia)
 	app.Get("/api/v1/media/:id", h.getMediaAttachment)
@@ -61,6 +72,8 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/statuses/:id/context", h.statusContext)
 	app.Post("/api/v1/statuses/:id/favourite", h.favouriteStatus)
 	app.Post("/api/v1/statuses/:id/unfavourite", h.unfavouriteStatus)
+	app.Post("/api/v1/statuses/:id/bookmark", h.bookmarkStatus)
+	app.Post("/api/v1/statuses/:id/unbookmark", h.unbookmarkStatus)
 	app.Post("/api/v1/statuses/:id/reblog", h.reblogStatus)
 	app.Post("/api/v1/statuses/:id/unreblog", h.unreblogStatus)
 	app.Get("/api/v1/statuses/:id", h.status)
@@ -466,6 +479,42 @@ func (h APIHandler) clearNotifications(c *fiber.Ctx) error {
 	return c.JSON(map[string]any{})
 }
 
+func (h APIHandler) favouriteStatuses(c *fiber.Ctx) error {
+	return h.interactionTimeline(c, h.api.FavouriteStatuses)
+}
+
+func (h APIHandler) bookmarkedStatuses(c *fiber.Ctx) error {
+	return h.interactionTimeline(c, h.api.BookmarkedStatuses)
+}
+
+func (h APIHandler) interactionTimeline(c *fiber.Ctx, fn func(context.Context, *models.Account, int) ([]mastodonUC.TimelineItem, *domainerrors.DomainError)) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	items, derr := fn(c.UserContext(), principal.Account, c.QueryInt("limit"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(timelineItemsToStatuses(items))
+}
+
+func (h APIHandler) preferences(c *fiber.Ctx) error {
+	if _, derr := h.authenticate(c); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(map[string]any{"posting:default:visibility": "public", "posting:default:sensitive": false, "posting:default:language": nil, "reading:expand:media": "default", "reading:expand:spoilers": false})
+}
+
+func (h APIHandler) customEmojis(c *fiber.Ctx) error { return h.emptyList(c) }
+
+func (h APIHandler) emptyList(c *fiber.Ctx) error {
+	if _, derr := h.authenticate(c); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON([]any{})
+}
+
 func (h APIHandler) status(c *fiber.Ctx) error {
 	principal, derr := h.authenticate(c)
 	if derr != nil {
@@ -485,9 +534,27 @@ func (h APIHandler) favouriteStatus(c *fiber.Ctx) error {
 func (h APIHandler) unfavouriteStatus(c *fiber.Ctx) error {
 	return h.interactStatus(c, h.api.UnfavouriteStatus)
 }
+func (h APIHandler) bookmarkStatus(c *fiber.Ctx) error {
+	return h.localStatusInteraction(c, h.api.BookmarkStatus)
+}
+func (h APIHandler) unbookmarkStatus(c *fiber.Ctx) error {
+	return h.localStatusInteraction(c, h.api.UnbookmarkStatus)
+}
 func (h APIHandler) reblogStatus(c *fiber.Ctx) error { return h.interactStatus(c, h.api.ReblogStatus) }
 func (h APIHandler) unreblogStatus(c *fiber.Ctx) error {
 	return h.interactStatus(c, h.api.UnreblogStatus)
+}
+
+func (h APIHandler) localStatusInteraction(c *fiber.Ctx, fn func(context.Context, *models.Account, string) (*mastodonUC.TimelineItem, *domainerrors.DomainError)) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	item, derr := fn(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(timelineItemsToStatuses([]mastodonUC.TimelineItem{*item})[0])
 }
 
 func (h APIHandler) interactStatus(c *fiber.Ctx, fn func(context.Context, *models.Account, string) (*mastodonUC.InteractionResult, *domainerrors.DomainError)) error {
