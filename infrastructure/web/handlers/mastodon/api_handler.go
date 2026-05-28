@@ -50,6 +50,9 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/favourites", h.favouriteStatuses)
 	app.Get("/api/v1/bookmarks", h.bookmarkedStatuses)
 	app.Get("/api/v1/preferences", h.preferences)
+	app.Get("/api/v1/conversations", h.conversations)
+	app.Delete("/api/v1/conversations/:id", h.deleteConversation)
+	app.Post("/api/v1/conversations/:id/read", h.readConversation)
 	app.Get("/api/v1/custom_emojis", h.customEmojis)
 	app.Get("/api/v1/announcements", h.emptyList)
 	app.Get("/api/v1/trends/tags", h.emptyList)
@@ -510,6 +513,51 @@ func (h APIHandler) dismissNotification(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	if derr := h.api.DismissNotification(c.UserContext(), principal.Account, c.Params("id")); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(map[string]any{})
+}
+
+type conversationResponse struct {
+	ID         string            `json:"id"`
+	Unread     bool              `json:"unread"`
+	Accounts   []accountResponse `json:"accounts"`
+	LastStatus statusResponse    `json:"last_status"`
+}
+
+func (h APIHandler) conversations(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	items, derr := h.api.Conversations(c.UserContext(), principal.Account, c.QueryInt("limit"), c.Query("max_id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	resp := make([]conversationResponse, 0, len(items))
+	for _, item := range items {
+		resp = append(resp, conversationResponse{ID: item.ID, Unread: item.Unread, Accounts: accountsToResponses(item.Accounts), LastStatus: timelineItemsToStatuses([]mastodonUC.TimelineItem{item.LastStatus})[0]})
+	}
+	return c.JSON(resp)
+}
+
+func (h APIHandler) deleteConversation(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if derr := h.api.DismissConversation(c.UserContext(), principal.Account, c.Params("id")); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(map[string]any{})
+}
+
+func (h APIHandler) readConversation(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if derr := h.api.ReadConversation(c.UserContext(), principal.Account, c.Params("id")); derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
 	return c.JSON(map[string]any{})

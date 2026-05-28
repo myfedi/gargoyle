@@ -34,6 +34,9 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	if derr != nil {
 		return nil, derr
 	}
+	if visibility == "direct" && len(mentions) == 0 {
+		return nil, domainerrors.New(domainerrors.ErrBadRequest, "direct statuses require at least one mentioned recipient")
+	}
 	media, derr := u.statusMedia(ctx, account, input.MediaIDs)
 	if derr != nil {
 		return nil, derr

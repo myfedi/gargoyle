@@ -160,6 +160,8 @@ Useful for search, actor refresh, missing referenced objects, and remote status 
 - [x] Add notification clear/dismiss endpoints.
 - [x] Represent boosts in Mastodon timelines/account statuses as reblog wrapper statuses.
 - [x] Persist inbound and local boosts as timeline objects.
+- [x] Reject direct statuses without mentioned recipients.
+- [x] Add Mastodon conversations endpoints for direct-status threads.
 - [ ] Expand local read/access-control checks for followers-only and direct statuses beyond the current owner/public split.
 
 ## Priority 8: OAuth/session polish

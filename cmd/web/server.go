@@ -75,6 +75,7 @@ func main() {
 	mediaStorage := adapters.NewLocalMediaStorage(config.Media.StorageDir)
 	socialRepo := repos.NewSocialRepo(sqlite.Bun)
 	boostsRepo := repos.NewBoostsRepo(sqlite.Bun)
+	conversationsRepo := repos.NewConversationsRepo(sqlite.Bun)
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
 	jobsRepo := repos.NewJobsRepo(sqlite.Bun)
@@ -170,6 +171,7 @@ func main() {
 		MediaStorage:       mediaStorage,
 		SocialRepo:         socialRepo,
 		BoostsRepo:         boostsRepo,
+		ConversationsRepo:  conversationsRepo,
 		RemoteAccountsRepo: remoteAccountsRepo,
 		IDGenerator:        adapters.NewULIDGenerator(),
 		RemoteResolver:     mastodon.NewRemoteAccountResolver(nil, mastodonRemoteURLExceptions),

@@ -160,6 +160,10 @@ func (r *NotesRepo) ListLocalNotesPaged(ctx context.Context, tx *dbPorts.Tx, loc
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, limit: limit, maxID: maxID})
 }
 
+func (r *NotesRepo) ListDirectNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error) {
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, visibility: "direct", limit: limit, maxID: maxID})
+}
+
 func (r *NotesRepo) ListKnownPublicTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error) {
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, publicOnly: true, limit: limit, maxID: maxID})
 }
@@ -183,6 +187,7 @@ type noteListFilter struct {
 	localOnly        bool
 	remoteOnly       bool
 	publicOnly       bool
+	visibility       string
 	limit            int
 	maxID            string
 }
@@ -231,6 +236,9 @@ func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, filter noteLi
 	}
 	if filter.publicOnly {
 		query = query.Where("visibility = ?", "public")
+	}
+	if filter.visibility != "" {
+		query = query.Where("visibility = ?", filter.visibility)
 	}
 	if filter.maxID != "" {
 		query = query.Where("id < ?", filter.maxID)
