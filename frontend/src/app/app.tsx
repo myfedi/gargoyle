@@ -1,15 +1,16 @@
 import type React from "react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { LogOut, Menu } from "lucide-react";
+import { Bell, LogOut, Menu } from "lucide-react";
 
 import { AuthProvider, useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { LoginPage } from "@/features/auth/login-page";
 import { AccountPage } from "@/features/accounts/account-page";
 import { DeliveryPage } from "@/features/delivery/delivery-page";
+import { DirectMessagesPage } from "@/features/direct/direct-messages-page";
 import { FollowsPage } from "@/features/follows/follows-page";
-import { InboxPage } from "@/features/inbox/inbox-page";
-import { OutboxPage } from "@/features/outbox/outbox-page";
+import { NotificationsPage } from "@/features/notifications/notifications-page";
+import { StatusCollectionPage } from "@/features/collections/status-collection-page";
 import { PostsPage } from "@/features/posts/posts-page";
 import { SettingsPage } from "@/features/settings/settings-page";
 import { StatusPage } from "@/features/status/status-page";
@@ -23,8 +24,10 @@ const routes = {
   "/": PostsPage,
   "/posts": PostsPage,
   "/follows": FollowsPage,
-  "/inbox": InboxPage,
-  "/outbox": OutboxPage,
+  "/notifications": NotificationsPage,
+  "/bookmarks": () => <StatusCollectionPage type="bookmarks" />,
+  "/favourites": () => <StatusCollectionPage type="favourites" />,
+  "/direct": DirectMessagesPage,
   "/delivery": DeliveryPage,
   "/settings": SettingsPage,
 } satisfies Record<string, React.ComponentType>;
@@ -140,6 +143,12 @@ function AuthenticatedApp() {
               })}
             </nav>
             <div className="mt-auto space-y-3">
+              <Button asChild variant="outline" className="w-full justify-start">
+                <a href="/#/notifications">
+                  <Bell className="size-4" aria-hidden="true" />
+                  Notifications
+                </a>
+              </Button>
               <Button variant="outline" className="w-full justify-start" onClick={signOut}>
                 <LogOut className="size-4" aria-hidden="true" />
                 Sign out
@@ -156,6 +165,11 @@ function AuthenticatedApp() {
                 <p className="text-xs text-muted-foreground">{currentItem?.label}</p>
               </div>
               <div className="flex items-center gap-2">
+                <Button asChild variant="outline" size="icon" aria-label="Notifications">
+                  <a href="/#/notifications">
+                    <Bell className="size-4" aria-hidden="true" />
+                  </a>
+                </Button>
                 <Button
                   variant="outline"
                   size="icon"

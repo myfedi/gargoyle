@@ -1,8 +1,9 @@
 import {
-  Inbox,
+  Bookmark,
+  Heart,
+  Mail,
   MessageSquareText,
   Repeat2,
-  Send,
   Settings,
   Users,
 } from "lucide-react";
@@ -28,16 +29,22 @@ export const navItems: NavItem[] = [
     icon: Users,
   },
   {
-    href: "#/inbox",
-    label: "Inbox",
-    description: "Inbound federation activity",
-    icon: Inbox,
+    href: "#/bookmarks",
+    label: "Bookmarks",
+    description: "Saved posts",
+    icon: Bookmark,
   },
   {
-    href: "#/outbox",
-    label: "Outbox",
-    description: "Published activities and fanout",
-    icon: Send,
+    href: "#/favourites",
+    label: "Favourites",
+    description: "Favourited posts",
+    icon: Heart,
+  },
+  {
+    href: "#/direct",
+    label: "Direct",
+    description: "Private conversations",
+    icon: Mail,
   },
   {
     href: "#/delivery",

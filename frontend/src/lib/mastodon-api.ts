@@ -112,6 +112,12 @@ export function createMastodonApi(accessToken: string) {
     clearNotifications() {
       return client.request<Record<string, never>>("/api/v1/notifications/clear", { method: "POST" });
     },
+    dismissNotification(id: string) {
+      return client.request<Record<string, never>>(`/api/v1/notifications/${encodeURIComponent(id)}/dismiss`, { method: "POST" });
+    },
+    deleteNotification(id: string) {
+      return client.request<Record<string, never>>(`/api/v1/notifications/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
     favourites(limit = 40) {
       return client.request<MastodonStatus[]>(`/api/v1/favourites?limit=${limit}`);
     },

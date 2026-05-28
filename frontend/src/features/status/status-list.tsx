@@ -56,30 +56,36 @@ export function StatusList({
     <>
       <div className="divide-y divide-border">
         {statuses.map((status) => {
-          const canDelete = Boolean(onDelete && currentAccountId && status.account.id === currentAccountId);
+          const displayedStatus = status.reblog ?? status;
+          const canDelete = Boolean(onDelete && currentAccountId && displayedStatus.account.id === currentAccountId);
           const canReply = Boolean(onReply);
           const canInteract = Boolean(onAction);
-          const isActing = actingStatusId === status.id;
+          const isActing = actingStatusId === displayedStatus.id;
           return (
             <article key={status.id} className="py-4 first:pt-0 last:pb-0">
+              {status.reblog ? (
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {status.account.display_name || status.account.username} boosted
+                </p>
+              ) : null}
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <a className="text-sm font-semibold hover:underline" href={accountHref(status.account.id)}>
-                      {status.account.display_name || status.account.username}
+                    <a className="text-sm font-semibold hover:underline" href={accountHref(displayedStatus.account.id)}>
+                      {displayedStatus.account.display_name || displayedStatus.account.username}
                     </a>
-                    <p className="text-xs text-muted-foreground">@{status.account.acct}</p>
-                    <StatusMeta status={status} />
-                    <a className="ml-auto text-xs text-muted-foreground hover:underline" href={statusHref(status.id)}>
-                      <time dateTime={status.created_at}>{formatDateTime(status.created_at)}</time>
+                    <p className="text-xs text-muted-foreground">@{displayedStatus.account.acct}</p>
+                    <StatusMeta status={displayedStatus} />
+                    <a className="ml-auto text-xs text-muted-foreground hover:underline" href={statusHref(displayedStatus.id)}>
+                      <time dateTime={displayedStatus.created_at}>{formatDateTime(displayedStatus.created_at)}</time>
                     </a>
                   </div>
-                  {status.spoiler_text ? <p className="mt-2 text-sm font-medium">{status.spoiler_text}</p> : null}
+                  {displayedStatus.spoiler_text ? <p className="mt-2 text-sm font-medium">{displayedStatus.spoiler_text}</p> : null}
                   <div className="mt-2">
-                    <StatusContent html={status.content} />
+                    <StatusContent html={displayedStatus.content} />
                   </div>
-                  <StatusStats status={status} />
-                  <StatusMedia attachments={status.media_attachments ?? []} onPreview={setMediaPreview} />
+                  <StatusStats status={displayedStatus} />
+                  <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
                 </div>
                 {canDelete || canReply || canInteract ? (
                   <DropdownMenu>
@@ -89,22 +95,22 @@ export function StatusList({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      {canReply ? <DropdownMenuItem onSelect={() => onReply?.(status)}>Reply</DropdownMenuItem> : null}
+                      {canReply ? <DropdownMenuItem onSelect={() => onReply?.(displayedStatus)}>Reply</DropdownMenuItem> : null}
                       {canInteract ? (
                         <>
-                          <DropdownMenuItem onSelect={() => void onAction?.(status.bookmarked ? "unbookmark" : "bookmark", status)}>
-                            {status.bookmarked ? "Remove bookmark" : "Bookmark"}
+                          <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.bookmarked ? "unbookmark" : "bookmark", displayedStatus)}>
+                            {displayedStatus.bookmarked ? "Remove bookmark" : "Bookmark"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void onAction?.(status.favourited ? "unfavourite" : "favourite", status)}>
-                            {status.favourited ? "Remove favourite" : "Favourite"}
+                          <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.favourited ? "unfavourite" : "favourite", displayedStatus)}>
+                            {displayedStatus.favourited ? "Remove favourite" : "Favourite"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void onAction?.(status.reblogged ? "unreblog" : "reblog", status)}>
-                            {status.reblogged ? "Undo boost" : "Boost"}
+                          <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.reblogged ? "unreblog" : "reblog", displayedStatus)}>
+                            {displayedStatus.reblogged ? "Undo boost" : "Boost"}
                           </DropdownMenuItem>
                         </>
                       ) : null}
                       {canDelete ? (
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setStatusPendingDeletion(status)}>
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setStatusPendingDeletion(displayedStatus)}>
                           Delete
                         </DropdownMenuItem>
                       ) : null}

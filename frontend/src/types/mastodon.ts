@@ -61,6 +61,7 @@ export type MastodonStatus = {
   media_attachments?: MastodonMediaAttachment[];
   in_reply_to_id?: string | null;
   in_reply_to_account_id?: string | null;
+  reblog?: MastodonStatus | null;
 };
 
 export type MastodonNotification = {
