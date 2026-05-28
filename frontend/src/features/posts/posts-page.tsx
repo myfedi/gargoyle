@@ -41,6 +41,11 @@ export function PostsPage() {
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
 
+  const searchKnownAccounts = useCallback(async (query: string) => {
+    if (!api) return [];
+    return api.searchKnownAccounts(query);
+  }, [api]);
+
   const loadTimeline = useCallback(
     async (timeline: TimelineTab, options: { silent?: boolean } = {}) => {
       if (!api) {
@@ -211,6 +216,7 @@ export function PostsPage() {
           onUploadMedia={api?.uploadMedia}
           onDeleteMedia={api?.deleteMedia}
           onUpdateMedia={api?.updateMedia}
+          searchKnownAccounts={searchKnownAccounts}
         />
       </Panel>
 

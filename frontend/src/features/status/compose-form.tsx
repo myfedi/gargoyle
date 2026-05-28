@@ -1,10 +1,10 @@
 import type React from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { MastodonMediaAttachment } from "@/types/mastodon";
+import type { MastodonAccount, MastodonMediaAttachment } from "@/types/mastodon";
 
 export type ComposeValues = {
   status: string;
@@ -25,6 +25,7 @@ type ComposeFormProps = {
   onUploadMedia?: (file: File, description?: string) => Promise<MastodonMediaAttachment>;
   onDeleteMedia?: (id: string) => Promise<void>;
   onUpdateMedia?: (id: string, description: string) => Promise<MastodonMediaAttachment>;
+  searchKnownAccounts?: (query: string) => Promise<MastodonAccount[]>;
 };
 
 const maxLength = 500;
@@ -40,8 +41,10 @@ export function ComposeForm({
   onUploadMedia,
   onDeleteMedia,
   onUpdateMedia,
+  searchKnownAccounts,
 }: ComposeFormProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [status, setStatus] = useState(initialText);
   const [visibility, setVisibility] = useState<ComposeValues["visibility"]>("public");
   const [sensitive, setSensitive] = useState(false);
@@ -52,7 +55,41 @@ export function ComposeForm({
   const [isUploading, setIsUploading] = useState(false);
   const [isDeletingMedia, setIsDeletingMedia] = useState(false);
   const [isUpdatingMedia, setIsUpdatingMedia] = useState(false);
+  const [caretPosition, setCaretPosition] = useState(0);
+  const [mentionResults, setMentionResults] = useState<MastodonAccount[]>([]);
+  const [isSearchingMentions, setIsSearchingMentions] = useState(false);
+  const [mentionError, setMentionError] = useState<string | null>(null);
+  const mentionQuery = currentMentionQuery(status, caretPosition);
   const remaining = maxLength - status.length;
+
+  useEffect(() => {
+    if (!searchKnownAccounts || !mentionQuery || mentionQuery.length < 2) {
+      setMentionResults([]);
+      setMentionError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      setIsSearchingMentions(true);
+      setMentionError(null);
+      searchKnownAccounts(mentionQuery)
+        .then((accounts) => {
+          if (!cancelled) setMentionResults(accounts);
+        })
+        .catch((caughtError: unknown) => {
+          if (!cancelled) setMentionError(caughtError instanceof Error ? caughtError.message : "Could not search accounts.");
+        })
+        .finally(() => {
+          if (!cancelled) setIsSearchingMentions(false);
+        });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [mentionQuery, searchKnownAccounts]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,6 +103,22 @@ export function ComposeForm({
     setSpoilerText("");
     setMedia(null);
     setMediaDescription("");
+  }
+
+  function insertMention(account: MastodonAccount) {
+    const token = mentionToken(status, caretPosition);
+    if (!token) return;
+
+    const mention = `@${account.acct} `;
+    const nextStatus = `${status.slice(0, token.start)}${mention}${status.slice(token.end)}`;
+    const nextCaretPosition = token.start + mention.length;
+    setStatus(nextStatus);
+    setCaretPosition(nextCaretPosition);
+    setMentionResults([]);
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition);
+    }, 0);
   }
 
   async function saveMediaDescription() {
@@ -135,13 +188,47 @@ export function ComposeForm({
 
   return (
     <form className="space-y-4" onSubmit={(event) => void submit(event)}>
-      <Textarea
-        value={status}
-        onChange={(event) => setStatus(event.target.value)}
-        placeholder={placeholder}
-        aria-label="Post content"
-        rows={6}
-      />
+      <div className="relative">
+        <Textarea
+          ref={textareaRef}
+          value={status}
+          onChange={(event) => {
+            setStatus(event.target.value);
+            setCaretPosition(event.target.selectionStart);
+          }}
+          onClick={(event) => setCaretPosition(event.currentTarget.selectionStart)}
+          onKeyUp={(event) => setCaretPosition(event.currentTarget.selectionStart)}
+          placeholder={placeholder}
+          aria-label="Post content"
+          rows={6}
+        />
+        {mentionQuery && mentionQuery.length >= 2 ? (
+          <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-border bg-card shadow-lg">
+            {isSearchingMentions ? (
+              <p className="p-3 text-sm text-muted-foreground">Searching accounts...</p>
+            ) : mentionError ? (
+              <p className="p-3 text-sm text-destructive">{mentionError}</p>
+            ) : mentionResults.length > 0 ? (
+              <div className="max-h-64 overflow-auto p-1">
+                {mentionResults.map((account) => (
+                  <button
+                    key={account.id}
+                    type="button"
+                    className="block w-full rounded-md px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => insertMention(account)}
+                  >
+                    <span className="block truncate text-sm font-medium">{account.display_name || account.username}</span>
+                    <span className="block truncate text-xs text-muted-foreground">@{account.acct}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="p-3 text-sm text-muted-foreground">No known accounts.</p>
+            )}
+          </div>
+        ) : null}
+      </div>
 
       <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
         <label className="space-y-1 text-sm font-medium">
@@ -230,4 +317,18 @@ export function ComposeForm({
       </div>
     </form>
   );
+}
+
+function currentMentionQuery(text: string, caretPosition: number) {
+  const token = mentionToken(text, caretPosition);
+  return token?.query ?? null;
+}
+
+function mentionToken(text: string, caretPosition: number) {
+  const beforeCaret = text.slice(0, caretPosition);
+  const match = beforeCaret.match(/(^|\s)@([^\s@]*)$/);
+  if (!match || match.index === undefined) return null;
+  const prefixLength = match[1].length;
+  const start = match.index + prefixLength;
+  return { start, end: caretPosition, query: match[2] };
 }

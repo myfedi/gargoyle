@@ -1,8 +1,6 @@
-import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { htmlToPlainText } from "@/lib/text";
 import type { MastodonAccount } from "@/types/mastodon";
@@ -11,7 +9,7 @@ type AccountComboboxProps = {
   value: string;
   onValueChange: (value: string) => void;
   onSelect: (account: MastodonAccount) => void;
-  onResolve: (query: string) => void;
+  onResolve: (query: string) => Promise<void> | void;
   searchKnownAccounts: (query: string) => Promise<MastodonAccount[]>;
   isResolving?: boolean;
   placeholder?: string;
@@ -33,6 +31,7 @@ export function AccountCombobox({
   const trimmedValue = value.trim();
   const canResolve = isResolvableRemoteQuery(trimmedValue);
   const searchIdRef = useRef(0);
+  const resolvedQueryRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (trimmedValue.length < 2) {
@@ -53,6 +52,11 @@ export function AccountCombobox({
         .then((accounts) => {
           if (searchIdRef.current === searchId) {
             setResults(accounts);
+            const normalizedQuery = normalizeRemoteQuery(trimmedValue);
+            if (accounts.length === 0 && isResolvableRemoteQuery(trimmedValue) && resolvedQueryRef.current !== normalizedQuery) {
+              resolvedQueryRef.current = normalizedQuery;
+              void onResolve(normalizedQuery);
+            }
           }
         })
         .catch((caughtError: unknown) => {
@@ -68,39 +72,30 @@ export function AccountCombobox({
     }, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [searchKnownAccounts, trimmedValue]);
+  }, [onResolve, searchKnownAccounts, trimmedValue]);
 
-  const showRemoteHint = useMemo(() => canResolve && results.length === 0 && !isSearching, [canResolve, isSearching, results.length]);
-
-  function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (canResolve) {
-      onResolve(normalizeRemoteQuery(trimmedValue));
-    }
-  }
+  const normalizedValue = normalizeRemoteQuery(trimmedValue);
+  const hasTriedRemote = resolvedQueryRef.current === normalizedValue;
+  const showRemoteHint = useMemo(() => canResolve && results.length === 0 && !isSearching && !hasTriedRemote, [canResolve, hasTriedRemote, isSearching, results.length]);
 
   return (
     <div className="relative">
-      <form className="flex flex-col gap-3 sm:flex-row" onSubmit={submit}>
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input
-            value={value}
-            onChange={(event) => {
-              onValueChange(event.target.value);
-              setIsOpen(true);
-            }}
-            onFocus={() => trimmedValue.length >= 2 && setIsOpen(true)}
-            className="pl-9"
-            placeholder={placeholder}
-            aria-label="Search accounts"
-            autoComplete="off"
-          />
-        </div>
-        <Button type="submit" disabled={!canResolve || isResolving}>
-          {isResolving ? "Looking up..." : "Lookup remote"}
-        </Button>
-      </form>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+        <Input
+          value={value}
+          onChange={(event) => {
+            onValueChange(event.target.value);
+            resolvedQueryRef.current = null;
+            setIsOpen(true);
+          }}
+          onFocus={() => trimmedValue.length >= 2 && setIsOpen(true)}
+          className="pl-9"
+          placeholder={placeholder}
+          aria-label="Search accounts"
+          autoComplete="off"
+        />
+      </div>
 
       {isOpen ? (
         <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-lg border border-border bg-card shadow-lg">
@@ -129,15 +124,12 @@ export function AccountCombobox({
                 </button>
               ))}
             </div>
+          ) : isResolving ? (
+            <div className="space-y-2 p-3" aria-label="Looking up remote account">
+              {[0, 1].map((item) => <div key={item} className="h-12 animate-pulse rounded-md bg-secondary" />)}
+            </div>
           ) : showRemoteHint ? (
-            <button
-              type="button"
-              className="block w-full px-3 py-3 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onResolve(normalizeRemoteQuery(trimmedValue))}
-            >
-              Look up {normalizeRemoteQuery(trimmedValue)}
-            </button>
+            <p className="p-3 text-sm text-muted-foreground">Looking up remote account...</p>
           ) : (
             <p className="p-3 text-sm text-muted-foreground">No known accounts.</p>
           )}
