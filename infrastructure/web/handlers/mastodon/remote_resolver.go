@@ -2,8 +2,14 @@ package mastodon
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -41,7 +47,7 @@ func (r RemoteAccountResolver) ResolveAccount(ctx context.Context, query string,
 	if err != nil {
 		return nil, err
 	}
-	return r.fetchActor(ctx, actorURL)
+	return r.fetchActor(ctx, actorURL, signer)
 }
 
 func (r RemoteAccountResolver) actorURL(ctx context.Context, query string) (string, error) {
@@ -92,7 +98,7 @@ func (r RemoteAccountResolver) actorURL(ctx context.Context, query string) (stri
 	return "", errors.New("webfinger response did not include ActivityPub actor")
 }
 
-func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string) (*models.Account, error) {
+func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string, signer *models.Account) (*models.Account, error) {
 	if err := validateRemoteURL(ctx, actorURL, r.exceptions); err != nil {
 		return nil, err
 	}
@@ -101,6 +107,9 @@ func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string) 
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/activity+json")
+	if signer != nil {
+		signFederatedGet(req, *signer)
+	}
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -140,6 +149,46 @@ func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string) 
 
 func mastodonAccountID(actor string) string {
 	return "remote:" + base64.RawURLEncoding.EncodeToString([]byte(actor))
+}
+
+func signFederatedGet(req *http.Request, account models.Account) {
+	if account.PrivateKey == nil {
+		return
+	}
+	block, _ := pem.Decode([]byte(*account.PrivateKey))
+	if block == nil {
+		return
+	}
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return
+	}
+	date := time.Now().UTC().Format(http.TimeFormat)
+	req.Header.Set("Date", date)
+	signed := signatureString(req.Method, req.URL, map[string]string{"host": req.URL.Host, "date": date}, []string{"(request-target)", "host", "date"})
+	hash := sha256.Sum256([]byte(signed))
+	sig, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
+	if err != nil {
+		return
+	}
+	req.Header.Set("Signature", fmt.Sprintf(`keyId="%s#main-key",algorithm="rsa-sha256",headers="(request-target) host date",signature="%s"`, account.URI, base64.StdEncoding.EncodeToString(sig)))
+}
+
+func signatureString(method string, u *url.URL, headers map[string]string, order []string) string {
+	path := u.RequestURI()
+	if path == "" {
+		path = u.Path
+	}
+	lines := make([]string, 0, len(order))
+	for _, h := range order {
+		switch strings.ToLower(h) {
+		case "(request-target)":
+			lines = append(lines, fmt.Sprintf("(request-target): %s %s", strings.ToLower(method), path))
+		default:
+			lines = append(lines, fmt.Sprintf("%s: %s", strings.ToLower(h), headers[strings.ToLower(h)]))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func validateRemoteURL(ctx context.Context, raw string, exceptions []RemoteURLException) error {
