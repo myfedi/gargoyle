@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { MastodonMediaAttachment } from "@/types/mastodon";
+import { AccountCombobox, normalizeRemoteQuery } from "@/features/accounts/account-combobox";
+import type { MastodonAccount, MastodonMediaAttachment } from "@/types/mastodon";
 
 export type ComposeValues = {
   status: string;
@@ -25,6 +26,8 @@ type ComposeFormProps = {
   onUploadMedia?: (file: File, description?: string) => Promise<MastodonMediaAttachment>;
   onDeleteMedia?: (id: string) => Promise<void>;
   onUpdateMedia?: (id: string, description: string) => Promise<MastodonMediaAttachment>;
+  searchKnownAccounts?: (query: string) => Promise<MastodonAccount[]>;
+  resolveAccounts?: (query: string) => Promise<MastodonAccount[]>;
 };
 
 const maxLength = 500;
@@ -40,6 +43,8 @@ export function ComposeForm({
   onUploadMedia,
   onDeleteMedia,
   onUpdateMedia,
+  searchKnownAccounts,
+  resolveAccounts,
 }: ComposeFormProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState(initialText);
@@ -52,7 +57,13 @@ export function ComposeForm({
   const [isUploading, setIsUploading] = useState(false);
   const [isDeletingMedia, setIsDeletingMedia] = useState(false);
   const [isUpdatingMedia, setIsUpdatingMedia] = useState(false);
+  const [isDirectOpen, setIsDirectOpen] = useState(false);
+  const [directQuery, setDirectQuery] = useState("");
+  const [directRecipient, setDirectRecipient] = useState<MastodonAccount | null>(null);
+  const [isResolvingDirect, setIsResolvingDirect] = useState(false);
+  const [directError, setDirectError] = useState<string | null>(null);
   const remaining = maxLength - status.length;
+  const canSendDirect = Boolean(searchKnownAccounts && resolveAccounts);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,11 +72,50 @@ export function ComposeForm({
     }
 
     await onSubmit({ status: status.trim(), visibility, sensitive, spoilerText, mediaIds: media ? [media.id] : [] });
+    resetForm();
+  }
+
+  async function submitDirect() {
+    if (!directRecipient || !status.trim() || remaining < 0) {
+      return;
+    }
+
+    await onSubmit({ status: withMention(status.trim(), directRecipient), visibility: "direct", sensitive, spoilerText, mediaIds: media ? [media.id] : [] });
+    resetForm();
+  }
+
+  function resetForm() {
     setStatus("");
     setSensitive(false);
     setSpoilerText("");
     setMedia(null);
     setMediaDescription("");
+    setDirectRecipient(null);
+    setDirectQuery("");
+    setDirectError(null);
+  }
+
+  async function resolveDirectRecipient(searchQuery: string) {
+    if (!resolveAccounts || !searchQuery.trim()) {
+      return;
+    }
+
+    setIsResolvingDirect(true);
+    setDirectError(null);
+
+    try {
+      const accounts = await resolveAccounts(normalizeRemoteQuery(searchQuery));
+      if (accounts[0]) {
+        setDirectRecipient(accounts[0]);
+        setDirectQuery(accounts[0].acct);
+      } else {
+        setDirectError("No account found.");
+      }
+    } catch (caughtError) {
+      setDirectError(caughtError instanceof Error ? caughtError.message : "Could not look up account.");
+    } finally {
+      setIsResolvingDirect(false);
+    }
   }
 
   async function saveMediaDescription() {
@@ -154,7 +204,6 @@ export function ComposeForm({
             <option value="public">Public</option>
             <option value="unlisted">Unlisted</option>
             <option value="private">Private</option>
-            <option value="direct">Direct</option>
           </select>
         </label>
 
@@ -168,6 +217,41 @@ export function ComposeForm({
         <input type="checkbox" checked={sensitive} onChange={(event) => setSensitive(event.target.checked)} />
         Mark as sensitive
       </label>
+
+      {canSendDirect ? (
+        <div className="rounded-md border border-border bg-background p-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium">Direct message</p>
+              <p className="text-sm text-muted-foreground">Choose a recipient before sending privately.</p>
+            </div>
+            <Button type="button" variant="outline" onClick={() => setIsDirectOpen((current) => !current)}>
+              {isDirectOpen ? "Hide" : "Direct message"}
+            </Button>
+          </div>
+          {isDirectOpen ? (
+            <div className="mt-3 space-y-3">
+              <AccountCombobox
+                value={directQuery}
+                onValueChange={(value) => {
+                  setDirectQuery(value);
+                  setDirectRecipient(null);
+                }}
+                searchKnownAccounts={searchKnownAccounts!}
+                isResolving={isResolvingDirect}
+                placeholder="Choose a recipient"
+                onSelect={(account) => {
+                  setDirectRecipient(account);
+                  setDirectQuery(account.acct);
+                }}
+                onResolve={(query) => void resolveDirectRecipient(query)}
+              />
+              {directRecipient ? <p className="text-sm text-muted-foreground">To @{directRecipient.acct}</p> : null}
+              {directError ? <p className="text-sm text-destructive" role="alert">{directError}</p> : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {onUploadMedia ? (
         <div className="rounded-md border border-border bg-background p-3">
@@ -225,10 +309,22 @@ export function ComposeForm({
         <p className={remaining < 0 ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
           {remaining} characters remaining
         </p>
-        <Button type="submit" disabled={isSubmitting || !status.trim() || remaining < 0}>
-          {isSubmitting ? submittingLabel : submitLabel}
-        </Button>
+        <div className="flex gap-2">
+          {isDirectOpen ? (
+            <Button type="button" variant="outline" disabled={isSubmitting || !directRecipient || !status.trim() || remaining < 0} onClick={() => void submitDirect()}>
+              {isSubmitting ? submittingLabel : "Send direct"}
+            </Button>
+          ) : null}
+          <Button type="submit" disabled={isSubmitting || !status.trim() || remaining < 0}>
+            {isSubmitting ? submittingLabel : submitLabel}
+          </Button>
+        </div>
       </div>
     </form>
   );
+}
+
+function withMention(text: string, recipient: MastodonAccount) {
+  const mention = `@${recipient.acct}`;
+  return text.startsWith(mention) ? text : `${mention} ${text}`;
 }
