@@ -63,6 +63,7 @@ type CreateStatusInput struct {
 type CreateStatusResult struct {
 	Note            models.Note
 	Account         models.Account
+	Media           []models.MediaAttachment
 	RawJSON         []byte
 	FollowerInboxes []string
 	MentionInboxes  []string

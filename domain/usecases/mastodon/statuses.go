@@ -34,8 +34,13 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	if derr != nil {
 		return nil, derr
 	}
+	media, derr := u.statusMedia(ctx, account, input.MediaIDs)
+	if derr != nil {
+		return nil, derr
+	}
 	noteDoc := map[string]any{"type": "Note", "content": input.Content, "visibility": visibility, "sensitive": input.Sensitive}
 	applyVisibilityAddressing(noteDoc, visibility, account, mentions)
+	applyMediaAttachments(noteDoc, u.cfg.Host, media)
 	if input.SpoilerText != "" {
 		noteDoc["summary"] = input.SpoilerText
 	}
@@ -62,19 +67,49 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	for _, mediaID := range input.MediaIDs {
-		media, err := u.cfg.MediaRepo.GetMediaAttachmentByID(ctx, nil, mediaID)
-		if err != nil || media.LocalAccountID != account.ID {
-			return nil, domainerrors.New(domainerrors.ErrBadRequest, "media_ids contains invalid media")
-		}
-		if err := u.cfg.MediaRepo.AttachMediaToNote(ctx, nil, note.ID, mediaID); err != nil {
+	for _, item := range media {
+		if err := u.cfg.MediaRepo.AttachMediaToNote(ctx, nil, note.ID, item.ID); err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
 	}
 	note.Visibility = visibility
 	note.Sensitive = input.Sensitive
 	note.SpoilerText = input.SpoilerText
-	return &CreateStatusResult{Note: *note, Account: res.Account, RawJSON: res.RawJSON, FollowerInboxes: res.FollowerInboxes, MentionInboxes: mentionInboxes(mentions)}, nil
+	return &CreateStatusResult{Note: *note, Account: res.Account, Media: media, RawJSON: res.RawJSON, FollowerInboxes: res.FollowerInboxes, MentionInboxes: mentionInboxes(mentions)}, nil
+}
+
+func (u UseCase) statusMedia(ctx context.Context, account *models.Account, mediaIDs []string) ([]models.MediaAttachment, *domainerrors.DomainError) {
+	media := make([]models.MediaAttachment, 0, len(mediaIDs))
+	seen := map[string]bool{}
+	for _, mediaID := range mediaIDs {
+		mediaID = strings.TrimSpace(mediaID)
+		if mediaID == "" || seen[mediaID] {
+			continue
+		}
+		seen[mediaID] = true
+		item, err := u.cfg.MediaRepo.GetMediaAttachmentByID(ctx, nil, mediaID)
+		if err != nil || item.LocalAccountID != account.ID {
+			return nil, domainerrors.New(domainerrors.ErrBadRequest, "media_ids contains invalid media")
+		}
+		media = append(media, *item)
+	}
+	return media, nil
+}
+
+func applyMediaAttachments(noteDoc map[string]any, host string, media []models.MediaAttachment) {
+	if len(media) == 0 {
+		return
+	}
+	attachments := make([]map[string]string, 0, len(media))
+	base := strings.TrimRight(host, "/")
+	for _, item := range media {
+		attachment := map[string]string{"type": "Document", "mediaType": item.ContentType, "url": base + "/media/" + item.ID}
+		if item.Description != "" {
+			attachment["name"] = item.Description
+		}
+		attachments = append(attachments, attachment)
+	}
+	noteDoc["attachment"] = attachments
 }
 
 var remoteMentionPattern = regexp.MustCompile(`@([A-Za-z0-9_]+)@([A-Za-z0-9.-]+)`)

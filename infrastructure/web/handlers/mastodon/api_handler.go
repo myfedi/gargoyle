@@ -261,7 +261,9 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 			return web.HandleDomainError(c, err)
 		}
 	}
-	return c.JSON(noteToStatus(res.Note, principal.Account))
+	status := noteToStatus(res.Note, principal.Account)
+	status.MediaAttachments = mediaResponses(res.Media)
+	return c.JSON(status)
 }
 
 type searchResponse struct {
