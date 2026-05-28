@@ -64,6 +64,7 @@ type CreateStatusResult struct {
 	Account         models.Account
 	RawJSON         []byte
 	FollowerInboxes []string
+	MentionInboxes  []string
 }
 
 type TimelineItem struct {

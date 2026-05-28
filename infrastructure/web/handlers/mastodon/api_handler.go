@@ -221,6 +221,19 @@ func mediaType(contentType string) string {
 	return "image"
 }
 
+func uniqueInboxes(inboxes []string) []string {
+	res := make([]string, 0, len(inboxes))
+	seen := map[string]bool{}
+	for _, inbox := range inboxes {
+		if inbox == "" || seen[inbox] {
+			continue
+		}
+		seen[inbox] = true
+		res = append(res, inbox)
+	}
+	return res
+}
+
 type createStatusRequest struct {
 	Status      string   `json:"status" form:"status"`
 	Visibility  string   `json:"visibility" form:"visibility"`
@@ -243,7 +256,7 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	for _, inbox := range res.FollowerInboxes {
+	for _, inbox := range uniqueInboxes(append(res.FollowerInboxes, res.MentionInboxes...)) {
 		if err := h.queueDelivery(res.RawJSON, inbox, res.Account); err != nil {
 			return web.HandleDomainError(c, err)
 		}
