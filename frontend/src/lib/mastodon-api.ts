@@ -1,10 +1,13 @@
 import { ApiClient } from "@/lib/api";
-import type { MastodonAccount, MastodonInstance, MastodonRelationship, MastodonSearchResults, MastodonStatus } from "@/types/mastodon";
+import type { MastodonAccount, MastodonInstance, MastodonMediaAttachment, MastodonRelationship, MastodonSearchResults, MastodonStatus } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
   visibility?: "public" | "unlisted" | "private" | "direct";
+  sensitive?: boolean;
+  spoiler_text?: string;
   in_reply_to_id?: string;
+  media_ids?: string[];
 };
 
 export function createMastodonApi(accessToken: string) {
@@ -35,6 +38,31 @@ export function createMastodonApi(accessToken: string) {
       return client.request<MastodonStatus>("/api/v1/statuses", {
         method: "POST",
         body: JSON.stringify(input),
+      });
+    },
+    uploadMedia(file: File, description?: string) {
+      const body = new FormData();
+      body.set("file", file);
+      if (description) {
+        body.set("description", description);
+      }
+      return client.request<MastodonMediaAttachment>("/api/v2/media", {
+        method: "POST",
+        body,
+      });
+    },
+    media(id: string) {
+      return client.request<MastodonMediaAttachment>(`/api/v1/media/${encodeURIComponent(id)}`);
+    },
+    updateMedia(id: string, description: string) {
+      return client.request<MastodonMediaAttachment>(`/api/v1/media/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ description }),
+      });
+    },
+    deleteMedia(id: string) {
+      return client.request<void>(`/api/v1/media/${encodeURIComponent(id)}`, {
+        method: "DELETE",
       });
     },
     account(id: string) {

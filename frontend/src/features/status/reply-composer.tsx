@@ -1,11 +1,5 @@
-import type React from "react";
-import { useState } from "react";
-
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { ComposeForm } from "@/features/status/compose-form";
 import type { MastodonStatus } from "@/types/mastodon";
-
-const maxReplyLength = 500;
 
 type ReplyComposerProps = {
   status: MastodonStatus;
@@ -16,38 +10,24 @@ type ReplyComposerProps = {
 };
 
 export function ReplyComposer({ status, isSubmitting, error, onCancel, onSubmit }: ReplyComposerProps) {
-  const [text, setText] = useState(prefillMention(status));
-  const remaining = maxReplyLength - text.length;
-
-  async function submitReply(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!text.trim() || remaining < 0) {
-      return;
-    }
-    await onSubmit(text.trim());
-  }
-
   return (
-    <form className="space-y-3 rounded-lg border border-border bg-background p-4" onSubmit={(event) => void submitReply(event)}>
-      <p className="text-sm font-medium">Reply to @{status.account.acct}</p>
-      <Textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} aria-label="Reply text" />
-      {error ? (
-        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className={remaining < 0 ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-          {remaining} characters remaining
-        </p>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>Cancel</Button>
-          <Button type="submit" disabled={isSubmitting || !text.trim() || remaining < 0}>
-            {isSubmitting ? "Replying..." : "Reply"}
-          </Button>
-        </div>
+    <div className="space-y-3 rounded-lg border border-border bg-background p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">Reply to @{status.account.acct}</p>
+        <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={onCancel}>
+          Cancel
+        </button>
       </div>
-    </form>
+      <ComposeForm
+        submitLabel="Reply"
+        submittingLabel="Replying..."
+        placeholder="Write a reply"
+        initialText={prefillMention(status)}
+        isSubmitting={isSubmitting}
+        error={error}
+        onSubmit={(values) => onSubmit(values.status)}
+      />
+    </div>
   );
 }
 

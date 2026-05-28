@@ -24,6 +24,15 @@ export default defineConfig({
           });
         },
       },
+      "/media": {
+        target: "http://gargoyle.test",
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on("proxyReq", (proxyReq) => {
+            proxyReq.removeHeader("cookie");
+          });
+        },
+      },
     },
   },
   resolve: {

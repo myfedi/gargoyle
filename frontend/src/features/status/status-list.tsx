@@ -16,7 +16,7 @@ import { EmptyState } from "@/features/shared";
 import { StatusContent } from "@/features/status/status-content";
 import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime, htmlToPlainText } from "@/lib/text";
-import type { MastodonStatus } from "@/types/mastodon";
+import type { MastodonMediaAttachment, MastodonStatus } from "@/types/mastodon";
 
 type StatusListProps = {
   statuses: MastodonStatus[];
@@ -38,6 +38,7 @@ export function StatusList({
   onReply,
 }: StatusListProps) {
   const [statusPendingDeletion, setStatusPendingDeletion] = useState<MastodonStatus | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<MastodonMediaAttachment | null>(null);
 
   if (statuses.length === 0) {
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
@@ -67,6 +68,7 @@ export function StatusList({
                   <div className="mt-2">
                     <StatusContent html={status.content} />
                   </div>
+                  <StatusMedia attachments={status.media_attachments ?? []} onPreview={setMediaPreview} />
                 </div>
                 {canDelete || canReply ? (
                   <DropdownMenu>
@@ -97,6 +99,24 @@ export function StatusList({
           );
         })}
       </div>
+
+      <Dialog open={Boolean(mediaPreview)} onOpenChange={(open) => !open && setMediaPreview(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Media</DialogTitle>
+            {mediaPreview?.description ? <DialogDescription>{mediaPreview.description}</DialogDescription> : null}
+          </DialogHeader>
+          {mediaPreview ? (
+            <div className="flex justify-center rounded-md bg-background p-2">
+              {mediaPreview.type === "image" ? (
+                <img className="max-h-[75vh] rounded-md object-contain" src={mediaPreview.url} alt={mediaPreview.description || "Media attachment"} />
+              ) : (
+                <a className="text-primary hover:underline" href={mediaPreview.url} target="_blank" rel="noreferrer">Open media</a>
+              )}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(statusPendingDeletion)} onOpenChange={(open) => !open && setStatusPendingDeletion(null)}>
         <DialogContent>
@@ -132,5 +152,30 @@ export function StatusList({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function StatusMedia({ attachments, onPreview }: { attachments: MastodonMediaAttachment[]; onPreview: (attachment: MastodonMediaAttachment) => void }) {
+  if (attachments.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      {attachments.map((attachment) => (
+        <button
+          key={attachment.id}
+          type="button"
+          className="block overflow-hidden rounded-lg border border-border bg-background text-left"
+          onClick={() => onPreview(attachment)}
+        >
+          {attachment.type === "image" ? (
+            <img className="max-h-80 w-full object-cover" src={attachment.preview_url || attachment.url} alt={attachment.description || "Media attachment"} />
+          ) : (
+            <div className="p-4 text-sm text-muted-foreground">{attachment.type} attachment</div>
+          )}
+        </button>
+      ))}
+    </div>
   );
 }

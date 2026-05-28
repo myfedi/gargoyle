@@ -34,6 +34,14 @@ export type MastodonSearchResults = {
   hashtags: unknown[];
 };
 
+export type MastodonMediaAttachment = {
+  id: string;
+  type: "image" | "video" | "gifv" | "audio" | "unknown" | string;
+  url: string;
+  preview_url: string;
+  description?: string;
+};
+
 export type MastodonStatus = {
   id: string;
   uri: string;
@@ -47,6 +55,7 @@ export type MastodonStatus = {
   replies_count: number;
   reblogs_count: number;
   favourites_count: number;
+  media_attachments?: MastodonMediaAttachment[];
   in_reply_to_id?: string | null;
   in_reply_to_account_id?: string | null;
 };

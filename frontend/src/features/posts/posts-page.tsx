@@ -1,17 +1,15 @@
-import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
+import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
 import { StatusList } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import type { MastodonAccount, MastodonStatus } from "@/types/mastodon";
 
-const maxPostLength = 500;
 const timelineTabs = [
   { value: "home", label: "Home" },
   { value: "local", label: "Local" },
@@ -27,7 +25,6 @@ export function PostsPage() {
   const [activeTimeline, setActiveTimeline] = useState<TimelineTab>("home");
   const [statuses, setStatuses] = useState<MastodonStatus[]>([]);
   const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(null);
-  const [statusText, setStatusText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isPosting, setIsPosting] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -38,7 +35,6 @@ export function PostsPage() {
   const [replyError, setReplyError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
-  const remaining = maxPostLength - statusText.length;
 
   const loadTimeline = useCallback(
     async (timeline: TimelineTab, options: { silent?: boolean } = {}) => {
@@ -142,9 +138,8 @@ export function PostsPage() {
     }
   }
 
-  async function submitPost(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!api || !statusText.trim() || remaining < 0) {
+  async function submitPost(values: ComposeValues) {
+    if (!api) {
       return;
     }
 
@@ -152,11 +147,20 @@ export function PostsPage() {
     setPublishError(null);
 
     try {
-      const createdStatus = await api.createStatus({ status: statusText.trim(), visibility: "public" });
+      const createdStatus = await api.createStatus({
+        status: values.status,
+        visibility: values.visibility,
+        sensitive: values.sensitive,
+        spoiler_text: values.spoilerText,
+        media_ids: values.mediaIds,
+      });
       if (activeTimeline === "home") {
-        setStatuses((current) => [createdStatus, ...current]);
+        if (values.mediaIds.length > 0) {
+          await loadTimeline(activeTimeline, { silent: true });
+        } else {
+          setStatuses((current) => [createdStatus, ...current]);
+        }
       }
-      setStatusText("");
     } catch (caughtError) {
       setPublishError(caughtError instanceof Error ? caughtError.message : "Could not publish post.");
     } finally {
@@ -167,28 +171,17 @@ export function PostsPage() {
   return (
     <FeaturePage eyebrow="Timeline" title="Timeline" description="Write posts and read recent activity.">
       <Panel title="New post">
-        <form className="space-y-4" onSubmit={(event) => void submitPost(event)}>
-          <Textarea
-            value={statusText}
-            onChange={(event) => setStatusText(event.target.value)}
-            placeholder="What would you like to share?"
-            aria-label="Post content"
-            rows={6}
-          />
-          {publishError ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
-              {publishError}
-            </p>
-          ) : null}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className={remaining < 0 ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-              {remaining} characters remaining
-            </p>
-            <Button type="submit" disabled={isPosting || !statusText.trim() || remaining < 0}>
-              {isPosting ? "Publishing..." : "Publish"}
-            </Button>
-          </div>
-        </form>
+        <ComposeForm
+          submitLabel="Publish"
+          submittingLabel="Publishing..."
+          placeholder="What would you like to share?"
+          isSubmitting={isPosting}
+          error={publishError}
+          onSubmit={submitPost}
+          onUploadMedia={api?.uploadMedia}
+          onDeleteMedia={api?.deleteMedia}
+          onUpdateMedia={api?.updateMedia}
+        />
       </Panel>
 
       <Panel title="Posts">
