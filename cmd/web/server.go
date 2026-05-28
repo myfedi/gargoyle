@@ -10,6 +10,7 @@ import (
 	passwordAdapters "github.com/myfedi/gargoyle/adapters/password"
 	"github.com/myfedi/gargoyle/adapters/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
+	mastodonUsecases "github.com/myfedi/gargoyle/domain/usecases/mastodon"
 	"github.com/myfedi/gargoyle/domain/usecases/oauth"
 	infra "github.com/myfedi/gargoyle/infrastructure"
 	"github.com/myfedi/gargoyle/infrastructure/db"
@@ -110,12 +111,12 @@ func main() {
 		PasswordHash: passwordAdapters.NewBCryptPasswordHasher(),
 	})
 	mastodon.NewOAuthHandler(oauthUC).Setup(app)
-	mastodon.NewAPIHandler(mastodon.APIHandlerConfig{
+	mastodonAPIUC := mastodonUsecases.NewUseCase(mastodonUsecases.Config{
 		Host:          host,
 		Domain:        config.Domain,
 		ServerVersion: infra.ServerVersion,
-		OAuth:         oauthUC,
 		NotesRepo:     notesRepo,
+		IDGenerator:   adapters.NewULIDGenerator(),
 		CreateOutboxUC: apUsecases.NewCreateOutboxActivityUseCase(apUsecases.ActivityPubFlowConfig{
 			TxProvider:       txProvider,
 			AccountsRepo:     accountsRepo,
@@ -124,7 +125,8 @@ func main() {
 			NotesRepo:        notesRepo,
 			ContentSanitizer: contentSanitizer,
 		}),
-	}).Setup(app)
+	})
+	mastodon.NewAPIHandler(mastodon.APIHandlerConfig{OAuth: oauthUC, API: mastodonAPIUC}).Setup(app)
 
 	/// run server
 	err = app.Listen(fmt.Sprintf(":%d", config.Port))

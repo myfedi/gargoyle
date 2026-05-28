@@ -1,48 +1,31 @@
 package mastodon
 
 import (
-	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
-	"github.com/myfedi/gargoyle/domain/ports/repos"
-	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
+	mastodonUC "github.com/myfedi/gargoyle/domain/usecases/mastodon"
 	"github.com/myfedi/gargoyle/domain/usecases/oauth"
-	infraDB "github.com/myfedi/gargoyle/infrastructure/db"
 	"github.com/myfedi/gargoyle/infrastructure/web"
 )
 
 // APIHandler exposes the small Mastodon-compatible API surface needed by web
 // and mobile clients after OAuth login.
 type APIHandler struct {
-	host           string
-	domain         string
-	serverVersion  string
-	oauth          oauth.UseCase
-	notesRepo      repos.NotesRepository
-	createOutboxUC apUsecases.CreateOutboxActivityUseCase
+	oauth oauth.UseCase
+	api   mastodonUC.UseCase
 }
 
 type APIHandlerConfig struct {
-	Host           string
-	Domain         string
-	ServerVersion  string
-	OAuth          oauth.UseCase
-	NotesRepo      repos.NotesRepository
-	CreateOutboxUC apUsecases.CreateOutboxActivityUseCase
+	OAuth oauth.UseCase
+	API   mastodonUC.UseCase
 }
 
 func NewAPIHandler(cfg APIHandlerConfig) APIHandler {
-	if cfg.Host == "" || cfg.Domain == "" {
-		panic("mastodon API handler requires Host and Domain")
-	}
-	if cfg.NotesRepo == nil {
-		panic("mastodon API handler requires NotesRepo")
-	}
-	return APIHandler{host: cfg.Host, domain: cfg.Domain, serverVersion: cfg.ServerVersion, oauth: cfg.OAuth, notesRepo: cfg.NotesRepo, createOutboxUC: cfg.CreateOutboxUC}
+	return APIHandler{oauth: cfg.OAuth, api: cfg.API}
 }
 
 func (h APIHandler) Setup(app *fiber.App) {
@@ -71,8 +54,9 @@ type instanceV1Response struct {
 }
 
 func (h APIHandler) instanceV1(c *fiber.Ctx) error {
-	resp := instanceV1Response{URI: h.domain, Title: "Gargoyle", ShortDesc: "Gargoyle federated server", Description: "Gargoyle federated server", Version: h.serverVersion}
-	resp.URLs.StreamingAPI = h.host
+	info := h.api.InstanceInfo()
+	resp := instanceV1Response{URI: info.Domain, Title: info.Title, ShortDesc: info.Description, Description: info.Description, Version: info.ServerVersion}
+	resp.URLs.StreamingAPI = info.Host
 	return c.JSON(resp)
 }
 
@@ -85,7 +69,8 @@ type instanceV2Response struct {
 }
 
 func (h APIHandler) instanceV2(c *fiber.Ctx) error {
-	return c.JSON(instanceV2Response{Domain: h.domain, Title: "Gargoyle", Version: h.serverVersion, Description: "Gargoyle federated server"})
+	info := h.api.InstanceInfo()
+	return c.JSON(instanceV2Response{Domain: info.Domain, Title: info.Title, Version: info.ServerVersion, Description: info.Description})
 }
 
 type createStatusRequest struct {
@@ -102,29 +87,11 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
-	if strings.TrimSpace(req.Status) == "" {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "status is required"))
-	}
-	activityID, err := infraDB.NewULID()
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-	objectID, err := infraDB.NewULID()
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-	raw, err := json.Marshal(map[string]any{"type": "Note", "content": req.Status})
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-	res, derr := h.createOutboxUC.CreateOutboxActivity(c.UserContext(), apUsecases.CreateOutboxActivityInput{Username: principal.Account.Username, RawJSON: raw, ActivityID: activityID, ObjectID: objectID})
+	note, derr := h.api.CreateStatus(c.UserContext(), principal.Account, req.Status)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	if note, ok := apUsecases.ExtractNote(res.RawJSON); ok {
-		return c.JSON(noteToStatus(noteModelFromExtracted(note, principal.Account.ID), principal.Account))
-	}
-	return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrInternal, "created activity did not contain a note"))
+	return c.JSON(noteToStatus(*note, principal.Account))
 }
 
 func (h APIHandler) homeTimeline(c *fiber.Ctx) error {
@@ -132,15 +99,23 @@ func (h APIHandler) homeTimeline(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	notes, err := h.notesRepo.ListLocalNotes(c.UserContext(), nil, principal.Account.ID)
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+	notes, derr := h.api.HomeTimeline(c.UserContext(), principal.Account)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
 	}
 	return c.JSON(notesToStatuses(notes, principal.Account))
 }
 
 func (h APIHandler) publicTimeline(c *fiber.Ctx) error {
-	return h.homeTimeline(c)
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	notes, derr := h.api.PublicTimeline(c.UserContext(), principal.Account)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(notesToStatuses(notes, principal.Account))
 }
 
 func (h APIHandler) authenticate(c *fiber.Ctx) (*oauth.AuthenticatedUser, *domainerrors.DomainError) {
@@ -190,8 +165,4 @@ func noteToStatus(note models.Note, account *models.Account) statusResponse {
 		created = time.Now().UTC()
 	}
 	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: "public", Sensitive: false, MediaAttachments: []any{}, Mentions: []any{}, Tags: []any{}, Emojis: []any{}}
-}
-
-func noteModelFromExtracted(note apUsecases.ExtractedNote, accountID string) models.Note {
-	return models.Note{ID: note.URI, LocalAccountID: accountID, URI: note.URI, Content: note.Content, PlainText: note.Content, AttributedTo: note.AttributedTo, PublishedAt: note.PublishedAt}
 }
