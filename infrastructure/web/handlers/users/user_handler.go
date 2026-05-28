@@ -158,6 +158,10 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 
 // SetupHostMeta initializes the hostmeta route for the Fiber application.
 func (h *UsersWebHandler) SetupUserProfileHandler(app *fiber.App) {
+	app.Get("/@:username", func(c *fiber.Ctx) error {
+		return c.Redirect("/users/"+url.PathEscape(c.Params("username")), fiber.StatusFound)
+	})
+
 	app.Get("/users/:username", func(c *fiber.Ctx) error {
 		username := c.Params("username")
 		if username == "" {
