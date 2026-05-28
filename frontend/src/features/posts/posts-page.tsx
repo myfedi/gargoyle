@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs } from "@/components/ui/tabs";
+import { DirectMessageForm } from "@/features/direct/direct-message-form";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
 import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
@@ -33,21 +35,11 @@ export function PostsPage() {
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MastodonStatus | null>(null);
+  const [forwardingStatus, setForwardingStatus] = useState<MastodonStatus | null>(null);
   const [isReplying, setIsReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
-
-  const searchKnownAccounts = useCallback(async (query: string) => {
-    if (!api) return [];
-    return api.searchKnownAccounts(query);
-  }, [api]);
-
-  const resolveAccounts = useCallback(async (query: string) => {
-    if (!api) return [];
-    const search = await api.searchAccounts(query);
-    return search.accounts;
-  }, [api]);
 
   const loadTimeline = useCallback(
     async (timeline: TimelineTab, options: { silent?: boolean } = {}) => {
@@ -219,8 +211,6 @@ export function PostsPage() {
           onUploadMedia={api?.uploadMedia}
           onDeleteMedia={api?.deleteMedia}
           onUpdateMedia={api?.updateMedia}
-          searchKnownAccounts={searchKnownAccounts}
-          resolveAccounts={resolveAccounts}
         />
       </Panel>
 
@@ -266,6 +256,7 @@ export function PostsPage() {
               onDelete={deleteStatus}
               actingStatusId={actingStatusId}
               onAction={runAction}
+              onForward={setForwardingStatus}
               onReply={(status) => {
                 setReplyingTo(status);
                 setReplyError(null);
@@ -279,6 +270,15 @@ export function PostsPage() {
           </>
         )}
       </Panel>
+
+      <Dialog open={Boolean(forwardingStatus)} onOpenChange={(open) => !open && setForwardingStatus(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Forward by direct message</DialogTitle>
+          </DialogHeader>
+          {forwardingStatus ? <DirectMessageForm forwardedStatus={forwardingStatus} onSent={() => setForwardingStatus(null)} onCancel={() => setForwardingStatus(null)} /> : null}
+        </DialogContent>
+      </Dialog>
     </FeaturePage>
   );
 }

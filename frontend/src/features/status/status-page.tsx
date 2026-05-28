@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DirectMessageForm } from "@/features/direct/direct-message-form";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
 import type { ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
@@ -26,6 +28,7 @@ export function StatusPage({ route }: StatusPageProps) {
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MastodonStatus | null>(null);
+  const [forwardingStatus, setForwardingStatus] = useState<MastodonStatus | null>(null);
   const [isReplying, setIsReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -150,6 +153,7 @@ export function StatusPage({ route }: StatusPageProps) {
             actingStatusId={actingStatusId}
             onDelete={deleteStatus}
             onAction={runAction}
+            onForward={setForwardingStatus}
             onReply={(nextStatus) => {
               setReplyingTo(nextStatus);
               setReplyError(null);
@@ -171,6 +175,15 @@ export function StatusPage({ route }: StatusPageProps) {
       ) : null}
 
       <Button variant="outline" onClick={() => window.history.back()}>Back</Button>
+
+      <Dialog open={Boolean(forwardingStatus)} onOpenChange={(open) => !open && setForwardingStatus(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Forward by direct message</DialogTitle>
+          </DialogHeader>
+          {forwardingStatus ? <DirectMessageForm forwardedStatus={forwardingStatus} onSent={() => setForwardingStatus(null)} onCancel={() => setForwardingStatus(null)} /> : null}
+        </DialogContent>
+      </Dialog>
     </FeaturePage>
   );
 }

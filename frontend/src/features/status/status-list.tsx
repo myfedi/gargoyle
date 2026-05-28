@@ -29,6 +29,7 @@ type StatusListProps = {
   actingStatusId?: string | null;
   onDelete?: (status: MastodonStatus) => Promise<boolean> | boolean;
   onReply?: (status: MastodonStatus) => void;
+  onForward?: (status: MastodonStatus) => void;
   onAction?: (action: StatusAction, status: MastodonStatus) => Promise<void> | void;
 };
 
@@ -41,6 +42,7 @@ export function StatusList({
   actingStatusId,
   onDelete,
   onReply,
+  onForward,
   onAction,
 }: StatusListProps) {
   const [statusPendingDeletion, setStatusPendingDeletion] = useState<MastodonStatus | null>(null);
@@ -59,6 +61,7 @@ export function StatusList({
           const displayedStatus = status.reblog ?? status;
           const canDelete = Boolean(onDelete && currentAccountId && displayedStatus.account.id === currentAccountId);
           const canReply = Boolean(onReply);
+          const canForward = Boolean(onForward);
           const canInteract = Boolean(onAction);
           const isActing = actingStatusId === displayedStatus.id;
           return (
@@ -87,7 +90,7 @@ export function StatusList({
                   <StatusStats status={displayedStatus} />
                   <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
                 </div>
-                {canDelete || canReply || canInteract ? (
+                {canDelete || canReply || canForward || canInteract ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" aria-label="Post actions" disabled={isActing}>
@@ -96,6 +99,7 @@ export function StatusList({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       {canReply ? <DropdownMenuItem onSelect={() => onReply?.(displayedStatus)}>Reply</DropdownMenuItem> : null}
+                      {canForward ? <DropdownMenuItem onSelect={() => onForward?.(displayedStatus)}>Forward by DM</DropdownMenuItem> : null}
                       {canInteract ? (
                         <>
                           <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.bookmarked ? "unbookmark" : "bookmark", displayedStatus)}>
