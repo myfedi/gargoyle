@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/mail"
 	"strings"
+	"time"
 
 	"os"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/myfedi/gargoyle/adapters/gcrypto"
 	pw "github.com/myfedi/gargoyle/adapters/password"
 	"github.com/myfedi/gargoyle/adapters/repos"
+	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/usecases/users"
 	"github.com/myfedi/gargoyle/infrastructure/config"
 	"github.com/myfedi/gargoyle/infrastructure/db"
@@ -23,11 +25,56 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func main() {
 	app := &cli.App{
 		Name:  "admin",
 		Usage: "Admin CLI for user management",
 		Commands: []*cli.Command{
+			{
+				Name:  "jobs",
+				Usage: "Inspect durable delivery/fetch jobs",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "config", Required: true},
+					&cli.StringFlag{Name: "type", Value: "delivery", Usage: "delivery or fetch"},
+					&cli.StringFlag{Name: "status", Value: "pending", Usage: "pending, failed, done, running"},
+					&cli.IntFlag{Name: "limit", Value: 25},
+				},
+				Action: func(c *cli.Context) error {
+					cfg, err := config.NewConfig(c.String("config"))
+					if err != nil {
+						return err
+					}
+					store := db.NewSqliteStore(db.SqliteStoreConfig{Debug: cfg.Debug, SqlitePath: cfg.Sqlite.Uri})
+					jobsRepo := repos.NewJobsRepo(store.Bun)
+					status := models.JobStatus(c.String("status"))
+					ctx := context.Background()
+					if c.String("type") == "fetch" {
+						jobs, err := jobsRepo.ListFetchJobsByStatus(ctx, nil, status, c.Int("limit"))
+						if err != nil {
+							return err
+						}
+						for _, job := range jobs {
+							fmt.Printf("%s\t%s\t%s\tattempts=%d\tnext=%s\terr=%s\n", job.ID, job.Status, job.URL, job.Attempts, job.NextAttemptAt.Format(time.RFC3339), stringValue(job.LastError))
+						}
+						return nil
+					}
+					jobs, err := jobsRepo.ListDeliveryJobsByStatus(ctx, nil, status, c.Int("limit"))
+					if err != nil {
+						return err
+					}
+					for _, job := range jobs {
+						fmt.Printf("%s\t%s\t%s\tattempts=%d\tnext=%s\terr=%s\n", job.ID, job.Status, job.InboxURL, job.Attempts, job.NextAttemptAt.Format(time.RFC3339), stringValue(job.LastError))
+					}
+					return nil
+				},
+			},
 			{
 				Name:  "register",
 				Usage: "Register a new user",
