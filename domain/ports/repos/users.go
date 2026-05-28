@@ -18,6 +18,7 @@ type UsersRepository interface {
 	UserWithUsernameExists(ctx context.Context, tx *db.Tx, username string) (bool, error)
 	UserWithEmailExists(ctx context.Context, tx *db.Tx, email string) (bool, error)
 	GetUserByUsername(ctx context.Context, tx *db.Tx, username string) (*models.User, error)
+	GetUserByEmail(ctx context.Context, tx *db.Tx, email string) (*models.User, error)
 	GetUserByID(ctx context.Context, tx *db.Tx, id string) (*models.User, error)
 	CreateUser(ctx context.Context, tx *db.Tx, input UserCreationInput) (*models.User, error)
 }

@@ -117,7 +117,7 @@ func (u UseCase) Authorize(ctx context.Context, input AuthorizeInput) (string, *
 	if derr != nil {
 		return "", derr
 	}
-	user, err := u.cfg.UsersRepo.GetUserByUsername(ctx, nil, input.Username)
+	user, err := u.userByLogin(ctx, input.Username)
 	if err != nil || u.cfg.PasswordHash.CompareHashAndPassword(user.PasswordHash, input.Password) != nil {
 		return "", derrors.New(derrors.ErrUnauthorized, "invalid credentials")
 	}
@@ -168,7 +168,7 @@ func (u UseCase) IssueToken(ctx context.Context, input IssueTokenInput) (*Issued
 }
 
 func (u UseCase) issuePasswordToken(ctx context.Context, app *models.OAuthApplication, input IssueTokenInput) (*IssuedToken, *derrors.DomainError) {
-	user, err := u.cfg.UsersRepo.GetUserByUsername(ctx, nil, input.Username)
+	user, err := u.userByLogin(ctx, input.Username)
 	if err != nil {
 		return nil, derrors.New(derrors.ErrUnauthorized, "invalid resource owner credentials")
 	}
@@ -227,6 +227,15 @@ func (u UseCase) AuthenticateBearer(ctx context.Context, bearer string) (*Authen
 		return nil, derrors.NewErr(derrors.ErrInternal, err)
 	}
 	return &AuthenticatedUser{User: user, Account: account, Scopes: token.Scopes}, nil
+}
+
+func (u UseCase) userByLogin(ctx context.Context, login string) (*models.User, error) {
+	if strings.Contains(login, "@") {
+		if user, err := u.cfg.UsersRepo.GetUserByEmail(ctx, nil, login); err == nil {
+			return user, nil
+		}
+	}
+	return u.cfg.UsersRepo.GetUserByUsername(ctx, nil, login)
 }
 
 func (u UseCase) validatedApplication(ctx context.Context, clientID string, redirectURI string) (*models.OAuthApplication, *derrors.DomainError) {

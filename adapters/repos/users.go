@@ -89,6 +89,24 @@ func (r UsersRepo) GetUserByUsername(ctx context.Context, tx *dbPorts.Tx, userna
 	return &model, nil
 }
 
+func (r UsersRepo) GetUserByEmail(ctx context.Context, tx *dbPorts.Tx, email string) (*models.User, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
+	var user dbModels.User
+	if err := db.NewSelect().Model(&user).Where("email = ?", email).Scan(ctx); err != nil {
+		return nil, err
+	}
+	model := user.ToModel()
+	return &model, nil
+}
+
 func (r UsersRepo) GetUserByID(ctx context.Context, tx *dbPorts.Tx, id string) (*models.User, error) {
 	db := r.db
 	if tx != nil {
