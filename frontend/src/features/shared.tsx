@@ -18,9 +18,9 @@ type FeaturePageProps = {
 };
 
 const statusLabels: Record<FeatureStatus, string> = {
-  ready: "Ready for wiring",
-  planned: "Planned",
-  "needs-api": "Needs API",
+  ready: "Ready",
+  planned: "Later",
+  "needs-api": "Coming soon",
 };
 
 export function FeaturePage({

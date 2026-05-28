@@ -8,10 +8,10 @@ import { createMastodonApi } from "@/lib/mastodon-api";
 import type { MastodonInstance } from "@/types/mastodon";
 
 const readinessItems = [
-  { label: "OAuth", value: "PKCE browser flow", icon: ShieldCheck, variant: "success" as const },
-  { label: "Account", value: "verify_credentials wired", icon: CircleCheck, variant: "success" as const },
-  { label: "Timelines", value: "Home and public API ready", icon: Activity, variant: "secondary" as const },
-  { label: "Delivery", value: "Awaiting queue API", icon: Clock, variant: "warning" as const },
+  { label: "Sign-in", value: "Ready", icon: ShieldCheck, variant: "success" as const },
+  { label: "Account", value: "Connected", icon: CircleCheck, variant: "success" as const },
+  { label: "Posts", value: "Publishing enabled", icon: Activity, variant: "secondary" as const },
+  { label: "Delivery", value: "Coming soon", icon: Clock, variant: "warning" as const },
 ];
 
 export function OverviewPage() {
@@ -49,7 +49,7 @@ export function OverviewPage() {
     <FeaturePage
       eyebrow="Instance console"
       title="Your Gargoyle surface"
-      description="A small-instance control room for publishing, authorization, and federation health. The UI shows real API state where endpoints exist, and stays honest where backend support is pending."
+      description="A small-instance control room for publishing, account access, and federation health. Start with the essentials, then dig into operational details when something needs attention."
       status="ready"
       primaryAction="Write a post"
     >
@@ -61,7 +61,7 @@ export function OverviewPage() {
               <div className="flex items-center justify-between gap-3">
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">{item.value}</p>
-                  <Badge variant={item.variant}>Tracked</Badge>
+                  <Badge variant={item.variant}>{item.variant === "warning" ? "Later" : "Healthy"}</Badge>
                 </div>
                 <span className="rounded-md bg-secondary p-2 text-secondary-foreground">
                   <Icon className="size-4" aria-hidden="true" />
@@ -72,7 +72,7 @@ export function OverviewPage() {
         })}
       </div>
 
-      <Panel title="Instance" description="Loaded from GET /api/v1/instance.">
+      <Panel title="Instance" description="Public details for this Gargoyle home.">
         {error ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
             {error}
@@ -85,7 +85,7 @@ export function OverviewPage() {
             <FieldRow label="Description" value={instance.short_description ?? instance.description ?? "No description published."} />
           </dl>
         ) : (
-          <EmptyState title="Loading instance" description="Fetching Gargoyle instance metadata." />
+          <EmptyState title="Loading instance" description="Fetching the latest details for this Gargoyle home." />
         )}
       </Panel>
     </FeaturePage>

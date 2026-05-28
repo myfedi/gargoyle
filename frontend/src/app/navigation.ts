@@ -56,13 +56,13 @@ export const navItems: NavItem[] = [
   {
     href: "#/compatibility",
     label: "Compatibility",
-    description: "Mastodon API and federation checks",
+    description: "Connection and federation health",
     icon: RadioTower,
   },
   {
     href: "#/settings",
     label: "Settings",
-    description: "Instance, OAuth, and account settings",
+    description: "Instance and account preferences",
     icon: Settings,
   },
 ];

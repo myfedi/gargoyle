@@ -5,13 +5,13 @@ export function DeliveryPage() {
     <FeaturePage
       eyebrow="Operations"
       title="Delivery"
-      description="Delivery attempts, retries, and remote inbox failures should be visible once Gargoyle has a persistent queue API."
+      description="A calm place to see whether outgoing activity reached other servers or needs attention."
       status="planned"
     >
-      <Panel title="Queue" description="Designed for a future deliveries endpoint with attempts, next retry time, and last error.">
+      <Panel title="Delivery health" description="Retries, failures, and successful deliveries will be shown here when available.">
         <EmptyState
-          title="Delivery queue not exposed yet"
-          description="Keep this page operational and boring: failed inbox, attempts, next retry, last error, and delivered time."
+          title="No delivery issues"
+          description="There is nothing to review right now. When delivery tracking is ready, failed sends and retry details will appear here."
         />
       </Panel>
     </FeaturePage>

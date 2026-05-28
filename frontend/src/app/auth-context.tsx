@@ -46,14 +46,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!validateOAuthState(state)) {
         clearOAuthTransaction();
-        setError("OAuth state did not match. Start authorization again.");
+        setError("Sign-in could not be verified. Start again.");
         setStatus("unauthenticated");
         return;
       }
 
       const config = getOAuthConfig();
       if (!config) {
-        setError("OAuth client is not configured.");
+        setError("Sign-in is not configured.");
         setStatus("unauthenticated");
         return;
       }
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         clearOAuthTransaction();
-        setError(caughtError instanceof Error ? caughtError.message : "OAuth authorization failed.");
+        setError(caughtError instanceof Error ? caughtError.message : "Sign-in failed.");
         setStatus("unauthenticated");
       }
     }
@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback(async () => {
     const config = getOAuthConfig();
     if (!config) {
-      setError("Set VITE_GARGOYLE_OAUTH_CLIENT_ID before signing in.");
+      setError("Sign-in is not configured yet.");
       return;
     }
 

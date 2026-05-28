@@ -78,11 +78,11 @@ export function PostsPage() {
     <FeaturePage
       eyebrow="Publishing"
       title="Posts"
-      description="Write local notes through Gargoyle's Mastodon-compatible API. Remote content is rendered as plain text until a sanitizer is in place."
+      description="Write from your instance and keep an eye on recent local activity. Gargoyle keeps the protocol machinery out of the way while you post."
       status="ready"
     >
       <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_1fr]">
-        <Panel title="New post" description="Public posting is wired to POST /api/v1/statuses.">
+        <Panel title="New post" description="Share a public note from this Gargoyle account.">
           <form className="space-y-4" onSubmit={(event) => void submitPost(event)}>
             <Textarea
               value={statusText}
@@ -102,12 +102,12 @@ export function PostsPage() {
           </form>
         </Panel>
 
-        <Panel title="Session" description="If token validation fails, sign out and authorize again.">
+        <Panel title="Account" description="Sign out when you are done managing this instance.">
           <Button variant="outline" onClick={signOut}>Sign out</Button>
         </Panel>
       </div>
 
-      <Panel title="Home timeline" description="Loaded from GET /api/v1/timelines/home.">
+      <Panel title="Recent posts" description="The latest activity visible to this account.">
         {error ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
             {error}
@@ -119,7 +119,7 @@ export function PostsPage() {
             ))}
           </div>
         ) : statuses.length === 0 ? (
-          <EmptyState title="No posts yet" description="Publish the first local note or wait for home timeline data to arrive." />
+          <EmptyState title="No posts yet" description="Publish the first note from this instance." />
         ) : (
           <div className="divide-y divide-border">
             {statuses.map((status) => (

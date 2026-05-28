@@ -5,13 +5,13 @@ export function InboxPage() {
     <FeaturePage
       eyebrow="Federation"
       title="Inbox"
-      description="Inbound ActivityPub events should be summarized for humans, with raw payload inspection kept behind an explicit detail view."
+      description="Incoming federation activity, summarized for people instead of protocol spelunking."
       status="needs-api"
     >
-      <Panel title="Inbound activity" description="This needs a Gargoyle-specific authenticated inbox activity endpoint.">
+      <Panel title="Incoming activity" description="Follows, mentions, updates, and other arrivals will be collected here.">
         <EmptyState
-          title="No inbox API connected"
-          description="When available, this screen should show Follow, Create, Delete, Update, Accept, and Reject activity summaries."
+          title="No incoming activity yet"
+          description="When other servers interact with this instance, this page will help you understand what arrived and whether it needs attention."
         />
       </Panel>
     </FeaturePage>

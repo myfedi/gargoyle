@@ -3,15 +3,15 @@ import { EmptyState, FeaturePage, Panel } from "@/features/shared";
 export function FollowsPage() {
   return (
     <FeaturePage
-      eyebrow="Social graph"
+      eyebrow="People"
       title="Follows"
-      description="Followers and following belong here once Gargoyle exposes the corresponding Mastodon-compatible account relationship endpoints."
+      description="See who is connected to this instance and manage relationships from one quiet, readable place."
       status="needs-api"
     >
-      <Panel title="People" description="No frontend guesses here. This screen is intentionally empty until real follow endpoints exist.">
+      <Panel title="People" description="Follower and following management will appear here soon.">
         <EmptyState
-          title="Follow APIs are not wired yet"
-          description="Expected next endpoints are followers, following, account search or lookup, follow, and unfollow."
+          title="No follow list yet"
+          description="Once this area is ready, you will be able to review followers, see who you follow, and manage relationships."
         />
       </Panel>
     </FeaturePage>

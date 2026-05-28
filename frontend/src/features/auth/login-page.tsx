@@ -24,16 +24,16 @@ export function LoginPage() {
         </div>
 
         <p className="text-sm leading-6 text-muted-foreground">
-          Sign in with Gargoyle OAuth before viewing posts, follows, delivery state, or federation activity.
+          Sign in to manage posts, follows, delivery, and federation activity for this Gargoyle instance.
         </p>
 
         <div className="mt-6 rounded-lg border border-border bg-background p-4">
           <div className="flex gap-3">
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
             <div className="space-y-1">
-              <p className="text-sm font-medium">Authorization Code with PKCE</p>
+              <p className="text-sm font-medium">Secure instance access</p>
               <p className="text-sm leading-6 text-muted-foreground">
-                The browser uses a public client ID and never receives a client secret.
+                You will be sent to Gargoyle to approve this console, then brought back here.
               </p>
             </div>
           </div>
@@ -47,7 +47,7 @@ export function LoginPage() {
 
         {!oauthConfig ? (
           <p className="mt-4 rounded-md border border-amber-300/70 bg-amber-100/70 px-3 py-2 text-sm text-amber-950" role="alert">
-            Missing <code>VITE_GARGOYLE_OAUTH_CLIENT_ID</code>. Add it to your environment to enable login.
+            This console is not configured for sign-in yet.
           </p>
         ) : null}
 

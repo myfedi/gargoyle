@@ -8,27 +8,26 @@ export function SettingsPage() {
     <FeaturePage
       eyebrow="Instance"
       title="Settings"
-      description="Runtime configuration for the local UI. Secrets are intentionally absent because this browser client uses OAuth PKCE."
+      description="Review how this console connects to your Gargoyle instance."
       status="ready"
     >
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="API" description="Requests are same-origin in development through the Vite proxy unless an absolute base URL is configured.">
+        <Panel title="Connection" description="Where this console sends requests while you use it.">
           <dl>
-            <FieldRow label="API base URL" value={getApiBaseUrl() || "Same origin"} />
+            <FieldRow label="Server" value={getApiBaseUrl() || "Same origin"} />
           </dl>
         </Panel>
 
-        <Panel title="OAuth" description="Public client configuration only. Do not add client_secret to this app.">
+        <Panel title="Authorization" description="The sign-in details this console uses for Gargoyle.">
           {oauth ? (
             <dl>
-              <FieldRow label="Client ID" value={<code className="text-xs">{oauth.clientId}</code>} />
-              <FieldRow label="Authorize URL" value={oauth.authorizationEndpoint} />
-              <FieldRow label="Token URL" value={oauth.tokenEndpoint} />
-              <FieldRow label="Redirect URI" value={oauth.redirectUri} />
-              <FieldRow label="Scopes" value={oauth.scopes.join(" ")} />
+              <FieldRow label="Client" value={<code className="text-xs">{oauth.clientId}</code>} />
+              <FieldRow label="Sign-in page" value={oauth.authorizationEndpoint} />
+              <FieldRow label="Return address" value={oauth.redirectUri} />
+              <FieldRow label="Permissions" value={oauth.scopes.join(" ")} />
             </dl>
           ) : (
-            <p className="text-sm text-muted-foreground">OAuth client ID is not configured.</p>
+            <p className="text-sm text-muted-foreground">Sign-in is not configured yet.</p>
           )}
         </Panel>
       </div>
