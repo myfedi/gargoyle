@@ -105,6 +105,16 @@ web:
 
 Wildcard CORS origins are rejected; only trusted UI origins should be listed.
 
+For local Fediverse compatibility setups that resolve peers such as `gts.test` to loopback/private addresses, opt in explicitly:
+
+```yaml
+activitypub:
+  allow_http_remote: true
+  allow_private_remote: true
+```
+
+Do not enable private remote fetching for untrusted production deployments.
+
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.

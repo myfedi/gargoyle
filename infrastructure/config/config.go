@@ -12,9 +12,10 @@ type SqliteConfig struct {
 }
 
 type ActivityPubConfig struct {
-	BodyLimitBytes    int  `mapstructure:"body_limit_bytes"`
-	AllowHTTPRemote   bool `mapstructure:"allow_http_remote"`
-	DeliveryQueueSize int  `mapstructure:"delivery_queue_size"`
+	BodyLimitBytes     int  `mapstructure:"body_limit_bytes"`
+	AllowHTTPRemote    bool `mapstructure:"allow_http_remote"`
+	AllowPrivateRemote bool `mapstructure:"allow_private_remote"`
+	DeliveryQueueSize  int  `mapstructure:"delivery_queue_size"`
 }
 
 type CORSConfig struct {
@@ -89,6 +90,7 @@ func NewConfig(configFile string) (*Config, error) {
 	viper.SetDefault("debug", false)
 	viper.SetDefault("activitypub.body_limit_bytes", 1<<20)
 	viper.SetDefault("activitypub.allow_http_remote", false)
+	viper.SetDefault("activitypub.allow_private_remote", false)
 	viper.SetDefault("activitypub.delivery_queue_size", 128)
 	viper.SetDefault("web.cors.allowed_methods", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 	viper.SetDefault("web.cors.allowed_headers", []string{"Authorization", "Content-Type"})

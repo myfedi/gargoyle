@@ -107,6 +107,7 @@ func main() {
 		ContentSanitizer:   contentSanitizer,
 		BodyLimitBytes:     config.ActivityPub.BodyLimitBytes,
 		AllowHTTPRemote:    config.ActivityPub.AllowHTTPRemote,
+		AllowPrivateRemote: config.ActivityPub.AllowPrivateRemote,
 		DeliveryQueueSize:  config.ActivityPub.DeliveryQueueSize,
 		RequireSignedInbox: true,
 		DeliveryRetries:    3,
@@ -121,24 +122,29 @@ func main() {
 		PasswordHash: passwordAdapters.NewBCryptPasswordHasher(),
 	})
 	mastodon.NewOAuthHandler(oauthUC).Setup(app)
+	mastodonFlowCfg := apUsecases.ActivityPubFlowConfig{
+		TxProvider:       txProvider,
+		AccountsRepo:     accountsRepo,
+		ActivitiesRepo:   activitiesRepo,
+		FollowsRepo:      followsRepo,
+		NotesRepo:        notesRepo,
+		ContentSanitizer: contentSanitizer,
+	}
 	mastodonAPIUC := mastodonUsecases.NewUseCase(mastodonUsecases.Config{
-		Host:          host,
-		Domain:        config.Domain,
-		ServerVersion: infra.ServerVersion,
-		NotesRepo:     notesRepo,
-		IDGenerator:   adapters.NewULIDGenerator(),
-		CreateOutboxUC: apUsecases.NewCreateOutboxActivityUseCase(apUsecases.ActivityPubFlowConfig{
-			TxProvider:       txProvider,
-			AccountsRepo:     accountsRepo,
-			ActivitiesRepo:   activitiesRepo,
-			FollowsRepo:      followsRepo,
-			NotesRepo:        notesRepo,
-			ContentSanitizer: contentSanitizer,
-		}),
+		Host:              host,
+		Domain:            config.Domain,
+		ServerVersion:     infra.ServerVersion,
+		NotesRepo:         notesRepo,
+		FollowsRepo:       followsRepo,
+		IDGenerator:       adapters.NewULIDGenerator(),
+		RemoteResolver:    mastodon.NewRemoteAccountResolver(nil, config.ActivityPub.AllowHTTPRemote, config.ActivityPub.AllowPrivateRemote),
+		CreateOutboxUC:    apUsecases.NewCreateOutboxActivityUseCase(mastodonFlowCfg),
+		CreateFollowingUC: apUsecases.NewCreateFollowingUseCase(mastodonFlowCfg),
 	})
-	mastodon.NewAPIHandler(mastodon.APIHandlerConfig{OAuth: oauthUC, API: mastodonAPIUC}).Setup(app)
+	mastodon.NewAPIHandler(mastodon.APIHandlerConfig{OAuth: oauthUC, API: mastodonAPIUC, QueueDelivery: userProfileHandler.QueueDelivery}).Setup(app)
 
 	/// run server
+
 	err = app.Listen(fmt.Sprintf(":%d", config.Port))
 	if err != nil {
 		panic(err)

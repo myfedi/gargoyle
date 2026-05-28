@@ -30,9 +30,10 @@ import (
 // I/O: actor fetching, signed delivery, and inbound HTTP-signature checks. The
 // web handler depends on the domain ports, not these concrete methods.
 type httpActivityPubTransport struct {
-	client          *http.Client
-	retries         int
-	allowHTTPRemote bool
+	client             *http.Client
+	retries            int
+	allowHTTPRemote    bool
+	allowPrivateRemote bool
 }
 
 func (t httpActivityPubTransport) httpClient() *http.Client {
@@ -49,13 +50,13 @@ func (t httpActivityPubTransport) httpClient() *http.Client {
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
-			return validateRemoteURL(req.Context(), req.URL.String(), t.allowHTTPRemote)
+			return validateRemoteURL(req.Context(), req.URL.String(), t.allowHTTPRemote, t.allowPrivateRemote)
 		}
 	}
 	return client
 }
 
-func validateRemoteURL(ctx context.Context, raw string, allowHTTP bool) error {
+func validateRemoteURL(ctx context.Context, raw string, allowHTTP bool, allowPrivate bool) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err
@@ -71,7 +72,7 @@ func validateRemoteURL(ctx context.Context, raw string, allowHTTP bool) error {
 		return err
 	}
 	for _, ip := range ips {
-		if !isPublicIP(ip) {
+		if !allowPrivate && !isPublicIP(ip) {
 			return errors.New("remote URL resolves to private address")
 		}
 	}
@@ -98,7 +99,7 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 	if actor == "" {
 		return nil, errors.New("empty actor")
 	}
-	if err := validateRemoteURL(ctx, actor, t.allowHTTPRemote); err != nil {
+	if err := validateRemoteURL(ctx, actor, t.allowHTTPRemote, t.allowPrivateRemote); err != nil {
 		return nil, err
 	}
 	client := t.httpClient()
@@ -130,7 +131,7 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 }
 
 func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbox string, account models.Account) {
-	if err := validateRemoteURL(ctx, inbox, t.allowHTTPRemote); err != nil {
+	if err := validateRemoteURL(ctx, inbox, t.allowHTTPRemote, t.allowPrivateRemote); err != nil {
 		return
 	}
 	client := t.httpClient()

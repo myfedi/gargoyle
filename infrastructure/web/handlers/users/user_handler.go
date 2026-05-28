@@ -43,6 +43,7 @@ type UsersWebHandlerConfig struct {
 	HTTPClient         *http.Client
 	BodyLimitBytes     int
 	AllowHTTPRemote    bool
+	AllowPrivateRemote bool
 	DeliveryQueueSize  int
 	RequireSignedInbox bool
 	AllowUnsignedInbox bool
@@ -103,6 +104,13 @@ func ensureBodySize(body []byte, limit int) *domainerrors.DomainError {
 	return nil
 }
 
+// QueueDelivery enqueues a committed ActivityPub payload for asynchronous
+// delivery. Other HTTP adapters use this to keep network I/O out of use cases
+// while preserving the shared delivery worker and backpressure behavior.
+func (h *UsersWebHandler) QueueDelivery(body []byte, inbox string, account models.Account) *domainerrors.DomainError {
+	return h.queueDelivery(body, inbox, account)
+}
+
 func (h *UsersWebHandler) queueDelivery(body []byte, inbox string, account models.Account) *domainerrors.DomainError {
 	job := deliveryJob{body: append([]byte(nil), body...), inbox: inbox, account: account}
 	select {
@@ -127,7 +135,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		AccountsRepo: cfg.AccountsRepo,
 		Serializer:   cfg.Serializer,
 	})
-	transport := httpActivityPubTransport{client: cfg.HTTPClient, retries: cfg.DeliveryRetries, allowHTTPRemote: cfg.AllowHTTPRemote}
+	transport := httpActivityPubTransport{client: cfg.HTTPClient, retries: cfg.DeliveryRetries, allowHTTPRemote: cfg.AllowHTTPRemote, allowPrivateRemote: cfg.AllowPrivateRemote}
 	if cfg.ActorFetcher == nil {
 		cfg.ActorFetcher = transport
 	}

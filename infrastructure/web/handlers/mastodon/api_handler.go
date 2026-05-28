@@ -14,23 +14,34 @@ import (
 
 // APIHandler exposes the small Mastodon-compatible API surface needed by web
 // and mobile clients after OAuth login.
+type DeliveryQueue func(body []byte, inbox string, account models.Account) *domainerrors.DomainError
+
 type APIHandler struct {
-	oauth oauth.UseCase
-	api   mastodonUC.UseCase
+	oauth         oauth.UseCase
+	api           mastodonUC.UseCase
+	queueDelivery DeliveryQueue
 }
 
 type APIHandlerConfig struct {
-	OAuth oauth.UseCase
-	API   mastodonUC.UseCase
+	OAuth         oauth.UseCase
+	API           mastodonUC.UseCase
+	QueueDelivery DeliveryQueue
 }
 
 func NewAPIHandler(cfg APIHandlerConfig) APIHandler {
-	return APIHandler{oauth: cfg.OAuth, api: cfg.API}
+	if cfg.QueueDelivery == nil {
+		panic("mastodon API handler requires QueueDelivery")
+	}
+	return APIHandler{oauth: cfg.OAuth, api: cfg.API, queueDelivery: cfg.QueueDelivery}
 }
 
 func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/instance", h.instanceV1)
 	app.Get("/api/v2/instance", h.instanceV2)
+	app.Get("/api/v2/search", h.search)
+	app.Get("/api/v1/accounts/search", h.search)
+	app.Get("/api/v1/accounts/relationships", h.relationships)
+	app.Post("/api/v1/accounts/:id/follow", h.followAccount)
 	app.Post("/api/v1/statuses", h.createStatus)
 	app.Get("/api/v1/timelines/home", h.homeTimeline)
 	app.Get("/api/v1/timelines/public", h.publicTimeline)
@@ -87,11 +98,98 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
-	note, derr := h.api.CreateStatus(c.UserContext(), principal.Account, req.Status)
+	res, derr := h.api.CreateStatus(c.UserContext(), principal.Account, req.Status)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(noteToStatus(*note, principal.Account))
+	for _, inbox := range res.FollowerInboxes {
+		if err := h.queueDelivery(res.RawJSON, inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	return c.JSON(noteToStatus(res.Note, principal.Account))
+}
+
+type searchResponse struct {
+	Accounts []accountResponse `json:"accounts"`
+	Statuses []statusResponse  `json:"statuses"`
+	Hashtags []any             `json:"hashtags"`
+}
+
+func (h APIHandler) search(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	accounts, derr := h.api.SearchAccounts(c.UserContext(), principal.Account, c.Query("q"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	resp := searchResponse{Accounts: make([]accountResponse, 0, len(accounts)), Statuses: []statusResponse{}, Hashtags: []any{}}
+	for _, account := range accounts {
+		acct := accountToResponse(&account)
+		if account.Domain != nil && *account.Domain != "" {
+			acct.Acct = account.Username + "@" + *account.Domain
+		}
+		resp.Accounts = append(resp.Accounts, acct)
+	}
+	return c.JSON(resp)
+}
+
+type relationshipResponse struct {
+	ID                  string `json:"id"`
+	Following           bool   `json:"following"`
+	ShowingReblogs      bool   `json:"showing_reblogs"`
+	Notifying           bool   `json:"notifying"`
+	FollowedBy          bool   `json:"followed_by"`
+	Blocking            bool   `json:"blocking"`
+	BlockedBy           bool   `json:"blocked_by"`
+	Muting              bool   `json:"muting"`
+	MutingNotifications bool   `json:"muting_notifications"`
+	Requested           bool   `json:"requested"`
+	DomainBlocking      bool   `json:"domain_blocking"`
+	Endorsed            bool   `json:"endorsed"`
+}
+
+func (h APIHandler) relationships(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	ids := c.Queries()["id[]"]
+	if ids == "" {
+		ids = c.Query("id")
+	}
+	idList := strings.Split(ids, ",")
+	following, derr := h.api.Relationships(c.UserContext(), principal.Account, idList)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	resp := make([]relationshipResponse, 0, len(idList))
+	for _, id := range idList {
+		if id == "" {
+			continue
+		}
+		resp = append(resp, relationshipResponse{ID: id, Following: following[id], ShowingReblogs: true})
+	}
+	return c.JSON(resp)
+}
+
+func (h APIHandler) followAccount(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	res, derr := h.api.FollowAccount(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if res.Inbox != "" {
+		if err := h.queueDelivery(res.RawJSON, res.Inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: false, Requested: true, ShowingReblogs: true})
 }
 
 func (h APIHandler) homeTimeline(c *fiber.Ctx) error {

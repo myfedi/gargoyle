@@ -32,4 +32,6 @@ web:
 activitypub:
   body_limit_bytes: 1048576
   allow_http_remote: false
+  # Only enable for local compatibility setups such as gts.test on 127.0.0.1.
+  allow_private_remote: false
   delivery_queue_size: 128
