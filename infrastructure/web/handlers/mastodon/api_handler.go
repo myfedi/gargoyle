@@ -47,6 +47,9 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Post("/api/v1/notifications/clear", h.clearNotifications)
 	app.Post("/api/v2/media", h.uploadMedia)
 	app.Post("/api/v1/media", h.uploadMedia)
+	app.Get("/api/v1/media/:id", h.getMediaAttachment)
+	app.Put("/api/v1/media/:id", h.updateMedia)
+	app.Delete("/api/v1/media/:id", h.deleteMedia)
 	app.Get("/media/:id", h.media)
 	app.Get("/api/v1/accounts/:id/followers", h.followers)
 	app.Get("/api/v1/accounts/:id/following", h.following)
@@ -134,6 +137,52 @@ func (h APIHandler) uploadMedia(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	return c.JSON(h.mediaResponse(media))
+}
+
+type updateMediaRequest struct {
+	Description string `json:"description" form:"description"`
+}
+
+func (h APIHandler) getMediaAttachment(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	media, derr := h.api.GetMedia(c.UserContext(), c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if media.LocalAccountID != principal.Account.ID {
+		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrNotFound, "media not found"))
+	}
+	return c.JSON(h.mediaResponse(media))
+}
+
+func (h APIHandler) updateMedia(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	var req updateMediaRequest
+	if err := c.BodyParser(&req); err != nil {
+		return err
+	}
+	media, derr := h.api.UpdateMedia(c.UserContext(), principal.Account, c.Params("id"), mastodonUC.UpdateMediaInput{Description: req.Description})
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(h.mediaResponse(media))
+}
+
+func (h APIHandler) deleteMedia(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if derr := h.api.DeleteMedia(c.UserContext(), principal.Account, c.Params("id")); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(map[string]any{})
 }
 
 func (h APIHandler) media(c *fiber.Ctx) error {

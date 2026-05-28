@@ -3,6 +3,7 @@ package repos
 import (
 	"context"
 	"errors"
+	"time"
 
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/domain/models"
@@ -58,6 +59,35 @@ func (r *MediaRepo) GetMediaAttachmentByID(ctx context.Context, tx *dbPorts.Tx, 
 	}
 	model := row.ToModel()
 	return &model, nil
+}
+
+func (r *MediaRepo) UpdateMediaAttachmentDescription(ctx context.Context, tx *dbPorts.Tx, id string, description string) (*models.MediaAttachment, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.NewUpdate().Model((*dbModels.MediaAttachment)(nil)).Set("description = ?", description).Set("updated_at = ?", time.Now().UTC()).Where("id = ?", id).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetMediaAttachmentByID(ctx, tx, id)
+}
+
+func (r *MediaRepo) DeleteMediaAttachment(ctx context.Context, tx *dbPorts.Tx, id string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewDelete().Model((*dbModels.MediaAttachment)(nil)).Where("id = ?", id).Exec(ctx)
+	return err
+}
+
+func (r *MediaRepo) MediaAttachmentIsAttached(ctx context.Context, tx *dbPorts.Tx, id string) (bool, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return false, err
+	}
+	return db.NewSelect().Model((*dbModels.NoteMediaAttachment)(nil)).Where("media_id = ?", id).Exists(ctx)
 }
 
 func (r *MediaRepo) AttachMediaToNote(ctx context.Context, tx *dbPorts.Tx, noteID string, mediaID string) error {
