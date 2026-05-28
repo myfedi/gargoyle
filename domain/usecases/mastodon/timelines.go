@@ -40,7 +40,7 @@ func (u UseCase) PublicTimeline(ctx context.Context, account *models.Account, op
 	case opts.RemoteOnly:
 		notes, err = u.cfg.NotesRepo.ListKnownRemoteTimelineNotesPaged(ctx, nil, account.ID, prefix, opts.Limit, opts.MaxID)
 	default:
-		notes, err = u.cfg.NotesRepo.ListLocalNotesPaged(ctx, nil, account.ID, opts.Limit, opts.MaxID)
+		notes, err = u.cfg.NotesRepo.ListKnownPublicTimelineNotesPaged(ctx, nil, account.ID, opts.Limit, opts.MaxID)
 	}
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)

@@ -160,12 +160,16 @@ func (r *NotesRepo) ListLocalNotesPaged(ctx context.Context, tx *dbPorts.Tx, loc
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, limit: limit, maxID: maxID})
 }
 
+func (r *NotesRepo) ListKnownPublicTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error) {
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, publicOnly: true, limit: limit, maxID: maxID})
+}
+
 func (r *NotesRepo) ListKnownLocalTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
-	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, localActorPrefix: localActorPrefix, localOnly: true, limit: limit, maxID: maxID})
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, localActorPrefix: localActorPrefix, localOnly: true, publicOnly: true, limit: limit, maxID: maxID})
 }
 
 func (r *NotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
-	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, localActorPrefix: localActorPrefix, remoteOnly: true, limit: limit, maxID: maxID})
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, localActorPrefix: localActorPrefix, remoteOnly: true, publicOnly: true, limit: limit, maxID: maxID})
 }
 
 func (r *NotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
@@ -178,6 +182,7 @@ type noteListFilter struct {
 	localActorPrefix string
 	localOnly        bool
 	remoteOnly       bool
+	publicOnly       bool
 	limit            int
 	maxID            string
 }
@@ -223,6 +228,9 @@ func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, filter noteLi
 	}
 	if filter.remoteOnly {
 		query = query.Where("attributed_to NOT LIKE ?", filter.localActorPrefix+"%")
+	}
+	if filter.publicOnly {
+		query = query.Where("visibility = ?", "public")
 	}
 	if filter.maxID != "" {
 		query = query.Where("id < ?", filter.maxID)
