@@ -69,6 +69,25 @@ func (r *JobsRepo) ListDueDeliveryJobs(ctx context.Context, tx *dbPorts.Tx, now 
 	return jobs, nil
 }
 
+func (r *JobsRepo) ListDeliveryJobsByStatus(ctx context.Context, tx *dbPorts.Tx, status models.JobStatus, limit int) ([]models.DeliveryJob, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	var rows []dbModels.DeliveryJob
+	if err := db.NewSelect().Model(&rows).Where("status = ?", string(status)).Order("updated_at DESC").Limit(limit).Scan(ctx); err != nil {
+		return nil, err
+	}
+	jobs := make([]models.DeliveryJob, 0, len(rows))
+	for _, row := range rows {
+		jobs = append(jobs, row.ToModel())
+	}
+	return jobs, nil
+}
+
 func (r *JobsRepo) MarkDeliveryJobDelivered(ctx context.Context, tx *dbPorts.Tx, id string, deliveredAt time.Time) error {
 	db, err := r.resolveDB(tx)
 	if err != nil {
@@ -96,6 +115,11 @@ func (r *JobsRepo) CreateFetchJob(ctx context.Context, tx *dbPorts.Tx, input rep
 	if err != nil {
 		return nil, err
 	}
+	var existing dbModels.FetchJob
+	if err := db.NewSelect().Model(&existing).Where("url = ?", input.URL).Where("kind = ?", input.Kind).Where("account_id = ?", input.AccountID).Where("status = ?", string(models.JobStatusPending)).Limit(1).Scan(ctx); err == nil {
+		model := existing.ToModel()
+		return &model, nil
+	}
 	id, err := dbUtils.NewULID()
 	if err != nil {
 		return nil, err
@@ -119,6 +143,25 @@ func (r *JobsRepo) ListDueFetchJobs(ctx context.Context, tx *dbPorts.Tx, now tim
 		query = query.Limit(limit)
 	}
 	if err := query.Scan(ctx); err != nil {
+		return nil, err
+	}
+	jobs := make([]models.FetchJob, 0, len(rows))
+	for _, row := range rows {
+		jobs = append(jobs, row.ToModel())
+	}
+	return jobs, nil
+}
+
+func (r *JobsRepo) ListFetchJobsByStatus(ctx context.Context, tx *dbPorts.Tx, status models.JobStatus, limit int) ([]models.FetchJob, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	var rows []dbModels.FetchJob
+	if err := db.NewSelect().Model(&rows).Where("status = ?", string(status)).Order("updated_at DESC").Limit(limit).Scan(ctx); err != nil {
 		return nil, err
 	}
 	jobs := make([]models.FetchJob, 0, len(rows))

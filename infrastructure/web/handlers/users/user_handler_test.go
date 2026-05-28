@@ -27,6 +27,9 @@ func (f fakeDeliveryJobsRepo) CreateDeliveryJob(ctx context.Context, tx *db.Tx, 
 func (f fakeDeliveryJobsRepo) ListDueDeliveryJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.DeliveryJob, error) {
 	return nil, nil
 }
+func (f fakeDeliveryJobsRepo) ListDeliveryJobsByStatus(ctx context.Context, tx *db.Tx, status models.JobStatus, limit int) ([]models.DeliveryJob, error) {
+	return nil, nil
+}
 func (f fakeDeliveryJobsRepo) MarkDeliveryJobDelivered(ctx context.Context, tx *db.Tx, id string, deliveredAt time.Time) error {
 	return nil
 }
