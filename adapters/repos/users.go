@@ -71,6 +71,42 @@ func (r UsersRepo) UserWithEmailExists(ctx context.Context, tx *dbPorts.Tx, emai
 		Exists(ctx)
 }
 
+func (r UsersRepo) GetUserByUsername(ctx context.Context, tx *dbPorts.Tx, username string) (*models.User, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
+	var user dbModels.User
+	if err := db.NewSelect().Model(&user).Where("username = ?", username).Scan(ctx); err != nil {
+		return nil, err
+	}
+	model := user.ToModel()
+	return &model, nil
+}
+
+func (r UsersRepo) GetUserByID(ctx context.Context, tx *dbPorts.Tx, id string) (*models.User, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
+	var user dbModels.User
+	if err := db.NewSelect().Model(&user).Where("id = ?", id).Scan(ctx); err != nil {
+		return nil, err
+	}
+	model := user.ToModel()
+	return &model, nil
+}
+
 func (r UsersRepo) CreateUser(ctx context.Context, tx *dbPorts.Tx, input ports.UserCreationInput) (*models.User, error) {
 	db := r.db
 	if tx != nil {

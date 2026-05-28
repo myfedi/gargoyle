@@ -7,10 +7,13 @@ import (
 	"github.com/myfedi/gargoyle/adapters"
 	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
+	passwordAdapters "github.com/myfedi/gargoyle/adapters/password"
 	"github.com/myfedi/gargoyle/adapters/repos"
+	"github.com/myfedi/gargoyle/domain/usecases/oauth"
 	infra "github.com/myfedi/gargoyle/infrastructure"
 	"github.com/myfedi/gargoyle/infrastructure/db"
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers"
+	"github.com/myfedi/gargoyle/infrastructure/web/handlers/mastodon"
 	"github.com/myfedi/gargoyle/infrastructure/web/handlers/users"
 
 	"github.com/gofiber/fiber/v2"
@@ -46,6 +49,7 @@ func main() {
 	activitiesRepo := repos.NewActivitiesRepo(sqlite.Bun)
 	followsRepo := repos.NewFollowsRepo(sqlite.Bun)
 	notesRepo := repos.NewNotesRepo(sqlite.Bun)
+	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
 	txProvider := dbAdapters.NewBunTxProvider(sqlite.Bun)
 
 	// sets up the go-fiber server. The body limit protects ActivityPub endpoints
@@ -96,6 +100,15 @@ func main() {
 		DeliveryRetries:    3,
 	})
 	userProfileHandler.SetupUserProfileHandler(app)
+
+	// set up Mastodon-compatible OAuth/client API foundation.
+	oauthUC := oauth.NewUseCase(oauth.Config{
+		OAuthRepo:    oauthRepo,
+		UsersRepo:    usersRepo,
+		AccountsRepo: accountsRepo,
+		PasswordHash: passwordAdapters.NewBCryptPasswordHasher(),
+	})
+	mastodon.NewOAuthHandler(oauthUC).Setup(app)
 
 	/// run server
 	err = app.Listen(fmt.Sprintf(":%d", config.Port))
