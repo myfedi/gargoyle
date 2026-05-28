@@ -117,13 +117,20 @@ activitypub:
 
 Do not allow private remote fetching for untrusted production hosts.
 
-Implemented Mastodon-compatible client endpoints include OAuth app registration and authorization-code PKCE, account verification/search/follow/unfollow/relationships/followers/following/profile/statuses, status create/detail/delete/context, and home/public timelines with local/remote filters.
+Implemented Mastodon-compatible client endpoints include OAuth app registration and authorization-code PKCE, account verification/search/follow/unfollow/relationships/followers/following/profile/statuses, status create/detail/delete/context, media upload/serving, notifications, favourites, boosts, and home/public timelines with local/remote filters.
+
+Delivery/fetch jobs can be inspected with:
+
+```sh
+go run cmd/cli/admin/main.go jobs --config ./config.yml --type delivery --status failed
+go run cmd/cli/admin/main.go jobs --config ./config.yml --type fetch --status pending
+```
 
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.
--   Visibility, sensitive/spoiler text, media uploads, notifications, favourites, and boosts still need full client API and ActivityPub semantics.
--   Fetch and delivery queues need operational observability and duplicate-job suppression.
+-   Media attachments, favourites, and boosts have Mastodon client API support, but their ActivityPub interoperability still needs broader real-server validation.
+-   Fetch and delivery queues have basic observability and duplicate fetch suppression, but need richer operational tooling.
 -   Some security limitations remain documented in [`LIMITATIONS.md`](LIMITATIONS.md).
 
 For more, see https://github.com/BasixKOR/awesome-activitypub

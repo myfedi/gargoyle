@@ -121,7 +121,7 @@ The current delivery queue is in-memory and not durable.
 - [x] Add worker that processes due jobs.
 - [x] Retry with exponential backoff.
 - [x] Mark permanent failure/dead-letter after max attempts.
-- [ ] Document worker operation.
+- [x] Document worker operation via admin job inspection command.
 
 ## Priority 6: durable fetch queue
 
@@ -133,18 +133,19 @@ Useful for search, actor refresh, missing referenced objects, and remote status 
 - [ ] Queue actor refreshes.
 - [x] Queue missing reply-parent object fetches from inbound/outbound notes.
 - [x] Persist hydrated remote reply parents as local notes.
-- [ ] Add de-duplication for repeated fetch jobs.
+- [x] Add de-duplication for repeated pending fetch jobs.
 
 ## Priority 7: posting/status compatibility
 
 - [x] `GET /api/v1/statuses/:id`.
 - [x] `DELETE /api/v1/statuses/:id`.
 - [x] `GET /api/v1/statuses/:id/context`.
-- [ ] Persist and federate `visibility`.
-- [ ] Persist and render `sensitive`.
-- [ ] Persist and render `spoiler_text`.
+- [x] Persist and render `visibility`.
+- [x] Persist and render `sensitive`.
+- [x] Persist and render `spoiler_text`.
 - [x] Support `in_reply_to_id`.
-- [ ] Media upload.
+- [x] Media upload and media attachment responses.
+- [ ] Fully federate media attachments in ActivityPub payloads.
 
 ## Priority 8: OAuth/session polish
 
