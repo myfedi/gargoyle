@@ -45,6 +45,8 @@ func (r *NotesRepo) CreateNote(ctx context.Context, tx *dbPorts.Tx, input repos.
 		Content:        input.Content,
 		PlainText:      input.PlainText,
 		AttributedTo:   input.AttributedTo,
+		InReplyToID:    input.InReplyToID,
+		InReplyToURI:   input.InReplyToURI,
 		PublishedAt:    input.PublishedAt,
 	}
 	_, err = db.NewInsert().Model(note).Exec(ctx)
@@ -168,6 +170,27 @@ type noteListFilter struct {
 	remoteOnly       bool
 	limit            int
 	maxID            string
+}
+
+func (r *NotesRepo) ListReplies(ctx context.Context, tx *dbPorts.Tx, localAccountID string, parentID string) ([]models.Note, error) {
+	db := r.db
+	if tx != nil {
+		adapted, ok := (*tx).(dbAdapters.BunTx)
+		if !ok {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+		db = adapted.Unwrap()
+	}
+	var notes []dbModels.Note
+	err := db.NewSelect().Model(&notes).Where("local_account_id = ?", localAccountID).Where("in_reply_to_id = ?", parentID).Order("published_at ASC", "id ASC").Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]models.Note, 0, len(notes))
+	for _, note := range notes {
+		res = append(res, note.ToModel())
+	}
+	return res, nil
 }
 
 func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, filter noteListFilter) ([]models.Note, error) {

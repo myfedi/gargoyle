@@ -13,11 +13,11 @@ import (
 // CreateStatus creates a local Note through the ActivityPub outbox workflow so
 // Mastodon API posting and federation posting share the same normalization,
 // persistence, and fan-out semantics.
-func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, content string) (*CreateStatusResult, *domainerrors.DomainError) {
+func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, input CreateStatusInput) (*CreateStatusResult, *domainerrors.DomainError) {
 	if derr := requireAccount(account); derr != nil {
 		return nil, derr
 	}
-	if strings.TrimSpace(content) == "" {
+	if strings.TrimSpace(input.Content) == "" {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "status is required")
 	}
 	activityID, err := u.cfg.IDGenerator.NewID()
@@ -28,7 +28,15 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, cont
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	raw, err := json.Marshal(map[string]any{"type": "Note", "content": content})
+	noteDoc := map[string]any{"type": "Note", "content": input.Content}
+	if input.InReplyToID != "" {
+		parent, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, input.InReplyToID)
+		if err != nil || parent.LocalAccountID != account.ID {
+			return nil, domainerrors.New(domainerrors.ErrBadRequest, "in_reply_to_id is invalid")
+		}
+		noteDoc["inReplyTo"] = parent.URI
+	}
+	raw, err := json.Marshal(noteDoc)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}

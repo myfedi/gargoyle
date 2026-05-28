@@ -10,6 +10,8 @@ type Note struct {
 	Content        string
 	PlainText      string
 	AttributedTo   string
+	InReplyToID    *string
+	InReplyToURI   *string
 	PublishedAt    time.Time
 	CreatedAt      time.Time
 }

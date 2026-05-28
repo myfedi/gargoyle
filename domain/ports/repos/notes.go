@@ -15,6 +15,8 @@ type CreateNoteInput struct {
 	Content        string
 	PlainText      string
 	AttributedTo   string
+	InReplyToID    *string
+	InReplyToURI   *string
 	PublishedAt    time.Time
 }
 
@@ -31,4 +33,5 @@ type NotesRepository interface {
 	ListKnownLocalTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error)
 	ListKnownRemoteTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error)
 	ListAttributedNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error)
+	ListReplies(ctx context.Context, tx *db.Tx, localAccountID string, parentID string) ([]models.Note, error)
 }

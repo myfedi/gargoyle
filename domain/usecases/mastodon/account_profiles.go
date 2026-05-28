@@ -49,7 +49,7 @@ func (u UseCase) AccountStatuses(ctx context.Context, localAccount *models.Accou
 	}
 	items := make([]TimelineItem, 0, len(notes))
 	for _, note := range notes {
-		items = append(items, TimelineItem{Note: note, Account: *account})
+		items = append(items, TimelineItem{Note: note, Account: *account, InReplyToAccountID: u.replyAccountID(ctx, localAccount, note)})
 	}
 	return items, nil
 }

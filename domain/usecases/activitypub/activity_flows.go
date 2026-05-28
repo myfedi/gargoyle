@@ -120,6 +120,17 @@ func requireContentSanitizer(cfg ActivityPubFlowConfig) {
 }
 
 // localAccount resolves a local ActivityPub account and maps repository errors to domain errors.
+func replyIDs(ctx context.Context, repo repos.NotesRepository, tx *db.Tx, note ExtractedNote) (*string, *string) {
+	if repo == nil || note.InReplyToURI == nil || *note.InReplyToURI == "" {
+		return nil, note.InReplyToURI
+	}
+	parent, err := repo.GetNoteByURI(ctx, tx, *note.InReplyToURI)
+	if err != nil {
+		return nil, note.InReplyToURI
+	}
+	return &parent.ID, note.InReplyToURI
+}
+
 func localAccount(ctx context.Context, repo repos.AccountsRepo, username string) (*models.Account, *domainerrors.DomainError) {
 	if username == "" {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "missing username")

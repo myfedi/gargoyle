@@ -55,9 +55,25 @@ func (u UseCase) timelineItems(ctx context.Context, localAccount *models.Account
 		if derr != nil {
 			return nil, derr
 		}
-		items = append(items, TimelineItem{Note: note, Account: *author})
+		replyAccountID := u.replyAccountID(ctx, localAccount, note)
+		items = append(items, TimelineItem{Note: note, Account: *author, InReplyToAccountID: replyAccountID})
 	}
 	return items, nil
+}
+
+func (u UseCase) replyAccountID(ctx context.Context, localAccount *models.Account, note models.Note) *string {
+	if note.InReplyToID == nil || *note.InReplyToID == "" {
+		return nil
+	}
+	parent, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, *note.InReplyToID)
+	if err != nil {
+		return nil
+	}
+	author, derr := u.noteAuthor(ctx, localAccount, *parent)
+	if derr != nil {
+		return nil
+	}
+	return &author.ID
 }
 
 func normalizeTimelineOptions(opts TimelineOptions) TimelineOptions {

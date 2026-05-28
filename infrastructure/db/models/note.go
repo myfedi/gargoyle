@@ -14,6 +14,8 @@ type Note struct {
 	Content        string    `bun:",nullzero,notnull"`
 	PlainText      string    `bun:",nullzero"`
 	AttributedTo   string    `bun:",nullzero,notnull"`
+	InReplyToID    *string   `bun:"type:CHAR(26),nullzero"`
+	InReplyToURI   *string   `bun:",nullzero"`
 	PublishedAt    time.Time `bun:"type:timestamptz,nullzero,notnull"`
 	CreatedAt      time.Time `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 }
@@ -27,6 +29,8 @@ func (n Note) ToModel() domainmodels.Note {
 		Content:        n.Content,
 		PlainText:      n.PlainText,
 		AttributedTo:   n.AttributedTo,
+		InReplyToID:    n.InReplyToID,
+		InReplyToURI:   n.InReplyToURI,
 		PublishedAt:    n.PublishedAt,
 		CreatedAt:      n.CreatedAt,
 	}

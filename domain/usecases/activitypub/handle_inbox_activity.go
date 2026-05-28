@@ -89,7 +89,8 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 		case "Create":
 			if u.cfg.NotesRepo != nil {
 				if note, ok := ExtractNote(input.RawJSON); ok {
-					_, err := u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: stored.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), AttributedTo: note.AttributedTo, PublishedAt: note.PublishedAt})
+					replyID, replyURI := replyIDs(ctx, u.cfg.NotesRepo, &tx, note)
+					_, err := u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: stored.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
 					return err
 				}
 			}

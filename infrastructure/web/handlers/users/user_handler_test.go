@@ -98,7 +98,7 @@ func (f *fakeNotesRepo) GetLocalPostsCount(ctx context.Context) (int, error) {
 	return len(f.notes), nil
 }
 func (f *fakeNotesRepo) CreateNote(ctx context.Context, tx *db.Tx, input repos.CreateNoteInput) (*models.Note, error) {
-	note := models.Note{ID: "note-1", LocalAccountID: input.LocalAccountID, ActivityID: input.ActivityID, URI: input.URI, Content: input.Content, PlainText: input.PlainText, AttributedTo: input.AttributedTo, PublishedAt: input.PublishedAt}
+	note := models.Note{ID: "note-1", LocalAccountID: input.LocalAccountID, ActivityID: input.ActivityID, URI: input.URI, Content: input.Content, PlainText: input.PlainText, AttributedTo: input.AttributedTo, InReplyToID: input.InReplyToID, InReplyToURI: input.InReplyToURI, PublishedAt: input.PublishedAt}
 	f.notes = append(f.notes, note)
 	return &note, nil
 }
@@ -160,6 +160,9 @@ func (f *fakeNotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, t
 	return f.notes, nil
 }
 func (f *fakeNotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
+	return f.notes, nil
+}
+func (f *fakeNotesRepo) ListReplies(ctx context.Context, tx *db.Tx, localAccountID string, parentID string) ([]models.Note, error) {
 	return f.notes, nil
 }
 

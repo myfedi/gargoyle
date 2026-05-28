@@ -93,8 +93,11 @@ func (h APIHandler) instanceV2(c *fiber.Ctx) error {
 }
 
 type createStatusRequest struct {
-	Status     string `json:"status" form:"status"`
-	Visibility string `json:"visibility" form:"visibility"`
+	Status      string `json:"status" form:"status"`
+	Visibility  string `json:"visibility" form:"visibility"`
+	InReplyToID string `json:"in_reply_to_id" form:"in_reply_to_id"`
+	Sensitive   bool   `json:"sensitive" form:"sensitive"`
+	SpoilerText string `json:"spoiler_text" form:"spoiler_text"`
 }
 
 func (h APIHandler) createStatus(c *fiber.Ctx) error {
@@ -106,7 +109,7 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
-	res, derr := h.api.CreateStatus(c.UserContext(), principal.Account, req.Status)
+	res, derr := h.api.CreateStatus(c.UserContext(), principal.Account, mastodonUC.CreateStatusInput{Content: req.Status, Visibility: req.Visibility, InReplyToID: req.InReplyToID, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText})
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -287,7 +290,8 @@ func (h APIHandler) status(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(noteToStatus(item.Note, &item.Account))
+	statuses := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item})
+	return c.JSON(statuses[0])
 }
 
 func (h APIHandler) deleteStatus(c *fiber.Ctx) error {
@@ -355,27 +359,29 @@ func (h APIHandler) authenticate(c *fiber.Ctx) (*oauth.AuthenticatedUser, *domai
 }
 
 type statusResponse struct {
-	ID               string          `json:"id"`
-	URI              string          `json:"uri"`
-	URL              string          `json:"url"`
-	CreatedAt        string          `json:"created_at"`
-	Account          accountResponse `json:"account"`
-	Content          string          `json:"content"`
-	Visibility       string          `json:"visibility"`
-	Sensitive        bool            `json:"sensitive"`
-	SpoilerText      string          `json:"spoiler_text"`
-	MediaAttachments []any           `json:"media_attachments"`
-	Mentions         []any           `json:"mentions"`
-	Tags             []any           `json:"tags"`
-	Emojis           []any           `json:"emojis"`
-	RepliesCount     int             `json:"replies_count"`
-	ReblogsCount     int             `json:"reblogs_count"`
-	FavouritesCount  int             `json:"favourites_count"`
-	Favourited       bool            `json:"favourited"`
-	Reblogged        bool            `json:"reblogged"`
-	Muted            bool            `json:"muted"`
-	Bookmarked       bool            `json:"bookmarked"`
-	Pinned           bool            `json:"pinned"`
+	ID                 string          `json:"id"`
+	URI                string          `json:"uri"`
+	URL                string          `json:"url"`
+	CreatedAt          string          `json:"created_at"`
+	Account            accountResponse `json:"account"`
+	Content            string          `json:"content"`
+	Visibility         string          `json:"visibility"`
+	InReplyToID        *string         `json:"in_reply_to_id"`
+	InReplyToAccountID *string         `json:"in_reply_to_account_id"`
+	Sensitive          bool            `json:"sensitive"`
+	SpoilerText        string          `json:"spoiler_text"`
+	MediaAttachments   []any           `json:"media_attachments"`
+	Mentions           []any           `json:"mentions"`
+	Tags               []any           `json:"tags"`
+	Emojis             []any           `json:"emojis"`
+	RepliesCount       int             `json:"replies_count"`
+	ReblogsCount       int             `json:"reblogs_count"`
+	FavouritesCount    int             `json:"favourites_count"`
+	Favourited         bool            `json:"favourited"`
+	Reblogged          bool            `json:"reblogged"`
+	Muted              bool            `json:"muted"`
+	Bookmarked         bool            `json:"bookmarked"`
+	Pinned             bool            `json:"pinned"`
 }
 
 func timelineOptions(c *fiber.Ctx) mastodonUC.TimelineOptions {
@@ -385,7 +391,9 @@ func timelineOptions(c *fiber.Ctx) mastodonUC.TimelineOptions {
 func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
 	statuses := make([]statusResponse, 0, len(items))
 	for _, item := range items {
-		statuses = append(statuses, noteToStatus(item.Note, &item.Account))
+		status := noteToStatus(item.Note, &item.Account)
+		status.InReplyToAccountID = item.InReplyToAccountID
+		statuses = append(statuses, status)
 	}
 	return statuses
 }
@@ -398,5 +406,5 @@ func noteToStatus(note models.Note, account *models.Account) statusResponse {
 	if created.IsZero() {
 		created = time.Now().UTC()
 	}
-	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: "public", Sensitive: false, MediaAttachments: []any{}, Mentions: []any{}, Tags: []any{}, Emojis: []any{}}
+	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: "public", InReplyToID: note.InReplyToID, Sensitive: false, MediaAttachments: []any{}, Mentions: []any{}, Tags: []any{}, Emojis: []any{}}
 }

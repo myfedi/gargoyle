@@ -47,6 +47,14 @@ type InstanceInfo struct {
 	ServerVersion string
 }
 
+type CreateStatusInput struct {
+	Content     string
+	InReplyToID string
+	Visibility  string
+	Sensitive   bool
+	SpoilerText string
+}
+
 type CreateStatusResult struct {
 	Note            models.Note
 	Account         models.Account
@@ -55,8 +63,9 @@ type CreateStatusResult struct {
 }
 
 type TimelineItem struct {
-	Note    models.Note
-	Account models.Account
+	Note               models.Note
+	Account            models.Account
+	InReplyToAccountID *string
 }
 
 type TimelineOptions struct {

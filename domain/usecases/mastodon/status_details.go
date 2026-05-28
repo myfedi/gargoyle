@@ -31,7 +31,7 @@ func (u UseCase) GetStatus(ctx context.Context, localAccount *models.Account, st
 	if derr != nil {
 		return nil, derr
 	}
-	return &TimelineItem{Note: *note, Account: *author}, nil
+	return &TimelineItem{Note: *note, Account: *author, InReplyToAccountID: u.replyAccountID(ctx, localAccount, *note)}, nil
 }
 
 func (u UseCase) DeleteStatus(ctx context.Context, localAccount *models.Account, statusID string) (*DeleteStatusResult, *domainerrors.DomainError) {
@@ -67,8 +67,41 @@ func (u UseCase) DeleteStatus(ctx context.Context, localAccount *models.Account,
 }
 
 func (u UseCase) StatusContext(ctx context.Context, localAccount *models.Account, statusID string) (*StatusContext, *domainerrors.DomainError) {
-	if _, derr := u.GetStatus(ctx, localAccount, statusID); derr != nil {
+	item, derr := u.GetStatus(ctx, localAccount, statusID)
+	if derr != nil {
 		return nil, derr
 	}
-	return &StatusContext{Ancestors: []TimelineItem{}, Descendants: []TimelineItem{}}, nil
+	ancestors, derr := u.statusAncestors(ctx, localAccount, item.Note)
+	if derr != nil {
+		return nil, derr
+	}
+	replies, err := u.cfg.NotesRepo.ListReplies(ctx, nil, localAccount.ID, statusID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	descendants, derr := u.timelineItems(ctx, localAccount, replies)
+	if derr != nil {
+		return nil, derr
+	}
+	return &StatusContext{Ancestors: ancestors, Descendants: descendants}, nil
+}
+
+func (u UseCase) statusAncestors(ctx context.Context, localAccount *models.Account, note models.Note) ([]TimelineItem, *domainerrors.DomainError) {
+	if note.InReplyToID == nil || *note.InReplyToID == "" {
+		return []TimelineItem{}, nil
+	}
+	parent, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, *note.InReplyToID)
+	if err != nil {
+		return []TimelineItem{}, nil
+	}
+	items, derr := u.statusAncestors(ctx, localAccount, *parent)
+	if derr != nil {
+		return nil, derr
+	}
+	author, derr := u.noteAuthor(ctx, localAccount, *parent)
+	if derr != nil {
+		return nil, derr
+	}
+	items = append(items, TimelineItem{Note: *parent, Account: *author, InReplyToAccountID: u.replyAccountID(ctx, localAccount, *parent)})
+	return items, nil
 }

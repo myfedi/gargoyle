@@ -140,6 +140,7 @@ type ExtractedNote struct {
 	URI          string
 	Content      string
 	AttributedTo string
+	InReplyToURI *string
 	PublishedAt  time.Time
 }
 
@@ -153,11 +154,12 @@ func ExtractNote(raw []byte) (ExtractedNote, bool) {
 		return ExtractedNote{}, false
 	}
 	var note struct {
-		ID           string `json:"id"`
-		Type         string `json:"type"`
-		Content      string `json:"content"`
-		AttributedTo string `json:"attributedTo"`
-		Published    string `json:"published"`
+		ID           string  `json:"id"`
+		Type         string  `json:"type"`
+		Content      string  `json:"content"`
+		AttributedTo string  `json:"attributedTo"`
+		InReplyTo    *string `json:"inReplyTo"`
+		Published    string  `json:"published"`
 	}
 	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
 		return ExtractedNote{}, false
@@ -166,7 +168,7 @@ func ExtractNote(raw []byte) (ExtractedNote, bool) {
 	if err != nil {
 		publishedAt = time.Now().UTC()
 	}
-	return ExtractedNote{URI: note.ID, Content: note.Content, AttributedTo: note.AttributedTo, PublishedAt: publishedAt}, true
+	return ExtractedNote{URI: note.ID, Content: note.Content, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, PublishedAt: publishedAt}, true
 }
 
 // ExtractNoteObject returns a Note from an activity object, used for Updates.
@@ -178,11 +180,12 @@ func ExtractNoteObject(raw []byte) (ExtractedNote, bool) {
 		return ExtractedNote{}, false
 	}
 	var note struct {
-		ID           string `json:"id"`
-		Type         string `json:"type"`
-		Content      string `json:"content"`
-		AttributedTo string `json:"attributedTo"`
-		Published    string `json:"published"`
+		ID           string  `json:"id"`
+		Type         string  `json:"type"`
+		Content      string  `json:"content"`
+		AttributedTo string  `json:"attributedTo"`
+		InReplyTo    *string `json:"inReplyTo"`
+		Published    string  `json:"published"`
 	}
 	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
 		return ExtractedNote{}, false
@@ -191,7 +194,7 @@ func ExtractNoteObject(raw []byte) (ExtractedNote, bool) {
 	if err != nil {
 		publishedAt = time.Now().UTC()
 	}
-	return ExtractedNote{URI: note.ID, Content: note.Content, AttributedTo: note.AttributedTo, PublishedAt: publishedAt}, true
+	return ExtractedNote{URI: note.ID, Content: note.Content, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, PublishedAt: publishedAt}, true
 }
 
 // ExtractedFollowObject is the normalized Follow object embedded in Accept/Reject activities.
