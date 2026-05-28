@@ -89,7 +89,7 @@ export function FollowsPage() {
     setError(null);
 
     try {
-      const search = await api.searchAccounts(query.trim());
+      const search = await api.searchAccounts(normalizeAccountQuery(query));
       const ids = search.accounts.map((account) => account.id);
       const relationships = ids.length > 0 ? await api.relationships(ids) : [];
       const relationshipsById = new Map(relationships.map((relationship) => [relationship.id, relationship]));
@@ -110,8 +110,12 @@ export function FollowsPage() {
     setError(null);
 
     try {
-      const relationship = await api.followAccount(account.id);
-      updateRelationship(account.id, relationship);
+      await api.followAccount(account.id);
+      const [relationship] = await api.relationships([account.id]);
+      if (relationship) {
+        updateRelationship(account.id, relationship);
+        addOrUpdateFollowing(account, relationship);
+      }
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not follow account.");
     } finally {
@@ -128,14 +132,27 @@ export function FollowsPage() {
     setError(null);
 
     try {
-      const relationship = await api.unfollowAccount(account.id);
-      updateRelationship(account.id, relationship);
+      await api.unfollowAccount(account.id);
+      const [relationship] = await api.relationships([account.id]);
+      if (relationship) {
+        updateRelationship(account.id, relationship);
+      }
       setFollowing((current) => current.filter((result) => result.account.id !== account.id));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not unfollow account.");
     } finally {
       setBusyAccountId(null);
     }
+  }
+
+  function addOrUpdateFollowing(account: MastodonAccount, relationship: MastodonRelationship) {
+    setFollowing((current) => {
+      const nextResult = { account, relationship };
+      if (current.some((result) => result.account.id === account.id)) {
+        return current.map((result) => (result.account.id === account.id ? nextResult : result));
+      }
+      return [nextResult, ...current];
+    });
   }
 
   function updateRelationship(accountIdToUpdate: string, relationship: MastodonRelationship) {
@@ -265,6 +282,19 @@ function AccountList({ accounts, emptyTitle, emptyDescription, busyAccountId, on
       })}
     </div>
   );
+}
+
+function normalizeAccountQuery(value: string) {
+  const query = value.trim();
+  if (query.startsWith("http://") || query.startsWith("https://") || query.startsWith("@")) {
+    return query;
+  }
+
+  if (/^[^@\s]+@[^@\s]+$/.test(query)) {
+    return `@${query}`;
+  }
+
+  return query;
 }
 
 function LoadingRows() {

@@ -29,7 +29,7 @@ export function createMastodonApi(accessToken: string) {
       });
     },
     searchAccounts(query: string) {
-      const params = new URLSearchParams({ q: query });
+      const params = new URLSearchParams({ q: query, type: "accounts", resolve: "true" });
       return client.request<MastodonSearchResults>(`/api/v2/search?${params.toString()}`);
     },
     relationships(ids: string[]) {
