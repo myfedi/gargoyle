@@ -176,6 +176,20 @@ func (r *FollowsRepo) RejectFollowingByActor(ctx context.Context, tx *dbPorts.Tx
 	return err
 }
 
+func (r *FollowsRepo) DeleteFollowingByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID string, remoteActor string) error {
+	db, err := unwrapDB(r.db, tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewDelete().
+		Model((*dbModels.Follow)(nil)).
+		Where("local_account_id = ?", localAccountID).
+		Where("remote_actor = ?", remoteActor).
+		Where("direction = ?", "following").
+		Exec(ctx)
+	return err
+}
+
 func (r *FollowsRepo) DeleteFollowByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID string, remoteActor string) error {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {

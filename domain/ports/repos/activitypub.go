@@ -41,5 +41,6 @@ type FollowsRepository interface {
 	CreateFollowing(ctx context.Context, tx *db.Tx, input CreateFollowInput) (*models.Follow, error)
 	AcceptFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error
 	RejectFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error
+	DeleteFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error
 	ListFollowing(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error)
 }

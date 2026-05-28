@@ -41,7 +41,10 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v2/search", h.search)
 	app.Get("/api/v1/accounts/search", h.search)
 	app.Get("/api/v1/accounts/relationships", h.relationships)
+	app.Get("/api/v1/accounts/:id/followers", h.followers)
+	app.Get("/api/v1/accounts/:id/following", h.following)
 	app.Post("/api/v1/accounts/:id/follow", h.followAccount)
+	app.Post("/api/v1/accounts/:id/unfollow", h.unfollowAccount)
 	app.Post("/api/v1/statuses", h.createStatus)
 	app.Get("/api/v1/timelines/home", h.homeTimeline)
 	app.Get("/api/v1/timelines/public", h.publicTimeline)
@@ -175,6 +178,42 @@ func (h APIHandler) relationships(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+func (h APIHandler) accountList(c *fiber.Ctx, accounts []models.Account) error {
+	resp := make([]accountResponse, 0, len(accounts))
+	for _, account := range accounts {
+		acct := accountToResponse(&account)
+		if account.Domain != nil && *account.Domain != "" {
+			acct.Acct = account.Username + "@" + *account.Domain
+		}
+		resp = append(resp, acct)
+	}
+	return c.JSON(resp)
+}
+
+func (h APIHandler) followers(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	accounts, derr := h.api.FollowerAccounts(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return h.accountList(c, accounts)
+}
+
+func (h APIHandler) following(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	accounts, derr := h.api.FollowingAccounts(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return h.accountList(c, accounts)
+}
+
 func (h APIHandler) followAccount(c *fiber.Ctx) error {
 	principal, derr := h.authenticate(c)
 	if derr != nil {
@@ -190,6 +229,23 @@ func (h APIHandler) followAccount(c *fiber.Ctx) error {
 		}
 	}
 	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: false, Requested: true, ShowingReblogs: true})
+}
+
+func (h APIHandler) unfollowAccount(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	res, derr := h.api.UnfollowAccount(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if res.Inbox != "" {
+		if err := h.queueDelivery(res.RawJSON, res.Inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: false, Requested: false, ShowingReblogs: true})
 }
 
 func (h APIHandler) homeTimeline(c *fiber.Ctx) error {

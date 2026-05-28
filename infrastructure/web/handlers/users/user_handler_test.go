@@ -137,6 +137,9 @@ func (f *fakeFollowsRepo) AcceptFollowingByActor(ctx context.Context, tx *db.Tx,
 func (f *fakeFollowsRepo) RejectFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
 	return nil
 }
+func (f *fakeFollowsRepo) DeleteFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
+	return nil
+}
 func (f *fakeFollowsRepo) DeleteFollowByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
 	for i, follower := range f.followers {
 		if follower.LocalAccountID == localAccountID && follower.RemoteActor == remoteActor {
