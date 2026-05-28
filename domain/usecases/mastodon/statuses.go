@@ -134,17 +134,15 @@ func (u UseCase) resolveMentions(ctx context.Context, account *models.Account, c
 		seen[acct] = true
 		if domain == strings.ToLower(u.cfg.Domain) {
 			local, err := u.cfg.AccountsRepo.GetLocalAccountByUsername(ctx, nil, username)
-			if err != nil {
-				return nil, domainerrors.New(domainerrors.ErrBadRequest, "mentioned account could not be resolved: "+acct)
+			if err == nil {
+				mentions = append(mentions, *local)
 			}
-			mentions = append(mentions, *local)
 			continue
 		}
 		remote, err := u.resolveAndCacheRemoteAccount(ctx, acct, account)
-		if err != nil {
-			return nil, domainerrors.New(domainerrors.ErrBadRequest, "mentioned account could not be resolved: "+acct)
+		if err == nil {
+			mentions = append(mentions, *remote)
 		}
-		mentions = append(mentions, *remote)
 	}
 	return mentions, nil
 }
