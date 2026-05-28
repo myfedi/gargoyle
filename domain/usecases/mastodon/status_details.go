@@ -35,7 +35,7 @@ func (u UseCase) GetStatus(ctx context.Context, localAccount *models.Account, st
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	return &TimelineItem{Note: *note, Account: *author, InReplyToAccountID: u.replyAccountID(ctx, localAccount, *note), Media: media}, nil
+	return u.timelineItem(ctx, localAccount, *note, *author, u.replyAccountID(ctx, localAccount, *note), media)
 }
 
 func (u UseCase) DeleteStatus(ctx context.Context, localAccount *models.Account, statusID string) (*DeleteStatusResult, *domainerrors.DomainError) {
@@ -110,6 +110,10 @@ func (u UseCase) statusAncestors(ctx context.Context, localAccount *models.Accou
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	items = append(items, TimelineItem{Note: *parent, Account: *author, InReplyToAccountID: u.replyAccountID(ctx, localAccount, *parent), Media: media})
+	item, derr := u.timelineItem(ctx, localAccount, *parent, *author, u.replyAccountID(ctx, localAccount, *parent), media)
+	if derr != nil {
+		return nil, derr
+	}
+	items = append(items, *item)
 	return items, nil
 }

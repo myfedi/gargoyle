@@ -31,6 +31,7 @@ type ActivityPubFlowConfig struct {
 	NotesRepo        repos.NotesRepository
 	FetchJobsRepo    repos.FetchJobsRepository
 	SocialRepo       repos.SocialRepository
+	BoostsRepo       repos.BoostsRepository
 	ActorFetcher     apPorts.ActorFetcher
 	ContentSanitizer ports.ContentSanitizer
 }

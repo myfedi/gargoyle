@@ -74,6 +74,7 @@ func main() {
 	mediaRepo := repos.NewMediaRepo(sqlite.Bun)
 	mediaStorage := adapters.NewLocalMediaStorage(config.Media.StorageDir)
 	socialRepo := repos.NewSocialRepo(sqlite.Bun)
+	boostsRepo := repos.NewBoostsRepo(sqlite.Bun)
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
 	jobsRepo := repos.NewJobsRepo(sqlite.Bun)
@@ -155,6 +156,7 @@ func main() {
 		NotesRepo:        notesRepo,
 		FetchJobsRepo:    jobsRepo,
 		SocialRepo:       socialRepo,
+		BoostsRepo:       boostsRepo,
 		ContentSanitizer: contentSanitizer,
 	}
 	mastodonAPIUC := mastodonUsecases.NewUseCase(mastodonUsecases.Config{
@@ -167,6 +169,7 @@ func main() {
 		MediaRepo:          mediaRepo,
 		MediaStorage:       mediaStorage,
 		SocialRepo:         socialRepo,
+		BoostsRepo:         boostsRepo,
 		RemoteAccountsRepo: remoteAccountsRepo,
 		IDGenerator:        adapters.NewULIDGenerator(),
 		RemoteResolver:     mastodon.NewRemoteAccountResolver(nil, mastodonRemoteURLExceptions),

@@ -29,7 +29,7 @@ func (u UseCase) GetAccount(ctx context.Context, localAccount *models.Account, a
 	return remote, nil
 }
 
-func (u UseCase) AccountStatuses(ctx context.Context, localAccount *models.Account, accountID string, limit int, maxID string) ([]TimelineItem, *domainerrors.DomainError) {
+func (u UseCase) AccountStatuses(ctx context.Context, localAccount *models.Account, accountID string, limit int, maxID string, excludeReblogs bool) ([]TimelineItem, *domainerrors.DomainError) {
 	account, derr := u.GetAccount(ctx, localAccount, accountID)
 	if derr != nil {
 		return nil, derr
@@ -53,7 +53,22 @@ func (u UseCase) AccountStatuses(ctx context.Context, localAccount *models.Accou
 		if err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
-		items = append(items, TimelineItem{Note: note, Account: *account, InReplyToAccountID: u.replyAccountID(ctx, localAccount, note), Media: media})
+		item, derr := u.timelineItem(ctx, localAccount, note, *account, u.replyAccountID(ctx, localAccount, note), media)
+		if derr != nil {
+			return nil, derr
+		}
+		items = append(items, *item)
 	}
-	return items, nil
+	if excludeReblogs {
+		return items, nil
+	}
+	boosts, err := u.cfg.BoostsRepo.ListActorBoosts(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	boostItems, derr := u.boostTimelineItems(ctx, localAccount, boosts)
+	if derr != nil {
+		return nil, derr
+	}
+	return mergeTimelineItems(items, boostItems, limit), nil
 }

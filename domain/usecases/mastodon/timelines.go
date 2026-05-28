@@ -2,6 +2,7 @@ package mastodon
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -20,7 +21,19 @@ func (u UseCase) HomeTimeline(ctx context.Context, account *models.Account, opts
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	return u.timelineItems(ctx, account, notes)
+	items, derr := u.timelineItems(ctx, account, notes)
+	if derr != nil {
+		return nil, derr
+	}
+	boosts, err := u.cfg.BoostsRepo.ListTimelineBoosts(ctx, nil, account.ID, opts.Limit, opts.MaxID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	boostItems, derr := u.boostTimelineItems(ctx, account, boosts)
+	if derr != nil {
+		return nil, derr
+	}
+	return mergeTimelineItems(items, boostItems, opts.Limit), nil
 }
 
 // PublicTimeline returns the server-known public timeline for the authenticated
@@ -60,9 +73,92 @@ func (u UseCase) timelineItems(ctx context.Context, localAccount *models.Account
 		if err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
-		items = append(items, TimelineItem{Note: note, Account: *author, InReplyToAccountID: replyAccountID, Media: media})
+		item, derr := u.timelineItem(ctx, localAccount, note, *author, replyAccountID, media)
+		if derr != nil {
+			return nil, derr
+		}
+		items = append(items, *item)
 	}
 	return items, nil
+}
+
+func (u UseCase) timelineItem(ctx context.Context, localAccount *models.Account, note models.Note, author models.Account, replyAccountID *string, media []models.MediaAttachment) (*TimelineItem, *domainerrors.DomainError) {
+	reblogsCount, err := u.cfg.BoostsRepo.CountBoostsForNote(ctx, nil, note.ID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	reblogged, err := u.cfg.BoostsRepo.BoostExists(ctx, nil, localAccount.ID, localAccount.URI, note.ID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	favourited, err := u.cfg.SocialRepo.InteractionExists(ctx, nil, localAccount.ID, note.ID, "favourite")
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	bookmarked, err := u.cfg.SocialRepo.InteractionExists(ctx, nil, localAccount.ID, note.ID, "bookmark")
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return &TimelineItem{ID: note.ID, URI: note.URI, CreatedAt: note.PublishedAt, Note: note, Account: author, InReplyToAccountID: replyAccountID, Media: media, ReblogsCount: reblogsCount, Reblogged: reblogged, Favourited: favourited, Bookmarked: bookmarked}, nil
+}
+
+func (u UseCase) boostTimelineItems(ctx context.Context, localAccount *models.Account, boosts []models.Boost) ([]TimelineItem, *domainerrors.DomainError) {
+	items := make([]TimelineItem, 0, len(boosts))
+	for _, boost := range boosts {
+		note, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, boost.NoteID)
+		if err != nil {
+			continue
+		}
+		originalAuthor, derr := u.noteAuthor(ctx, localAccount, *note)
+		if derr != nil {
+			return nil, derr
+		}
+		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
+		if err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		inner, derr := u.timelineItem(ctx, localAccount, *note, *originalAuthor, u.replyAccountID(ctx, localAccount, *note), media)
+		if derr != nil {
+			return nil, derr
+		}
+		booster, derr := u.accountForActor(ctx, localAccount, boost.Actor)
+		if derr != nil {
+			return nil, derr
+		}
+		items = append(items, TimelineItem{ID: boost.ID, URI: boost.URI, CreatedAt: boost.PublishedAt, Note: *note, Account: *booster, Reblog: inner})
+	}
+	return items, nil
+}
+
+func (u UseCase) accountForActor(ctx context.Context, localAccount *models.Account, actor string) (*models.Account, *domainerrors.DomainError) {
+	if actor == localAccount.URI {
+		return localAccount, nil
+	}
+	prefix := strings.TrimRight(u.cfg.Host, "/") + "/users/"
+	if strings.HasPrefix(actor, prefix) {
+		account, err := u.cfg.AccountsRepo.GetLocalAccountByUsername(ctx, nil, strings.TrimPrefix(actor, prefix))
+		if err == nil {
+			return account, nil
+		}
+	}
+	remote, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, actor)
+	if err == nil {
+		return remote, nil
+	}
+	remote, err = u.resolveAndCacheRemoteAccount(ctx, actor, localAccount)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrNotFound, err)
+	}
+	return remote, nil
+}
+
+func mergeTimelineItems(a []TimelineItem, b []TimelineItem, limit int) []TimelineItem {
+	items := append(a, b...)
+	sort.SliceStable(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
+	if limit > 0 && len(items) > limit {
+		return items[:limit]
+	}
+	return items
 }
 
 func (u UseCase) replyAccountID(ctx context.Context, localAccount *models.Account, note models.Note) *string {

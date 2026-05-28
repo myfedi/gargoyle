@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -127,6 +128,9 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 		case "Like":
 			return u.createInteractionNotification(ctx, &tx, *account, activity, "favourite")
 		case "Announce":
+			if err := u.createInboundBoost(ctx, &tx, *account, activity); err != nil {
+				return err
+			}
 			return u.createInteractionNotification(ctx, &tx, *account, activity, "reblog")
 		case "Accept":
 			if u.cfg.FollowsRepo != nil && activity.Actor != "" {
@@ -205,6 +209,26 @@ func noteMentionsLocalActor(note ExtractedNote, localActor string) bool {
 		}
 	}
 	return false
+}
+
+func (u *HandleInboxActivityUseCase) createInboundBoost(ctx context.Context, tx *db.Tx, account models.Account, activity ParsedActivity) error {
+	if u.cfg.BoostsRepo == nil || u.cfg.NotesRepo == nil || activity.Object == "" {
+		return nil
+	}
+	note, err := u.cfg.NotesRepo.GetNoteByURI(ctx, tx, activity.Object)
+	if err != nil {
+		if u.cfg.FetchJobsRepo != nil {
+			return enqueueMissingAnnounceFetch(ctx, u.cfg.FetchJobsRepo, tx, account.ID, activity.Object)
+		}
+		return nil
+	}
+	_, err = u.cfg.BoostsRepo.CreateBoost(ctx, tx, repos.CreateBoostInput{LocalAccountID: account.ID, Actor: activity.Actor, NoteID: note.ID, URI: activity.Object + "#announce-" + activity.Actor, PublishedAt: note.PublishedAt})
+	return err
+}
+
+func enqueueMissingAnnounceFetch(ctx context.Context, repo repos.FetchJobsRepository, tx *db.Tx, accountID string, object string) error {
+	_, err := repo.CreateFetchJob(ctx, tx, repos.CreateFetchJobInput{URL: object, Kind: "activitypub_object", AccountID: accountID, NextAttemptAt: time.Now().UTC()})
+	return err
 }
 
 func (u *HandleInboxActivityUseCase) createInteractionNotification(ctx context.Context, tx *db.Tx, account models.Account, activity ParsedActivity, notificationType string) error {

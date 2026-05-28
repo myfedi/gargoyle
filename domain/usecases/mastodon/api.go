@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -31,6 +32,7 @@ type Config struct {
 	MediaRepo          repos.MediaRepository
 	MediaStorage       ports.MediaStorage
 	SocialRepo         repos.SocialRepository
+	BoostsRepo         repos.BoostsRepository
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	IDGenerator        ports.IDGenerator
 	RemoteResolver     RemoteAccountResolver
@@ -70,10 +72,18 @@ type CreateStatusResult struct {
 }
 
 type TimelineItem struct {
+	ID                 string
+	URI                string
+	CreatedAt          time.Time
 	Note               models.Note
 	Account            models.Account
 	InReplyToAccountID *string
 	Media              []models.MediaAttachment
+	Reblog             *TimelineItem
+	Reblogged          bool
+	Favourited         bool
+	Bookmarked         bool
+	ReblogsCount       int
 }
 
 type TimelineOptions struct {
@@ -116,6 +126,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.SocialRepo == nil {
 		panic("mastodon API use case requires SocialRepo")
+	}
+	if cfg.BoostsRepo == nil {
+		panic("mastodon API use case requires BoostsRepo")
 	}
 	if cfg.RemoteAccountsRepo == nil {
 		panic("mastodon API use case requires RemoteAccountsRepo")

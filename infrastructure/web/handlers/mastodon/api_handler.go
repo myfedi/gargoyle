@@ -399,7 +399,7 @@ func (h APIHandler) accountStatuses(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	items, derr := h.api.AccountStatuses(c.UserContext(), principal.Account, c.Params("id"), c.QueryInt("limit"), c.Query("max_id"))
+	items, derr := h.api.AccountStatuses(c.UserContext(), principal.Account, c.Params("id"), c.QueryInt("limit"), c.Query("max_id"), c.QueryBool("exclude_reblogs"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -698,6 +698,7 @@ type statusResponse struct {
 	Muted              bool                      `json:"muted"`
 	Bookmarked         bool                      `json:"bookmarked"`
 	Pinned             bool                      `json:"pinned"`
+	Reblog             *statusResponse           `json:"reblog"`
 }
 
 func timelineOptions(c *fiber.Ctx) mastodonUC.TimelineOptions {
@@ -708,8 +709,28 @@ func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
 	statuses := make([]statusResponse, 0, len(items))
 	for _, item := range items {
 		status := noteToStatus(item.Note, &item.Account)
+		if item.ID != "" {
+			status.ID = item.ID
+		}
+		if item.URI != "" {
+			status.URI = item.URI
+			status.URL = item.URI
+		}
+		if !item.CreatedAt.IsZero() {
+			status.CreatedAt = item.CreatedAt.UTC().Format(time.RFC3339)
+		}
 		status.InReplyToAccountID = item.InReplyToAccountID
 		status.MediaAttachments = mediaResponses(item.Media)
+		status.ReblogsCount = item.ReblogsCount
+		status.Reblogged = item.Reblogged
+		status.Favourited = item.Favourited
+		status.Bookmarked = item.Bookmarked
+		if item.Reblog != nil {
+			reblog := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item.Reblog})[0]
+			status.Content = ""
+			status.MediaAttachments = []mediaAttachmentResponse{}
+			status.Reblog = &reblog
+		}
 		statuses = append(statuses, status)
 	}
 	return statuses
