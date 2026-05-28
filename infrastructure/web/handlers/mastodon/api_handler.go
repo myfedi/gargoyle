@@ -1,6 +1,7 @@
 package mastodon
 
 import (
+	"context"
 	"io"
 	"strings"
 	"time"
@@ -42,6 +43,8 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v2/search", h.search)
 	app.Get("/api/v1/accounts/search", h.search)
 	app.Get("/api/v1/accounts/relationships", h.relationships)
+	app.Get("/api/v1/notifications", h.notifications)
+	app.Post("/api/v1/notifications/clear", h.clearNotifications)
 	app.Post("/api/v2/media", h.uploadMedia)
 	app.Post("/api/v1/media", h.uploadMedia)
 	app.Get("/media/:id", h.media)
@@ -53,6 +56,10 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/accounts/:id", h.account)
 	app.Post("/api/v1/statuses", h.createStatus)
 	app.Get("/api/v1/statuses/:id/context", h.statusContext)
+	app.Post("/api/v1/statuses/:id/favourite", h.favouriteStatus)
+	app.Post("/api/v1/statuses/:id/unfavourite", h.unfavouriteStatus)
+	app.Post("/api/v1/statuses/:id/reblog", h.reblogStatus)
+	app.Post("/api/v1/statuses/:id/unreblog", h.unreblogStatus)
 	app.Get("/api/v1/statuses/:id", h.status)
 	app.Delete("/api/v1/statuses/:id", h.deleteStatus)
 	app.Get("/api/v1/timelines/home", h.homeTimeline)
@@ -355,6 +362,46 @@ func (h APIHandler) unfollowAccount(c *fiber.Ctx) error {
 	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: false, Requested: false, ShowingReblogs: true})
 }
 
+type notificationResponse struct {
+	ID        string          `json:"id"`
+	Type      string          `json:"type"`
+	CreatedAt string          `json:"created_at"`
+	Account   accountResponse `json:"account"`
+	Status    *statusResponse `json:"status,omitempty"`
+}
+
+func (h APIHandler) notifications(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	items, derr := h.api.Notifications(c.UserContext(), principal.Account, c.QueryInt("limit"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	resp := make([]notificationResponse, 0, len(items))
+	for _, item := range items {
+		var status *statusResponse
+		if item.Status != nil {
+			s := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item.Status})[0]
+			status = &s
+		}
+		resp = append(resp, notificationResponse{ID: item.Notification.ID, Type: item.Notification.Type, CreatedAt: item.Notification.CreatedAt.UTC().Format(time.RFC3339), Account: accountToResponse(&item.Account), Status: status})
+	}
+	return c.JSON(resp)
+}
+
+func (h APIHandler) clearNotifications(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if derr := h.api.ClearNotifications(c.UserContext(), principal.Account); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(map[string]any{})
+}
+
 func (h APIHandler) status(c *fiber.Ctx) error {
 	principal, derr := h.authenticate(c)
 	if derr != nil {
@@ -366,6 +413,34 @@ func (h APIHandler) status(c *fiber.Ctx) error {
 	}
 	statuses := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item})
 	return c.JSON(statuses[0])
+}
+
+func (h APIHandler) favouriteStatus(c *fiber.Ctx) error {
+	return h.interactStatus(c, h.api.FavouriteStatus)
+}
+func (h APIHandler) unfavouriteStatus(c *fiber.Ctx) error {
+	return h.interactStatus(c, h.api.UnfavouriteStatus)
+}
+func (h APIHandler) reblogStatus(c *fiber.Ctx) error { return h.interactStatus(c, h.api.ReblogStatus) }
+func (h APIHandler) unreblogStatus(c *fiber.Ctx) error {
+	return h.interactStatus(c, h.api.UnreblogStatus)
+}
+
+func (h APIHandler) interactStatus(c *fiber.Ctx, fn func(context.Context, *models.Account, string) (*mastodonUC.InteractionResult, *domainerrors.DomainError)) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	res, derr := fn(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if res.Delivery != nil && res.Delivery.Inbox != "" {
+		if err := h.queueDelivery(res.Delivery.RawJSON, res.Delivery.Inbox, res.Delivery.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	return c.JSON(timelineItemsToStatuses([]mastodonUC.TimelineItem{res.Status})[0])
 }
 
 func (h APIHandler) deleteStatus(c *fiber.Ctx) error {

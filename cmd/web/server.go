@@ -72,6 +72,7 @@ func main() {
 	followsRepo := repos.NewFollowsRepo(sqlite.Bun)
 	notesRepo := repos.NewNotesRepo(sqlite.Bun)
 	mediaRepo := repos.NewMediaRepo(sqlite.Bun)
+	socialRepo := repos.NewSocialRepo(sqlite.Bun)
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
 	jobsRepo := repos.NewJobsRepo(sqlite.Bun)
@@ -161,6 +162,7 @@ func main() {
 		NotesRepo:          notesRepo,
 		FollowsRepo:        followsRepo,
 		MediaRepo:          mediaRepo,
+		SocialRepo:         socialRepo,
 		RemoteAccountsRepo: remoteAccountsRepo,
 		IDGenerator:        adapters.NewULIDGenerator(),
 		RemoteResolver:     mastodon.NewRemoteAccountResolver(nil, mastodonRemoteURLExceptions),
