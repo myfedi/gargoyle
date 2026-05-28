@@ -61,6 +61,33 @@ func (r *RemoteAccountsRepo) UpsertRemoteAccount(ctx context.Context, tx *dbPort
 	return r.GetRemoteAccountByURI(ctx, tx, account.URI)
 }
 
+func (r *RemoteAccountsRepo) SearchRemoteAccounts(ctx context.Context, tx *dbPorts.Tx, query string, limit int) ([]models.Account, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 40 {
+		limit = 20
+	}
+	pattern := "%" + query + "%"
+	var rows []dbModels.RemoteAccount
+	err = db.NewSelect().Model(&rows).
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("username LIKE ?", pattern).WhereOr("domain LIKE ?", pattern).WhereOr("display_name LIKE ?", pattern).WhereOr("uri LIKE ?", pattern)
+		}).
+		Order("fetched_at DESC").
+		Limit(limit).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]models.Account, 0, len(rows))
+	for _, row := range rows {
+		res = append(res, row.ToModel())
+	}
+	return res, nil
+}
+
 func (r *RemoteAccountsRepo) GetRemoteAccountByURI(ctx context.Context, tx *dbPorts.Tx, uri string) (*models.Account, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {

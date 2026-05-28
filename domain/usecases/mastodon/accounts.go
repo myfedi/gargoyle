@@ -10,10 +10,37 @@ import (
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 )
 
-// SearchAccounts resolves a remote account from an acct URI or actor URL. It
-// returns Mastodon-shaped account data via the handler while keeping WebFinger
-// and HTTP behind RemoteAccountResolver.
-func (u UseCase) SearchAccounts(ctx context.Context, account *models.Account, query string) ([]models.Account, *domainerrors.DomainError) {
+// SearchAccounts returns local and cached remote accounts without network I/O.
+// Mastodon clients use this endpoint for debounced typeahead, so it must remain fast.
+func (u UseCase) SearchAccounts(ctx context.Context, account *models.Account, query string, limit int) ([]models.Account, *domainerrors.DomainError) {
+	if derr := requireAccount(account); derr != nil {
+		return nil, derr
+	}
+	query = strings.TrimSpace(strings.TrimPrefix(query, "@"))
+	if query == "" {
+		return []models.Account{}, nil
+	}
+	if limit <= 0 || limit > 40 {
+		limit = 20
+	}
+	locals, err := u.cfg.AccountsRepo.SearchLocalAccounts(ctx, nil, query, limit)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	remaining := limit - len(locals)
+	if remaining <= 0 {
+		return locals[:limit], nil
+	}
+	remote, err := u.cfg.RemoteAccountsRepo.SearchRemoteAccounts(ctx, nil, query, remaining)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return append(locals, remote...), nil
+}
+
+// ResolveAccountSearch performs the explicit remote resolution path used by
+// /api/v2/search?type=accounts&resolve=true when a user confirms a full acct or URL.
+func (u UseCase) ResolveAccountSearch(ctx context.Context, account *models.Account, query string) ([]models.Account, *domainerrors.DomainError) {
 	if derr := requireAccount(account); derr != nil {
 		return nil, derr
 	}

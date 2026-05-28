@@ -132,6 +132,38 @@ func (r *AccountsRepo) GetLocalAccountByUsername(ctx context.Context, tx *dbPort
 	return &model, nil
 }
 
+func (r *AccountsRepo) SearchLocalAccounts(ctx context.Context, tx *dbPorts.Tx, query string, limit int) ([]models.Account, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+	if limit <= 0 || limit > 40 {
+		limit = 20
+	}
+	pattern := "%" + query + "%"
+	var rows []dbModels.Account
+	err := db.NewSelect().Model(&rows).
+		Where("user_id IS NOT NULL").
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("username LIKE ?", pattern).WhereOr("display_name LIKE ?", pattern)
+		}).
+		Order("username ASC").
+		Limit(limit).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]models.Account, 0, len(rows))
+	for _, row := range rows {
+		res = append(res, row.ToModel())
+	}
+	return res, nil
+}
+
 func (r AccountsRepo) AccountWithUsernameExists(ctx context.Context, tx *dbPorts.Tx, username string) (bool, error) {
 	db := r.db
 	if tx != nil {

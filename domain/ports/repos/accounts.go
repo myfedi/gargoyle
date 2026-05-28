@@ -36,5 +36,6 @@ type AccountsRepo interface {
 	GetAccountByID(ctx context.Context, tx *db.Tx, id string) (*models.Account, error)
 	GetAccountByUserID(ctx context.Context, tx *db.Tx, userID string) (*models.Account, error)
 	GetLocalAccountByUsername(ctx context.Context, tx *db.Tx, username string) (*models.Account, error)
+	SearchLocalAccounts(ctx context.Context, tx *db.Tx, query string, limit int) ([]models.Account, error)
 	AccountWithUsernameExists(ctx context.Context, tx *db.Tx, username string) (bool, error)
 }

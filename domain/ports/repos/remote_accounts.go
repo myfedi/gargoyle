@@ -12,4 +12,5 @@ import (
 type RemoteAccountsRepository interface {
 	UpsertRemoteAccount(ctx context.Context, tx *db.Tx, account models.Account) (*models.Account, error)
 	GetRemoteAccountByURI(ctx context.Context, tx *db.Tx, uri string) (*models.Account, error)
+	SearchRemoteAccounts(ctx context.Context, tx *db.Tx, query string, limit int) ([]models.Account, error)
 }

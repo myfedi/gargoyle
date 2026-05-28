@@ -41,7 +41,7 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/instance", h.instanceV1)
 	app.Get("/api/v2/instance", h.instanceV2)
 	app.Get("/api/v2/search", h.search)
-	app.Get("/api/v1/accounts/search", h.search)
+	app.Get("/api/v1/accounts/search", h.accountsSearch)
 	app.Get("/api/v1/accounts/relationships", h.relationships)
 	app.Get("/api/v1/notifications", h.notifications)
 	app.Post("/api/v1/notifications/clear", h.clearNotifications)
@@ -285,24 +285,47 @@ type searchResponse struct {
 	Hashtags []any             `json:"hashtags"`
 }
 
+func (h APIHandler) accountsSearch(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	accounts, derr := h.api.SearchAccounts(c.UserContext(), principal.Account, c.Query("q"), c.QueryInt("limit"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(accountsToResponses(accounts))
+}
+
 func (h APIHandler) search(c *fiber.Ctx) error {
 	principal, derr := h.authenticate(c)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	accounts, derr := h.api.SearchAccounts(c.UserContext(), principal.Account, c.Query("q"))
-	if derr != nil {
-		return web.HandleDomainError(c, derr)
+	var accounts []models.Account
+	if c.Query("type") == "" || c.Query("type") == "accounts" {
+		if c.QueryBool("resolve") {
+			accounts, derr = h.api.ResolveAccountSearch(c.UserContext(), principal.Account, c.Query("q"))
+		} else {
+			accounts, derr = h.api.SearchAccounts(c.UserContext(), principal.Account, c.Query("q"), c.QueryInt("limit"))
+		}
+		if derr != nil {
+			return web.HandleDomainError(c, derr)
+		}
 	}
-	resp := searchResponse{Accounts: make([]accountResponse, 0, len(accounts)), Statuses: []statusResponse{}, Hashtags: []any{}}
+	return c.JSON(searchResponse{Accounts: accountsToResponses(accounts), Statuses: []statusResponse{}, Hashtags: []any{}})
+}
+
+func accountsToResponses(accounts []models.Account) []accountResponse {
+	resp := make([]accountResponse, 0, len(accounts))
 	for _, account := range accounts {
 		acct := accountToResponse(&account)
 		if account.Domain != nil && *account.Domain != "" {
 			acct.Acct = account.Username + "@" + *account.Domain
 		}
-		resp.Accounts = append(resp.Accounts, acct)
+		resp = append(resp, acct)
 	}
-	return c.JSON(resp)
+	return resp
 }
 
 type relationshipResponse struct {

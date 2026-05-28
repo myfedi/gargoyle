@@ -64,6 +64,13 @@ func (f fakeAccountsRepo) GetLocalAccountByUsername(ctx context.Context, tx *db.
 		ActorType:    models.ActorTypePerson,
 	}, nil
 }
+func (f fakeAccountsRepo) SearchLocalAccounts(ctx context.Context, tx *db.Tx, query string, limit int) ([]models.Account, error) {
+	account, err := f.GetLocalAccountByUsername(ctx, tx, query)
+	if err != nil {
+		return nil, err
+	}
+	return []models.Account{*account}, nil
+}
 func (f fakeAccountsRepo) AccountWithUsernameExists(ctx context.Context, tx *db.Tx, username string) (bool, error) {
 	return false, nil
 }
