@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	errors "github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -35,9 +36,22 @@ type RegisterUserUseCase struct {
 }
 
 func NewRegisterUserUseCase(cfg RegisterUserUseCaseConfig) RegisterUserUseCase {
-	return RegisterUserUseCase{
-		cfg: cfg,
+	if cfg.TxProvider == nil {
+		panic("register user use case requires TxProvider")
 	}
+	if cfg.AccountsRepo == nil {
+		panic("register user use case requires AccountsRepo")
+	}
+	if cfg.UsersRepo == nil {
+		panic("register user use case requires UsersRepo")
+	}
+	if cfg.PasswordHashProvider == nil {
+		panic("register user use case requires PasswordHashProvider")
+	}
+	if cfg.PKeyManager == nil {
+		panic("register user use case requires PKeyManager")
+	}
+	return RegisterUserUseCase{cfg: cfg}
 }
 
 // RegisterUser creates a new user by hashing the password and persisting the user in the database.
@@ -45,7 +59,7 @@ func NewRegisterUserUseCase(cfg RegisterUserUseCaseConfig) RegisterUserUseCase {
 func (u *RegisterUserUseCase) RegisterUser(ctx context.Context, input RegisterUserUseCaseInput) (*models.User, *errors.DomainError) {
 	userNameTaken, err := u.cfg.UsersRepo.UserWithUsernameExists(ctx, nil, input.Username)
 	if err != nil {
-		return nil, errors.NewErr(errors.ErrBadRequest, err)
+		return nil, errors.NewErr(errors.ErrInternal, err)
 	}
 	if userNameTaken {
 		return nil, errors.NewErr(errors.ErrBadRequest, fmt.Errorf("Username %s already taken", input.Username))
@@ -53,7 +67,7 @@ func (u *RegisterUserUseCase) RegisterUser(ctx context.Context, input RegisterUs
 
 	emailTaken, err := u.cfg.UsersRepo.UserWithEmailExists(ctx, nil, input.Email)
 	if err != nil {
-		return nil, errors.NewErr(errors.ErrBadRequest, err)
+		return nil, errors.NewErr(errors.ErrInternal, err)
 	}
 	if emailTaken {
 		return nil, errors.NewErr(errors.ErrBadRequest, fmt.Errorf("Email %s already taken", input.Email))
@@ -63,6 +77,15 @@ func (u *RegisterUserUseCase) RegisterUser(ctx context.Context, input RegisterUs
 	if err != nil {
 		return nil, errors.NewErr(errors.ErrInternal, err)
 	}
+
+	// Generate keys before opening the transaction so CPU-heavy work does not keep
+	// database locks open. Persistence remains atomic below.
+	pkey, err := u.cfg.PKeyManager.CreatePKeyPair(input.Email)
+	if err != nil {
+		return nil, errors.NewErr(errors.ErrInternal, err)
+	}
+	publicPem := string(pkey.PublicKey().ToPEM())
+	privatePem := string(pkey.PrivateKey().ToPEM())
 
 	var user *models.User
 
@@ -74,20 +97,10 @@ func (u *RegisterUserUseCase) RegisterUser(ctx context.Context, input RegisterUs
 			Admin:          input.Admin,
 		})
 		if err != nil {
-			// TODO: do we need better error resolution here?
 			return err
 		}
 
 		user = res
-
-		// create pkey
-		pkey, err := u.cfg.PKeyManager.CreatePKeyPair(input.Email)
-		if err != nil {
-			return err
-		}
-
-		publicPem := string(pkey.PublicKey().ToPEM())
-		privatePem := string(pkey.PrivateKey().ToPEM())
 
 		uri := fmt.Sprintf("%s/users/%s", u.cfg.Host, input.Username)
 		inbox := fmt.Sprintf("%s/inbox", uri)
@@ -117,9 +130,16 @@ func (u *RegisterUserUseCase) RegisterUser(ctx context.Context, input RegisterUs
 		return err
 	})
 	if err != nil {
-		// TODO: do we need better error resolution here?
+		if isUniqueConstraintError(err) {
+			return nil, errors.NewErr(errors.ErrBadRequest, err)
+		}
 		return nil, errors.NewErr(errors.ErrInternal, err)
 	}
 
 	return user, nil
+}
+
+func isUniqueConstraintError(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") || strings.Contains(msg, "duplicate key")
 }

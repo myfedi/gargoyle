@@ -48,8 +48,9 @@ func main() {
 	notesRepo := repos.NewNotesRepo(sqlite.Bun)
 	txProvider := dbAdapters.NewBunTxProvider(sqlite.Bun)
 
-	// sets up the go-fiber server
-	app := fiber.New()
+	// sets up the go-fiber server. The body limit protects ActivityPub endpoints
+	// from unbounded in-memory request bodies before handlers copy or parse them.
+	app := fiber.New(fiber.Config{BodyLimit: 1 << 20})
 
 	/// set up the routes
 

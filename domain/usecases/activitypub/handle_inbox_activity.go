@@ -95,20 +95,35 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 			}
 		case "Delete":
 			if u.cfg.NotesRepo != nil && activity.Object != "" {
+				if err := u.ensureRemoteNoteOwner(ctx, &tx, activity.Object, activity.Actor); err != nil {
+					return err
+				}
 				return u.cfg.NotesRepo.DeleteNoteByURI(ctx, &tx, activity.Object)
 			}
 		case "Update":
 			if u.cfg.NotesRepo != nil {
 				if note, ok := ExtractNoteObject(input.RawJSON); ok {
+					if note.AttributedTo != "" && note.AttributedTo != activity.Actor {
+						return domainerrors.New(domainerrors.ErrUnauthorized, "update actor does not own note")
+					}
+					if err := u.ensureRemoteNoteOwner(ctx, &tx, note.URI, activity.Actor); err != nil {
+						return err
+					}
 					return u.cfg.NotesRepo.UpdateNoteByURI(ctx, &tx, note.URI, u.cfg.ContentSanitizer.SanitizeHTML(note.Content), u.cfg.ContentSanitizer.StripHTMLFromText(note.Content))
 				}
 			}
 		case "Accept":
 			if u.cfg.FollowsRepo != nil && activity.Actor != "" {
+				if err := validateFollowResponseObject(input.RawJSON, account.URI, activity.Actor); err != nil {
+					return err
+				}
 				return u.cfg.FollowsRepo.AcceptFollowingByActor(ctx, &tx, account.ID, activity.Actor)
 			}
 		case "Reject":
 			if u.cfg.FollowsRepo != nil && activity.Actor != "" {
+				if err := validateFollowResponseObject(input.RawJSON, account.URI, activity.Actor); err != nil {
+					return err
+				}
 				return u.cfg.FollowsRepo.RejectFollowingByActor(ctx, &tx, account.ID, activity.Actor)
 			}
 		case "Undo":
@@ -132,4 +147,29 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return &HandleInboxActivityResult{Account: *account, Activity: activity, AcceptJSON: acceptJSON, AcceptInbox: acceptInbox}, nil
+}
+
+func (u *HandleInboxActivityUseCase) ensureRemoteNoteOwner(ctx context.Context, tx *db.Tx, uri string, actor string) error {
+	note, err := u.cfg.NotesRepo.GetNoteByURI(ctx, tx, uri)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domainerrors.New(domainerrors.ErrNotFound, "note does not exist")
+		}
+		return err
+	}
+	if note.AttributedTo != actor {
+		return domainerrors.New(domainerrors.ErrUnauthorized, "activity actor does not own note")
+	}
+	return nil
+}
+
+func validateFollowResponseObject(raw []byte, localActor string, remoteActor string) error {
+	follow, ok, err := ExtractFollowObject(raw)
+	if err != nil {
+		return domainerrors.NewErr(domainerrors.ErrBadRequest, err)
+	}
+	if !ok || follow.Actor != localActor || follow.Object != remoteActor {
+		return domainerrors.New(domainerrors.ErrBadRequest, "accept/reject object does not match local follow")
+	}
+	return nil
 }

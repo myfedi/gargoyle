@@ -194,6 +194,39 @@ func ExtractNoteObject(raw []byte) (ExtractedNote, bool) {
 	return ExtractedNote{URI: note.ID, Content: note.Content, AttributedTo: note.AttributedTo, PublishedAt: publishedAt}, true
 }
 
+// ExtractedFollowObject is the normalized Follow object embedded in Accept/Reject activities.
+type ExtractedFollowObject struct {
+	Actor  string
+	Object string
+}
+
+// ExtractFollowObject returns the Follow object embedded in an Accept or Reject activity.
+func ExtractFollowObject(raw []byte) (ExtractedFollowObject, bool, error) {
+	var activity struct {
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(raw, &activity); err != nil || len(activity.Object) == 0 {
+		return ExtractedFollowObject{}, false, err
+	}
+	var follow struct {
+		Type   string          `json:"type"`
+		Actor  json.RawMessage `json:"actor"`
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(activity.Object, &follow); err != nil || follow.Type != "Follow" {
+		return ExtractedFollowObject{}, false, err
+	}
+	actor, _, err := ExtractIDAndInbox(follow.Actor)
+	if err != nil {
+		return ExtractedFollowObject{}, false, err
+	}
+	object, _, err := ExtractIDAndInbox(follow.Object)
+	if err != nil {
+		return ExtractedFollowObject{}, false, err
+	}
+	return ExtractedFollowObject{Actor: actor, Object: object}, true, nil
+}
+
 // ExtractUndoFollowActor resolves the actor whose Follow is being undone.
 func ExtractUndoFollowActor(raw []byte) (string, error) {
 	var doc struct {

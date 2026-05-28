@@ -1,12 +1,15 @@
 package users
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
 	"github.com/myfedi/gargoyle/domain/ports"
 	"github.com/myfedi/gargoyle/domain/ports/activitypub"
@@ -17,6 +20,11 @@ import (
 	"github.com/myfedi/gargoyle/infrastructure/web"
 )
 
+const maxActivityPubBodyBytes = 1 << 20
+
+// UsersWebHandlerConfig wires HTTP infrastructure to ActivityPub use cases.
+// Required dependencies are validated in NewUsersWebHandler so configuration
+// mistakes fail at startup instead of during request handling.
 type UsersWebHandlerConfig struct {
 	TxProvider         db.TxProvider
 	AccountsRepo       repos.AccountsRepo
@@ -30,6 +38,7 @@ type UsersWebHandlerConfig struct {
 	ContentSanitizer   ports.ContentSanitizer
 	HTTPClient         *http.Client
 	RequireSignedInbox bool
+	AllowUnsignedInbox bool
 	DeliveryRetries    int
 }
 
@@ -45,7 +54,52 @@ type UsersWebHandler struct {
 }
 
 // NewWebfingerWebHandler creates a new Webfinger handler with the given dependencies.
+
+func validateUsersWebHandlerConfig(cfg UsersWebHandlerConfig) {
+	if cfg.TxProvider == nil {
+		panic("users web handler requires TxProvider")
+	}
+	if cfg.AccountsRepo == nil {
+		panic("users web handler requires AccountsRepo")
+	}
+	if cfg.ActivitiesRepo == nil {
+		panic("users web handler requires ActivitiesRepo")
+	}
+	if cfg.FollowsRepo == nil {
+		panic("users web handler requires FollowsRepo")
+	}
+	if cfg.NotesRepo == nil {
+		panic("users web handler requires NotesRepo")
+	}
+	if cfg.Serializer == nil {
+		panic("users web handler requires Serializer")
+	}
+	if !cfg.RequireSignedInbox && !cfg.AllowUnsignedInbox {
+		panic("users web handler requires signed inbox unless AllowUnsignedInbox is explicitly enabled")
+	}
+	if cfg.ContentSanitizer == nil {
+		panic("users web handler requires ContentSanitizer")
+	}
+}
+
+func ensureBodySize(body []byte) *domainerrors.DomainError {
+	if len(body) > maxActivityPubBodyBytes {
+		return domainerrors.New(domainerrors.ErrBadRequest, "request body too large")
+	}
+	return nil
+}
+
+func (h *UsersWebHandler) queueDelivery(body []byte, inbox string, account models.Account) {
+	payload := append([]byte(nil), body...)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		h.cfg.Deliverer.Deliver(ctx, payload, inbox, account)
+	}()
+}
+
 func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
+	validateUsersWebHandlerConfig(cfg)
 	handler := apUsecases.NewGetUserProfileUseCase(apUsecases.GetUserProfileUseCaseConfig{
 		AccountsRepo: cfg.AccountsRepo,
 		Serializer:   cfg.Serializer,
@@ -163,6 +217,9 @@ func (h *UsersWebHandler) followingCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
+	if err := ensureBodySize(c.Body()); err != nil {
+		return web.HandleDomainError(c, err)
+	}
 	var input struct {
 		Actor string `json:"actor"`
 		Inbox string `json:"inbox"`
@@ -182,7 +239,7 @@ func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	if res.Inbox != "" {
-		h.cfg.Deliverer.Deliver(c.UserContext(), res.RawJSON, res.Inbox, res.Account)
+		h.queueDelivery(res.RawJSON, res.Inbox, res.Account)
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }
@@ -212,6 +269,9 @@ func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
+	if err := ensureBodySize(c.Body()); err != nil {
+		return web.HandleDomainError(c, err)
+	}
 	raw := append([]byte(nil), c.Body()...)
 	account, activity, derr := h.handleInboxActivityUC.InspectInboxActivity(c.UserContext(), c.Params("username"), raw)
 	if derr != nil {
@@ -226,12 +286,15 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	if len(res.AcceptJSON) > 0 && res.AcceptInbox != "" {
-		h.cfg.Deliverer.Deliver(c.UserContext(), res.AcceptJSON, res.AcceptInbox, res.Account)
+		h.queueDelivery(res.AcceptJSON, res.AcceptInbox, res.Account)
 	}
 	return c.SendStatus(fiber.StatusAccepted)
 }
 
 func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
+	if err := ensureBodySize(c.Body()); err != nil {
+		return web.HandleDomainError(c, err)
+	}
 	activityID, err := dbUtils.NewULID()
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
@@ -245,7 +308,7 @@ func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	for _, inbox := range res.FollowerInboxes {
-		h.cfg.Deliverer.Deliver(c.UserContext(), res.RawJSON, inbox, res.Account)
+		h.queueDelivery(res.RawJSON, inbox, res.Account)
 	}
 	return c.SendStatus(fiber.StatusCreated)
 }

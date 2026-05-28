@@ -51,22 +51,72 @@ type CreateOutboxActivityUseCase struct{ cfg ActivityPubFlowConfig }
 type HandleInboxActivityUseCase struct{ cfg ActivityPubFlowConfig }
 
 func NewGetOutboxUseCase(cfg ActivityPubFlowConfig) GetOutboxUseCase {
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
 	return GetOutboxUseCase{cfg: cfg}
 }
 func NewGetFollowersUseCase(cfg ActivityPubFlowConfig) GetFollowersUseCase {
+	requireAccountsRepo(cfg)
+	requireFollowsRepo(cfg)
 	return GetFollowersUseCase{cfg: cfg}
 }
 func NewGetFollowingUseCase(cfg ActivityPubFlowConfig) GetFollowingUseCase {
+	requireAccountsRepo(cfg)
+	requireFollowsRepo(cfg)
 	return GetFollowingUseCase{cfg: cfg}
 }
 func NewCreateFollowingUseCase(cfg ActivityPubFlowConfig) CreateFollowingUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireFollowsRepo(cfg)
 	return CreateFollowingUseCase{cfg: cfg}
 }
 func NewCreateOutboxActivityUseCase(cfg ActivityPubFlowConfig) CreateOutboxActivityUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireFollowsRepo(cfg)
+	requireContentSanitizer(cfg)
 	return CreateOutboxActivityUseCase{cfg: cfg}
 }
 func NewHandleInboxActivityUseCase(cfg ActivityPubFlowConfig) HandleInboxActivityUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireFollowsRepo(cfg)
+	requireContentSanitizer(cfg)
 	return HandleInboxActivityUseCase{cfg: cfg}
+}
+
+func requireTxProvider(cfg ActivityPubFlowConfig) {
+	if cfg.TxProvider == nil {
+		panic("activitypub use case requires TxProvider")
+	}
+}
+
+func requireAccountsRepo(cfg ActivityPubFlowConfig) {
+	if cfg.AccountsRepo == nil {
+		panic("activitypub use case requires AccountsRepo")
+	}
+}
+
+func requireActivitiesRepo(cfg ActivityPubFlowConfig) {
+	if cfg.ActivitiesRepo == nil {
+		panic("activitypub use case requires ActivitiesRepo")
+	}
+}
+
+func requireFollowsRepo(cfg ActivityPubFlowConfig) {
+	if cfg.FollowsRepo == nil {
+		panic("activitypub use case requires FollowsRepo")
+	}
+}
+
+func requireContentSanitizer(cfg ActivityPubFlowConfig) {
+	if cfg.ContentSanitizer == nil {
+		panic("activitypub use case requires ContentSanitizer")
+	}
 }
 
 // localAccount resolves a local ActivityPub account and maps repository errors to domain errors.

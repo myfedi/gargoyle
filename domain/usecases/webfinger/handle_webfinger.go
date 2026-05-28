@@ -21,6 +21,9 @@ type WebfingerHandler struct {
 }
 
 func NewWebfingerHandler(cfg WebFingerHandlerConfig) *WebfingerHandler {
+	if cfg.UsersRepo == nil {
+		panic("webfinger handler requires UsersRepo")
+	}
 	return &WebfingerHandler{
 		cfg: cfg,
 	}

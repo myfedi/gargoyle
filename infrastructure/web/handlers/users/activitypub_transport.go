@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -33,6 +34,56 @@ type httpActivityPubTransport struct {
 	retries int
 }
 
+func (t httpActivityPubTransport) httpClient() *http.Client {
+	client := &http.Client{}
+	if t.client != nil {
+		copy := *t.client
+		client = &copy
+	}
+	if client.Timeout == 0 {
+		client.Timeout = 10 * time.Second
+	}
+	if client.CheckRedirect == nil {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return errors.New("too many redirects")
+			}
+			return validateRemoteURL(req.Context(), req.URL.String())
+		}
+	}
+	return client
+}
+
+func validateRemoteURL(ctx context.Context, raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return errors.New("unsupported remote URL scheme")
+	}
+	if u.Hostname() == "" || u.User != nil {
+		return errors.New("invalid remote URL host")
+	}
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", u.Hostname())
+	if err != nil {
+		return err
+	}
+	for _, ip := range ips {
+		if !isPublicIP(ip) {
+			return errors.New("remote URL resolves to private address")
+		}
+	}
+	return nil
+}
+
+func isPublicIP(ip net.IP) bool {
+	if ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsPrivate() {
+		return false
+	}
+	return true
+}
+
 type remoteActorDocument struct {
 	Inbox     string `json:"inbox"`
 	PublicKey struct {
@@ -46,10 +97,10 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 	if actor == "" {
 		return nil, errors.New("empty actor")
 	}
-	client := t.client
-	if client == nil {
-		client = http.DefaultClient
+	if err := validateRemoteURL(ctx, actor); err != nil {
+		return nil, err
 	}
+	client := t.httpClient()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, actor, nil)
 	if err != nil {
 		return nil, err
@@ -78,10 +129,10 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 }
 
 func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbox string, account models.Account) {
-	client := t.client
-	if client == nil {
-		client = http.DefaultClient
+	if err := validateRemoteURL(ctx, inbox); err != nil {
+		return
 	}
+	client := t.httpClient()
 	retries := t.retries
 	if retries < 1 {
 		retries = 3

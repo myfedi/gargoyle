@@ -48,6 +48,7 @@ func (f fakeAccountsRepo) AccountWithUsernameExists(ctx context.Context, tx *db.
 
 func TestGetUserProfileMapsMissingAccountToNotFound(t *testing.T) {
 	uc := NewGetUserProfileUseCase(GetUserProfileUseCaseConfig{
+		Serializer:   fakeActorSerializer{},
 		AccountsRepo: fakeAccountsRepo{err: sql.ErrNoRows},
 	})
 

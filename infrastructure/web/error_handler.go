@@ -10,7 +10,7 @@ func HandleDomainError(c *fiber.Ctx, err *errors.DomainError) error {
 	case errors.ErrBadRequest:
 		return c.Status(fiber.StatusBadRequest).SendString(err.Error())
 	case errors.ErrInternal:
-		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
+		return c.Status(fiber.StatusInternalServerError).SendString(errors.ErrInternal.Error())
 	case errors.ErrNotFound:
 		return c.Status(fiber.StatusNotFound).SendString(err.Error())
 	case errors.ErrUnauthorized:

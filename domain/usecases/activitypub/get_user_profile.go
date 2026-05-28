@@ -20,6 +20,12 @@ type GetUserProfileUseCase struct {
 }
 
 func NewGetUserProfileUseCase(cfg GetUserProfileUseCaseConfig) GetUserProfileUseCase {
+	if cfg.AccountsRepo == nil {
+		panic("get user profile use case requires AccountsRepo")
+	}
+	if cfg.Serializer == nil {
+		panic("get user profile use case requires Serializer")
+	}
 	return GetUserProfileUseCase{
 		cfg: cfg,
 	}

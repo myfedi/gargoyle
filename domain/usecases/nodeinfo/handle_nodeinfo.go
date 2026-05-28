@@ -27,6 +27,15 @@ type NodeInfoHandler struct {
 // Provides handlers for the nodeinfo protocol.
 // See https://nodeinfo.diaspora.software/protocol.html
 func NewNodeInfoHandler(cfg NodeInfoHandlerConfig) *NodeInfoHandler {
+	if cfg.UsersRepo == nil {
+		panic("nodeinfo handler requires UsersRepo")
+	}
+	if cfg.PostsRepo == nil {
+		panic("nodeinfo handler requires PostsRepo")
+	}
+	if cfg.CommentsRepo == nil {
+		panic("nodeinfo handler requires CommentsRepo")
+	}
 	return &NodeInfoHandler{cfg: cfg}
 }
 

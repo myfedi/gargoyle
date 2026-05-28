@@ -55,6 +55,25 @@ func (r *NotesRepo) CreateNote(ctx context.Context, tx *dbPorts.Tx, input repos.
 	return &model, nil
 }
 
+func (r *NotesRepo) GetNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri string) (*models.Note, error) {
+	db := r.db
+	if tx != nil {
+		adapted, ok := (*tx).(dbAdapters.BunTx)
+		if !ok {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+		db = adapted.Unwrap()
+	}
+
+	var note dbModels.Note
+	err := db.NewSelect().Model(&note).Where("uri = ?", uri).Limit(1).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	model := note.ToModel()
+	return &model, nil
+}
+
 func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri string, content string, plainText string) error {
 	db := r.db
 	if tx != nil {

@@ -82,6 +82,15 @@ func (f *fakeNotesRepo) CreateNote(ctx context.Context, tx *db.Tx, input repos.C
 	f.notes = append(f.notes, note)
 	return &note, nil
 }
+func (f *fakeNotesRepo) GetNoteByURI(ctx context.Context, tx *db.Tx, uri string) (*models.Note, error) {
+	for _, note := range f.notes {
+		if note.URI == uri {
+			return &note, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
 func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri string, content string, plainText string) error {
 	for i := range f.notes {
 		if f.notes[i].URI == uri {
@@ -185,7 +194,8 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
 		})},
-		DeliveryRetries: 1,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
 	})
 }
 
@@ -256,14 +266,15 @@ func TestUserProfileHandlerCreatesNoteFromOutboxPost(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
 	handler := NewUsersWebHandler(UsersWebHandlerConfig{
-		TxProvider:       fakeTxProvider{},
-		AccountsRepo:     fakeAccountsRepo{},
-		ActivitiesRepo:   &fakeActivitiesRepo{},
-		FollowsRepo:      &fakeFollowsRepo{},
-		NotesRepo:        notes,
-		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
-		ContentSanitizer: adapters.NewContentSanitizer(),
-		DeliveryRetries:  1,
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
 	})
 	handler.SetupUserProfileHandler(app)
 
@@ -311,14 +322,15 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
 	handler := NewUsersWebHandler(UsersWebHandlerConfig{
-		TxProvider:       fakeTxProvider{},
-		AccountsRepo:     fakeAccountsRepo{},
-		ActivitiesRepo:   &fakeActivitiesRepo{},
-		FollowsRepo:      &fakeFollowsRepo{},
-		NotesRepo:        notes,
-		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
-		ContentSanitizer: adapters.NewContentSanitizer(),
-		DeliveryRetries:  1,
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
 	})
 	handler.SetupUserProfileHandler(app)
 
