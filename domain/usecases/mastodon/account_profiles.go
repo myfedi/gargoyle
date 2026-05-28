@@ -49,7 +49,11 @@ func (u UseCase) AccountStatuses(ctx context.Context, localAccount *models.Accou
 	}
 	items := make([]TimelineItem, 0, len(notes))
 	for _, note := range notes {
-		items = append(items, TimelineItem{Note: note, Account: *account, InReplyToAccountID: u.replyAccountID(ctx, localAccount, note)})
+		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
+		if err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		items = append(items, TimelineItem{Note: note, Account: *account, InReplyToAccountID: u.replyAccountID(ctx, localAccount, note), Media: media})
 	}
 	return items, nil
 }

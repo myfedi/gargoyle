@@ -54,6 +54,7 @@ type CreateStatusInput struct {
 	Visibility  string
 	Sensitive   bool
 	SpoilerText string
+	MediaIDs    []string
 }
 
 type CreateStatusResult struct {
@@ -67,6 +68,7 @@ type TimelineItem struct {
 	Note               models.Note
 	Account            models.Account
 	InReplyToAccountID *string
+	Media              []models.MediaAttachment
 }
 
 type TimelineOptions struct {

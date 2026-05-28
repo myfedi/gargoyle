@@ -59,3 +59,33 @@ func (r *MediaRepo) GetMediaAttachmentByID(ctx context.Context, tx *dbPorts.Tx, 
 	model := row.ToModel()
 	return &model, nil
 }
+
+func (r *MediaRepo) AttachMediaToNote(ctx context.Context, tx *dbPorts.Tx, noteID string, mediaID string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewInsert().Model(&dbModels.NoteMediaAttachment{NoteID: noteID, MediaID: mediaID}).On("CONFLICT DO NOTHING").Exec(ctx)
+	return err
+}
+
+func (r *MediaRepo) ListMediaForNote(ctx context.Context, tx *dbPorts.Tx, noteID string) ([]models.MediaAttachment, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	var rows []dbModels.MediaAttachment
+	err = db.NewSelect().Model(&rows).
+		Join("JOIN note_media_attachments AS nma ON nma.media_id = media_attachment.id").
+		Where("nma.note_id = ?", noteID).
+		Order("nma.created_at ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]models.MediaAttachment, 0, len(rows))
+	for _, row := range rows {
+		res = append(res, row.ToModel())
+	}
+	return res, nil
+}

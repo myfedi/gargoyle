@@ -31,7 +31,11 @@ func (u UseCase) GetStatus(ctx context.Context, localAccount *models.Account, st
 	if derr != nil {
 		return nil, derr
 	}
-	return &TimelineItem{Note: *note, Account: *author, InReplyToAccountID: u.replyAccountID(ctx, localAccount, *note)}, nil
+	media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return &TimelineItem{Note: *note, Account: *author, InReplyToAccountID: u.replyAccountID(ctx, localAccount, *note), Media: media}, nil
 }
 
 func (u UseCase) DeleteStatus(ctx context.Context, localAccount *models.Account, statusID string) (*DeleteStatusResult, *domainerrors.DomainError) {
@@ -102,6 +106,10 @@ func (u UseCase) statusAncestors(ctx context.Context, localAccount *models.Accou
 	if derr != nil {
 		return nil, derr
 	}
-	items = append(items, TimelineItem{Note: *parent, Account: *author, InReplyToAccountID: u.replyAccountID(ctx, localAccount, *parent)})
+	media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, parent.ID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	items = append(items, TimelineItem{Note: *parent, Account: *author, InReplyToAccountID: u.replyAccountID(ctx, localAccount, *parent), Media: media})
 	return items, nil
 }

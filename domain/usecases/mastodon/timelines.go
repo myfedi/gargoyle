@@ -56,7 +56,11 @@ func (u UseCase) timelineItems(ctx context.Context, localAccount *models.Account
 			return nil, derr
 		}
 		replyAccountID := u.replyAccountID(ctx, localAccount, note)
-		items = append(items, TimelineItem{Note: note, Account: *author, InReplyToAccountID: replyAccountID})
+		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
+		if err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		items = append(items, TimelineItem{Note: note, Account: *author, InReplyToAccountID: replyAccountID, Media: media})
 	}
 	return items, nil
 }

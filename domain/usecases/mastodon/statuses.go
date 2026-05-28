@@ -56,6 +56,15 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+	for _, mediaID := range input.MediaIDs {
+		media, err := u.cfg.MediaRepo.GetMediaAttachmentByID(ctx, nil, mediaID)
+		if err != nil || media.LocalAccountID != account.ID {
+			return nil, domainerrors.New(domainerrors.ErrBadRequest, "media_ids contains invalid media")
+		}
+		if err := u.cfg.MediaRepo.AttachMediaToNote(ctx, nil, note.ID, mediaID); err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+	}
 	note.Visibility = visibility
 	note.Sensitive = input.Sensitive
 	note.SpoilerText = input.SpoilerText

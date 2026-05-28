@@ -139,16 +139,39 @@ func (h APIHandler) media(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) mediaResponse(media *models.MediaAttachment) mediaAttachmentResponse {
+	return mediaResponse(*media)
+}
+
+func mediaResponses(media []models.MediaAttachment) []mediaAttachmentResponse {
+	res := make([]mediaAttachmentResponse, 0, len(media))
+	for _, item := range media {
+		res = append(res, mediaResponse(item))
+	}
+	return res
+}
+
+func mediaResponse(media models.MediaAttachment) mediaAttachmentResponse {
 	url := "/media/" + media.ID
-	return mediaAttachmentResponse{ID: media.ID, Type: "image", URL: url, PreviewURL: url, Description: media.Description}
+	return mediaAttachmentResponse{ID: media.ID, Type: mediaType(media.ContentType), URL: url, PreviewURL: url, Description: media.Description}
+}
+
+func mediaType(contentType string) string {
+	if strings.HasPrefix(contentType, "video/") {
+		return "video"
+	}
+	if strings.HasPrefix(contentType, "audio/") {
+		return "audio"
+	}
+	return "image"
 }
 
 type createStatusRequest struct {
-	Status      string `json:"status" form:"status"`
-	Visibility  string `json:"visibility" form:"visibility"`
-	InReplyToID string `json:"in_reply_to_id" form:"in_reply_to_id"`
-	Sensitive   bool   `json:"sensitive" form:"sensitive"`
-	SpoilerText string `json:"spoiler_text" form:"spoiler_text"`
+	Status      string   `json:"status" form:"status"`
+	Visibility  string   `json:"visibility" form:"visibility"`
+	InReplyToID string   `json:"in_reply_to_id" form:"in_reply_to_id"`
+	Sensitive   bool     `json:"sensitive" form:"sensitive"`
+	SpoilerText string   `json:"spoiler_text" form:"spoiler_text"`
+	MediaIDs    []string `json:"media_ids" form:"media_ids"`
 }
 
 func (h APIHandler) createStatus(c *fiber.Ctx) error {
@@ -160,7 +183,7 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
-	res, derr := h.api.CreateStatus(c.UserContext(), principal.Account, mastodonUC.CreateStatusInput{Content: req.Status, Visibility: req.Visibility, InReplyToID: req.InReplyToID, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText})
+	res, derr := h.api.CreateStatus(c.UserContext(), principal.Account, mastodonUC.CreateStatusInput{Content: req.Status, Visibility: req.Visibility, InReplyToID: req.InReplyToID, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText, MediaIDs: req.MediaIDs})
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -444,6 +467,7 @@ func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
 	for _, item := range items {
 		status := noteToStatus(item.Note, &item.Account)
 		status.InReplyToAccountID = item.InReplyToAccountID
+		status.MediaAttachments = mediaResponses(item.Media)
 		statuses = append(statuses, status)
 	}
 	return statuses
