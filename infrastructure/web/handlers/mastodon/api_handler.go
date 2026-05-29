@@ -722,6 +722,13 @@ func (h APIHandler) authenticate(c *fiber.Ctx) (*oauth.AuthenticatedUser, *domai
 	return h.oauth.AuthenticateBearer(c.UserContext(), bearer)
 }
 
+type mentionResponse struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Acct     string `json:"acct"`
+	URL      string `json:"url"`
+}
+
 type statusResponse struct {
 	ID                 string                    `json:"id"`
 	URI                string                    `json:"uri"`
@@ -735,7 +742,7 @@ type statusResponse struct {
 	Sensitive          bool                      `json:"sensitive"`
 	SpoilerText        string                    `json:"spoiler_text"`
 	MediaAttachments   []mediaAttachmentResponse `json:"media_attachments"`
-	Mentions           []any                     `json:"mentions"`
+	Mentions           []mentionResponse         `json:"mentions"`
 	Tags               []any                     `json:"tags"`
 	Emojis             []any                     `json:"emojis"`
 	RepliesCount       int                       `json:"replies_count"`
@@ -769,6 +776,7 @@ func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
 		}
 		status.InReplyToAccountID = item.InReplyToAccountID
 		status.MediaAttachments = mediaResponses(item.Media)
+		status.Mentions = mentionResponses(item.Mentions)
 		status.ReblogsCount = item.ReblogsCount
 		status.Reblogged = item.Reblogged
 		status.Favourited = item.Favourited
@@ -784,6 +792,14 @@ func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
 	return statuses
 }
 
+func mentionResponses(mentions []models.Mention) []mentionResponse {
+	res := make([]mentionResponse, 0, len(mentions))
+	for _, mention := range mentions {
+		res = append(res, mentionResponse{ID: mention.AccountID, Username: mention.Username, Acct: mention.Acct, URL: mention.URL})
+	}
+	return res
+}
+
 func noteToStatus(note models.Note, account *models.Account) statusResponse {
 	created := note.PublishedAt
 	if created.IsZero() {
@@ -796,5 +812,5 @@ func noteToStatus(note models.Note, account *models.Account) statusResponse {
 	if visibility == "" {
 		visibility = "public"
 	}
-	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: visibility, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []any{}, Tags: []any{}, Emojis: []any{}}
+	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: visibility, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []mentionResponse{}, Tags: []any{}, Emojis: []any{}}
 }

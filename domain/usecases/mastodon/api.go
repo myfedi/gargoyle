@@ -34,6 +34,7 @@ type Config struct {
 	SocialRepo         repos.SocialRepository
 	BoostsRepo         repos.BoostsRepository
 	ConversationsRepo  repos.ConversationsRepository
+	MentionsRepo       repos.MentionsRepository
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	IDGenerator        ports.IDGenerator
 	RemoteResolver     RemoteAccountResolver
@@ -80,6 +81,7 @@ type TimelineItem struct {
 	Account            models.Account
 	InReplyToAccountID *string
 	Media              []models.MediaAttachment
+	Mentions           []models.Mention
 	Reblog             *TimelineItem
 	Reblogged          bool
 	Favourited         bool
@@ -133,6 +135,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.ConversationsRepo == nil {
 		panic("mastodon API use case requires ConversationsRepo")
+	}
+	if cfg.MentionsRepo == nil {
+		panic("mastodon API use case requires MentionsRepo")
 	}
 	if cfg.RemoteAccountsRepo == nil {
 		panic("mastodon API use case requires RemoteAccountsRepo")

@@ -8,6 +8,7 @@ import (
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
+	"github.com/myfedi/gargoyle/domain/ports/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 )
 
@@ -74,6 +75,9 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 		if err := u.cfg.MediaRepo.AttachMediaToNote(ctx, nil, note.ID, item.ID); err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
+	}
+	if derr := u.persistMentions(ctx, account.ID, note.ID, mentions); derr != nil {
+		return nil, derr
 	}
 	if derr := u.createLocalStatusNotifications(ctx, account, note.ID, mentions); derr != nil {
 		return nil, derr
@@ -176,6 +180,33 @@ func applyVisibilityAddressing(noteDoc map[string]any, visibility string, accoun
 		noteDoc["to"] = append([]string{public}, mentionURIs...)
 		noteDoc["cc"] = []string{account.FollowersURI}
 	}
+}
+
+func (u UseCase) persistMentions(ctx context.Context, localAccountID string, noteID string, mentions []models.Account) *domainerrors.DomainError {
+	for _, mention := range mentions {
+		input := repos.CreateMentionInput{LocalAccountID: localAccountID, NoteID: noteID, AccountID: mention.ID, Username: mention.Username, Acct: mentionAcct(mention), URL: mentionURL(mention, u.cfg.Host)}
+		if _, err := u.cfg.MentionsRepo.CreateMention(ctx, nil, input); err != nil {
+			return domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+	}
+	return nil
+}
+
+func mentionAcct(account models.Account) string {
+	if account.Domain != nil && *account.Domain != "" {
+		return account.Username + "@" + *account.Domain
+	}
+	return account.Username
+}
+
+func mentionURL(account models.Account, host string) string {
+	if account.URL != nil && *account.URL != "" {
+		return *account.URL
+	}
+	if account.Domain == nil {
+		return strings.TrimRight(host, "/") + "/@" + account.Username
+	}
+	return account.URI
 }
 
 func (u UseCase) createLocalStatusNotifications(ctx context.Context, actor *models.Account, statusID string, mentions []models.Account) *domainerrors.DomainError {

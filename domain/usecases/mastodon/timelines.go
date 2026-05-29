@@ -99,7 +99,11 @@ func (u UseCase) timelineItem(ctx context.Context, localAccount *models.Account,
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	return &TimelineItem{ID: note.ID, URI: note.URI, CreatedAt: note.PublishedAt, Note: note, Account: author, InReplyToAccountID: replyAccountID, Media: media, ReblogsCount: reblogsCount, Reblogged: reblogged, Favourited: favourited, Bookmarked: bookmarked}, nil
+	mentions, err := u.cfg.MentionsRepo.ListMentionsForNote(ctx, nil, note.ID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return &TimelineItem{ID: note.ID, URI: note.URI, CreatedAt: note.PublishedAt, Note: note, Account: author, InReplyToAccountID: replyAccountID, Media: media, Mentions: mentions, ReblogsCount: reblogsCount, Reblogged: reblogged, Favourited: favourited, Bookmarked: bookmarked}, nil
 }
 
 func (u UseCase) boostTimelineItems(ctx context.Context, localAccount *models.Account, boosts []models.Boost) ([]TimelineItem, *domainerrors.DomainError) {
