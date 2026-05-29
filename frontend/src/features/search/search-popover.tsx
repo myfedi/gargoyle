@@ -46,9 +46,9 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
   }
 
   return (
-    <div className="border-t border-border bg-background/98 shadow-sm">
-      <div className="mx-auto max-w-3xl px-4 py-4 md:px-6">
-        <div className="rounded-lg border border-border bg-card p-4 shadow-lg">
+    <div className="absolute left-0 right-0 top-full z-30 border-t border-border bg-transparent px-4 pt-3 md:px-6">
+      <div className="mx-auto max-w-3xl">
+        <div className="rounded-lg border border-border bg-card p-4 shadow-xl">
           <AccountCombobox
             value={query}
             onValueChange={(value) => {
