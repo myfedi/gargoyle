@@ -1,7 +1,6 @@
 import {
   Mail,
   MessageSquareText,
-  Search,
   UserCircle,
 } from "lucide-react";
 
@@ -18,12 +17,6 @@ export const navItems: NavItem[] = [
     label: "Timeline",
     description: "Posts and recent activity",
     icon: MessageSquareText,
-  },
-  {
-    href: "#/search",
-    label: "Search",
-    description: "Find people",
-    icon: Search,
   },
   {
     href: "#/profile",

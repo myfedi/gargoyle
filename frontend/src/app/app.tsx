@@ -1,6 +1,6 @@
 import type React from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Bell, LogOut, Menu, Settings } from "lucide-react";
+import { Bell, LogOut, Menu, Search, Settings } from "lucide-react";
 
 import { AuthProvider, useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { DirectMessagesPage } from "@/features/direct/direct-messages-page";
 import { NotificationsPage } from "@/features/notifications/notifications-page";
 import { PostsPage } from "@/features/posts/posts-page";
 import { MyProfilePage } from "@/features/profile/my-profile-page";
-import { SearchPage } from "@/features/search/search-page";
+import { SearchPopover } from "@/features/search/search-popover";
 import { SettingsPage } from "@/features/settings/settings-page";
 import { StatusPage } from "@/features/status/status-page";
 import { ApiError } from "@/lib/api";
@@ -22,7 +22,6 @@ import { navItems } from "./navigation";
 const routes = {
   "/": PostsPage,
   "/profile": MyProfilePage,
-  "/search": SearchPage,
   "/notifications": NotificationsPage,
   "/direct": DirectMessagesPage,
   "/settings": SettingsPage,
@@ -41,6 +40,7 @@ function AuthenticatedApp() {
   const [account, setAccount] = useState<MastodonAccount | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const route = useHashRoute();
   const RoutePage = routes[route as keyof typeof routes];
   const page = renderRoute(route, RoutePage);
@@ -131,6 +131,15 @@ function AuthenticatedApp() {
           </nav>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant={isSearchOpen ? "secondary" : "ghost"}
+              size="icon"
+              aria-label="Search"
+              aria-expanded={isSearchOpen}
+              onClick={() => setIsSearchOpen((current) => !current)}
+            >
+              <Search className="size-4" aria-hidden="true" />
+            </Button>
             <Button asChild variant="ghost" size="icon" aria-label="Notifications">
               <a href="/#/notifications">
                 <Bell className="size-4" aria-hidden="true" />
@@ -156,6 +165,7 @@ function AuthenticatedApp() {
             </Button>
           </div>
         </div>
+        {isSearchOpen ? <SearchPopover onClose={() => setIsSearchOpen(false)} /> : null}
         {isMobileNavOpen ? (
           <nav aria-label="Mobile primary" className="border-t border-border px-3 py-3 md:hidden">
             <div className="grid gap-1 sm:grid-cols-2">
