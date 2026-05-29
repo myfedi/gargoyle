@@ -9,7 +9,7 @@ type AccountComboboxProps = {
   value: string;
   onValueChange: (value: string) => void;
   onSelect: (account: MastodonAccount) => void;
-  onResolve: (query: string) => Promise<void> | void;
+  onResolve: (query: string) => Promise<MastodonAccount[] | void> | MastodonAccount[] | void;
   searchKnownAccounts: (query: string) => Promise<MastodonAccount[]>;
   isResolving?: boolean;
   placeholder?: string;
@@ -55,7 +55,11 @@ export function AccountCombobox({
             const normalizedQuery = normalizeRemoteQuery(trimmedValue);
             if (accounts.length === 0 && isResolvableRemoteQuery(trimmedValue) && resolvedQueryRef.current !== normalizedQuery) {
               resolvedQueryRef.current = normalizedQuery;
-              void onResolve(normalizedQuery);
+              void Promise.resolve(onResolve(normalizedQuery)).then((resolvedAccounts) => {
+                if (searchIdRef.current === searchId && Array.isArray(resolvedAccounts)) {
+                  setResults(resolvedAccounts);
+                }
+              });
             }
           }
         })
@@ -76,7 +80,7 @@ export function AccountCombobox({
 
   const normalizedValue = normalizeRemoteQuery(trimmedValue);
   const hasTriedRemote = resolvedQueryRef.current === normalizedValue;
-  const showRemoteHint = useMemo(() => canResolve && results.length === 0 && !isSearching && !hasTriedRemote, [canResolve, hasTriedRemote, isSearching, results.length]);
+  const showRemoteHint = useMemo(() => canResolve && results.length === 0 && !isSearching && !isResolving && !hasTriedRemote, [canResolve, hasTriedRemote, isResolving, isSearching, results.length]);
 
   return (
     <div className="relative">
@@ -130,6 +134,8 @@ export function AccountCombobox({
             </div>
           ) : showRemoteHint ? (
             <p className="p-3 text-sm text-muted-foreground">Looking up remote account...</p>
+          ) : canResolve && hasTriedRemote ? (
+            <p className="p-3 text-sm text-muted-foreground">No account found.</p>
           ) : (
             <p className="p-3 text-sm text-muted-foreground">No known accounts.</p>
           )}
