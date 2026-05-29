@@ -279,8 +279,7 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 			return web.HandleDomainError(c, err)
 		}
 	}
-	status := noteToStatus(res.Note, principal.Account)
-	status.MediaAttachments = mediaResponses(res.Media)
+	status := timelineItemsToStatuses([]mastodonUC.TimelineItem{{ID: res.Note.ID, URI: res.Note.URI, CreatedAt: res.Note.PublishedAt, Note: res.Note, Account: res.Account, Media: res.Media, Mentions: res.Mentions}})[0]
 	return c.JSON(status)
 }
 

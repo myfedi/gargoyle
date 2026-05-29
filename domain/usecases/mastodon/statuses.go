@@ -79,13 +79,17 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	if derr := u.persistMentions(ctx, account.ID, note.ID, mentions); derr != nil {
 		return nil, derr
 	}
+	storedMentions, err := u.cfg.MentionsRepo.ListMentionsForNote(ctx, nil, note.ID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
 	if derr := u.createLocalStatusNotifications(ctx, account, note.ID, mentions); derr != nil {
 		return nil, derr
 	}
 	note.Visibility = visibility
 	note.Sensitive = input.Sensitive
 	note.SpoilerText = input.SpoilerText
-	return &CreateStatusResult{Note: *note, Account: res.Account, Media: media, RawJSON: res.RawJSON, FollowerInboxes: res.FollowerInboxes, MentionInboxes: mentionInboxes(mentions)}, nil
+	return &CreateStatusResult{Note: *note, Account: res.Account, Media: media, Mentions: storedMentions, RawJSON: res.RawJSON, FollowerInboxes: res.FollowerInboxes, MentionInboxes: mentionInboxes(mentions)}, nil
 }
 
 func (u UseCase) statusMedia(ctx context.Context, account *models.Account, mediaIDs []string) ([]models.MediaAttachment, *domainerrors.DomainError) {
