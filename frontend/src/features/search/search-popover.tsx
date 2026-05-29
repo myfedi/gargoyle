@@ -17,7 +17,6 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
   const { session } = useAuth();
   const [query, setQuery] = useState("");
   const [isResolving, setIsResolving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
 
   const searchKnownAccounts = useCallback(async (searchQuery: string) => {
@@ -33,7 +32,6 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
   async function resolveAccount(searchQuery: string) {
     if (!api || !searchQuery.trim()) return;
     setIsResolving(true);
-    setError(null);
 
     try {
       if (isLocalUrl(searchQuery)) {
@@ -41,9 +39,6 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
       }
       const search = await api.searchAccounts(normalizeRemoteQuery(searchQuery));
       return search.accounts;
-    } catch (caughtError) {
-      const message = caughtError instanceof Error ? caughtError.message : "Could not look up account.";
-      setError(message.includes("private address") ? "That looks like a local profile URL, but no local account matched it." : message);
     } finally {
       setIsResolving(false);
     }
@@ -80,8 +75,6 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
             onSelect={openAccount}
             onResolve={resolveAccount}
           />
-
-          {error ? <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}
 
           {query.trim().length === 0 ? (
             <div className="mt-4">

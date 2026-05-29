@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
+import { ApiError } from "@/lib/api";
 import { htmlToPlainText } from "@/lib/text";
 import type { MastodonAccount } from "@/types/mastodon";
 
@@ -26,8 +27,10 @@ export function AccountCombobox({
 }: AccountComboboxProps) {
   const [results, setResults] = useState<MastodonAccount[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isRemoteLookupRunning, setIsRemoteLookupRunning] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
   const trimmedValue = value.trim();
   const canResolve = isResolvableRemoteQuery(trimmedValue);
   const searchIdRef = useRef(0);
@@ -37,7 +40,9 @@ export function AccountCombobox({
     if (trimmedValue.length < 2) {
       setResults([]);
       setIsOpen(false);
-      setError(null);
+      setLocalError(null);
+      setRemoteError(null);
+      setIsRemoteLookupRunning(false);
       return;
     }
 
@@ -46,26 +51,43 @@ export function AccountCombobox({
     const timeout = window.setTimeout(() => {
       setIsSearching(true);
       setIsOpen(true);
-      setError(null);
+      setLocalError(null);
+      setRemoteError(null);
 
       searchKnownAccounts(knownAccountSearchQuery(trimmedValue))
         .then((accounts) => {
-          if (searchIdRef.current === searchId) {
-            setResults(accounts);
-            const normalizedQuery = normalizeRemoteQuery(trimmedValue);
-            if (accounts.length === 0 && isResolvableRemoteQuery(trimmedValue) && resolvedQueryRef.current !== normalizedQuery) {
-              resolvedQueryRef.current = normalizedQuery;
-              void Promise.resolve(onResolve(normalizedQuery)).then((resolvedAccounts) => {
+          if (searchIdRef.current !== searchId) return;
+
+          setResults(accounts);
+          const normalizedQuery = normalizeRemoteQuery(trimmedValue);
+          if (accounts.length === 0 && isResolvableRemoteQuery(trimmedValue) && resolvedQueryRef.current !== normalizedQuery) {
+            resolvedQueryRef.current = normalizedQuery;
+            setIsRemoteLookupRunning(true);
+            Promise.resolve(onResolve(normalizedQuery))
+              .then((resolvedAccounts) => {
                 if (searchIdRef.current === searchId && Array.isArray(resolvedAccounts)) {
                   setResults(resolvedAccounts);
+                  if (resolvedAccounts.length === 0) {
+                    setRemoteError("No remote account found.");
+                  }
+                }
+              })
+              .catch((caughtError: unknown) => {
+                if (searchIdRef.current === searchId) {
+                  setRemoteError(remoteLookupMessage(caughtError, trimmedValue));
+                }
+              })
+              .finally(() => {
+                if (searchIdRef.current === searchId) {
+                  setIsRemoteLookupRunning(false);
                 }
               });
-            }
           }
         })
-        .catch((caughtError: unknown) => {
+        .catch(() => {
           if (searchIdRef.current === searchId) {
-            setError(caughtError instanceof Error ? caughtError.message : "Could not search accounts.");
+            setLocalError("Could not search local accounts.");
+            setResults([]);
           }
         })
         .finally(() => {
@@ -80,7 +102,11 @@ export function AccountCombobox({
 
   const normalizedValue = normalizeRemoteQuery(trimmedValue);
   const hasTriedRemote = resolvedQueryRef.current === normalizedValue;
-  const showRemoteHint = useMemo(() => canResolve && results.length === 0 && !isSearching && !isResolving && !hasTriedRemote, [canResolve, hasTriedRemote, isResolving, isSearching, results.length]);
+  const isLookingUpRemote = isResolving || isRemoteLookupRunning;
+  const showRemoteHint = useMemo(
+    () => canResolve && results.length === 0 && !isSearching && !isLookingUpRemote && !hasTriedRemote,
+    [canResolve, hasTriedRemote, isLookingUpRemote, isSearching, results.length],
+  );
 
   return (
     <div className="relative">
@@ -91,6 +117,8 @@ export function AccountCombobox({
           onChange={(event) => {
             onValueChange(event.target.value);
             resolvedQueryRef.current = null;
+            setRemoteError(null);
+            setLocalError(null);
             setIsOpen(true);
           }}
           onFocus={() => trimmedValue.length >= 2 && setIsOpen(true)}
@@ -107,8 +135,6 @@ export function AccountCombobox({
             <div className="space-y-2 p-3" aria-label="Searching accounts">
               {[0, 1, 2].map((item) => <div key={item} className="h-12 animate-pulse rounded-md bg-secondary" />)}
             </div>
-          ) : error ? (
-            <p className="p-3 text-sm text-destructive">{error}</p>
           ) : results.length > 0 ? (
             <div className="max-h-80 overflow-auto p-1">
               {results.map((account) => (
@@ -128,14 +154,18 @@ export function AccountCombobox({
                 </button>
               ))}
             </div>
-          ) : isResolving ? (
+          ) : isLookingUpRemote ? (
             <div className="space-y-2 p-3" aria-label="Looking up remote account">
               {[0, 1].map((item) => <div key={item} className="h-12 animate-pulse rounded-md bg-secondary" />)}
             </div>
+          ) : remoteError ? (
+            <p className="p-3 text-sm text-destructive">{remoteError}</p>
+          ) : localError ? (
+            <p className="p-3 text-sm text-destructive">{localError}</p>
           ) : showRemoteHint ? (
             <p className="p-3 text-sm text-muted-foreground">Looking up remote account...</p>
           ) : canResolve && hasTriedRemote ? (
-            <p className="p-3 text-sm text-muted-foreground">No account found.</p>
+            <p className="p-3 text-sm text-muted-foreground">No remote account found.</p>
           ) : (
             <p className="p-3 text-sm text-muted-foreground">No known accounts.</p>
           )}
@@ -172,8 +202,31 @@ export function normalizeRemoteQuery(value: string) {
   return query;
 }
 
+function remoteLookupMessage(error: unknown, query: string) {
+  const message = error instanceof Error ? error.message : "Could not look up that remote account.";
+  if (message.toLowerCase().includes("private address")) {
+    return "That URL points to a private or local address. Try the account handle instead.";
+  }
+  if (error instanceof ApiError && error.status === 404) {
+    return "No remote account found.";
+  }
+  if (isProfileUrl(query)) {
+    return "Could not look up that profile URL.";
+  }
+  return "Could not look up that remote account.";
+}
+
 function isResolvableRemoteQuery(value: string) {
   return value.startsWith("http://") || value.startsWith("https://") || /^@?[^@\s]+@[^@\s]+$/.test(value);
+}
+
+function isProfileUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return /^\/(?:@|users\/)[^/]+\/?$/.test(url.pathname);
+  } catch {
+    return false;
+  }
 }
 
 function handleFromProfileUrl(value: string) {

@@ -38,13 +38,7 @@ export function DirectMessageForm({ forwardedStatus, onSent, onCancel }: DirectM
 
     try {
       const search = await api.searchAccounts(normalizeRemoteQuery(searchQuery));
-      if (search.accounts[0]) {
-        chooseRecipient(search.accounts[0]);
-      } else {
-        setError("No account found.");
-      }
-    } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Could not look up account.");
+      return search.accounts;
     } finally {
       setIsResolving(false);
     }
@@ -91,7 +85,7 @@ export function DirectMessageForm({ forwardedStatus, onSent, onCancel }: DirectM
         isResolving={isResolving}
         placeholder="Choose a recipient"
         onSelect={chooseRecipient}
-        onResolve={(searchQuery) => void resolveAccount(searchQuery)}
+        onResolve={resolveAccount}
       />
 
       <Textarea
