@@ -48,7 +48,7 @@ export function AccountCombobox({
       setIsOpen(true);
       setError(null);
 
-      searchKnownAccounts(trimmedValue)
+      searchKnownAccounts(knownAccountSearchQuery(trimmedValue))
         .then((accounts) => {
           if (searchIdRef.current === searchId) {
             setResults(accounts);
@@ -145,6 +145,20 @@ export function AccountCombobox({
   );
 }
 
+export function knownAccountSearchQuery(value: string) {
+  const query = value.trim();
+  const profileHandle = handleFromProfileUrl(query);
+  if (profileHandle) {
+    return profileHandle;
+  }
+
+  if (query.endsWith("@")) {
+    return query.slice(0, -1);
+  }
+
+  return query;
+}
+
 export function normalizeRemoteQuery(value: string) {
   const query = value.trim();
   if (query.startsWith("http://") || query.startsWith("https://") || query.startsWith("@")) {
@@ -160,4 +174,14 @@ export function normalizeRemoteQuery(value: string) {
 
 function isResolvableRemoteQuery(value: string) {
   return value.startsWith("http://") || value.startsWith("https://") || /^@?[^@\s]+@[^@\s]+$/.test(value);
+}
+
+function handleFromProfileUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(/^\/(?:@|users\/)([^/@\s]+)@*\/?$/);
+    return match?.[1]?.replace(/@+$/, "") || null;
+  } catch {
+    return null;
+  }
 }

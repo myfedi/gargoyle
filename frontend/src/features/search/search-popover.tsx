@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
-import { AccountCombobox, normalizeRemoteQuery } from "@/features/accounts/account-combobox";
+import { AccountCombobox, knownAccountSearchQuery, normalizeRemoteQuery } from "@/features/accounts/account-combobox";
 import { EmptyState } from "@/features/shared";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { accountHref } from "@/lib/routes";
@@ -22,7 +22,7 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
 
   const searchKnownAccounts = useCallback(async (searchQuery: string) => {
     if (!api) return [];
-    return api.searchKnownAccounts(searchQuery);
+    return api.searchKnownAccounts(knownAccountSearchQuery(searchQuery));
   }, [api]);
 
   function openAccount(account: MastodonAccount) {
@@ -36,10 +36,14 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
     setError(null);
 
     try {
+      if (isLocalUrl(searchQuery)) {
+        return [];
+      }
       const search = await api.searchAccounts(normalizeRemoteQuery(searchQuery));
       return search.accounts;
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Could not look up account.");
+      const message = caughtError instanceof Error ? caughtError.message : "Could not look up account.";
+      setError(message.includes("private address") ? "That looks like a local profile URL, but no local account matched it." : message);
     } finally {
       setIsResolving(false);
     }
@@ -89,4 +93,13 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
       </div>
     </>
   );
+}
+
+function isLocalUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname === window.location.hostname;
+  } catch {
+    return false;
+  }
 }
