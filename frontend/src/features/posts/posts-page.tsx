@@ -182,7 +182,7 @@ export function PostsPage() {
     setPublishError(null);
 
     try {
-      await api.createStatus({
+      const createdStatus = await api.createStatus({
         status: values.status,
         visibility: values.visibility,
         sensitive: values.sensitive,
@@ -190,7 +190,7 @@ export function PostsPage() {
         media_ids: values.mediaIds,
       });
       if (activeTimeline === "home") {
-        await loadTimeline(activeTimeline, { silent: true });
+        setStatuses((current) => [createdStatus, ...current]);
       }
     } catch (caughtError) {
       setPublishError(caughtError instanceof Error ? caughtError.message : "Could not publish post.");
