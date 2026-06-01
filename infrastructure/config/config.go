@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -35,7 +36,9 @@ type WebConfig struct {
 }
 
 type MediaConfig struct {
-	StorageDir string `mapstructure:"storage_dir"`
+	StorageDir      string        `mapstructure:"storage_dir"`
+	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
+	UnattachedTTL   time.Duration `mapstructure:"unattached_ttl"`
 }
 
 type Config struct {
@@ -104,6 +107,8 @@ func NewConfig(configFile string) (*Config, error) {
 	viper.SetDefault("web.cors.allowed_headers", []string{"Authorization", "Content-Type"})
 	viper.SetDefault("web.cors.allow_credentials", false)
 	viper.SetDefault("media.storage_dir", "./media")
+	viper.SetDefault("media.cleanup_interval", "1h")
+	viper.SetDefault("media.unattached_ttl", "24h")
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
@@ -203,6 +208,12 @@ func verifyConfig(cfg *Config) error {
 	}
 	if strings.TrimSpace(cfg.Media.StorageDir) == "" {
 		return fmt.Errorf("media.storage_dir cannot be empty")
+	}
+	if cfg.Media.CleanupInterval <= 0 {
+		return fmt.Errorf("media.cleanup_interval must be greater than 0")
+	}
+	if cfg.Media.UnattachedTTL <= 0 {
+		return fmt.Errorf("media.unattached_ttl must be greater than 0")
 	}
 
 	// verify database config

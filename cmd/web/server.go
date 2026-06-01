@@ -186,6 +186,7 @@ func main() {
 	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Deliverer: userProfileHandler.ActivityDeliverer()}).Start(workerCtx)
 	hydrateRemoteObjectUC := apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{Fetcher: mastodon.NewRemoteObjectFetcher(nil, mastodonRemoteURLExceptions), ActivitiesRepo: activitiesRepo, NotesRepo: notesRepo, Sanitizer: contentSanitizer})
 	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Hydrater: hydrateRemoteObjectUC}).Start(workerCtx)
+	jobs.NewMediaCleanupWorker(jobs.MediaCleanupWorkerConfig{MediaRepo: mediaRepo, Storage: mediaStorage, Interval: config.Media.CleanupInterval, UnattachedTTL: config.Media.UnattachedTTL}).Start(workerCtx)
 
 	/// run server
 

@@ -11,6 +11,8 @@ sqlite:
 media:
   # Uploaded media bytes are stored on disk; only metadata is kept in SQLite.
   storage_dir: "./media"
+  cleanup_interval: "1h"
+  unattached_ttl: "24h"
 
 # Optional CORS support for browser UIs hosted on a different origin.
 # Prefer same-origin reverse proxying when possible. If this list is empty or
