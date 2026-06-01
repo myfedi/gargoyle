@@ -113,9 +113,49 @@ func (r *MediaRepo) ListMediaForNote(ctx context.Context, tx *dbPorts.Tx, noteID
 	if err != nil {
 		return nil, err
 	}
+	return mediaRowsToModels(rows), nil
+}
+
+func (r *MediaRepo) ListUnattachedMediaOlderThan(ctx context.Context, tx *dbPorts.Tx, cutoff time.Time, limit int) ([]models.MediaAttachment, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	var rows []dbModels.MediaAttachment
+	err = db.NewSelect().Model(&rows).
+		Where("created_at < ?", cutoff).
+		Where("NOT EXISTS (SELECT 1 FROM note_media_attachments nma WHERE nma.media_id = media_attachment.id)").
+		Order("created_at ASC").
+		Limit(limit).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mediaRowsToModels(rows), nil
+}
+
+func (r *MediaRepo) ListMediaWithoutStorage(ctx context.Context, tx *dbPorts.Tx, limit int) ([]models.MediaAttachment, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	var rows []dbModels.MediaAttachment
+	if err := db.NewSelect().Model(&rows).Where("storage_path = ''").Order("created_at ASC").Limit(limit).Scan(ctx); err != nil {
+		return nil, err
+	}
+	return mediaRowsToModels(rows), nil
+}
+
+func mediaRowsToModels(rows []dbModels.MediaAttachment) []models.MediaAttachment {
 	res := make([]models.MediaAttachment, 0, len(rows))
 	for _, row := range rows {
 		res = append(res, row.ToModel())
 	}
-	return res, nil
+	return res
 }

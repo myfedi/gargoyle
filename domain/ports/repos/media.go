@@ -2,6 +2,7 @@ package repos
 
 import (
 	"context"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/ports/db"
@@ -23,4 +24,6 @@ type MediaRepository interface {
 	MediaAttachmentIsAttached(ctx context.Context, tx *db.Tx, id string) (bool, error)
 	AttachMediaToNote(ctx context.Context, tx *db.Tx, noteID string, mediaID string) error
 	ListMediaForNote(ctx context.Context, tx *db.Tx, noteID string) ([]models.MediaAttachment, error)
+	ListUnattachedMediaOlderThan(ctx context.Context, tx *db.Tx, cutoff time.Time, limit int) ([]models.MediaAttachment, error)
+	ListMediaWithoutStorage(ctx context.Context, tx *db.Tx, limit int) ([]models.MediaAttachment, error)
 }

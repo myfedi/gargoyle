@@ -46,8 +46,15 @@ func (u UseCase) DeleteStatus(ctx context.Context, localAccount *models.Account,
 	if err != nil || note.LocalAccountID != localAccount.ID || note.AttributedTo != localAccount.URI {
 		return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
 	}
+	media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
 	if err := u.cfg.NotesRepo.DeleteNoteByID(ctx, nil, statusID); err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	if derr := u.cleanupUnreferencedMedia(ctx, media); derr != nil {
+		return nil, derr
 	}
 	deleteID, err := u.cfg.IDGenerator.NewID()
 	if err != nil {

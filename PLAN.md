@@ -145,6 +145,9 @@ Useful for search, actor refresh, missing referenced objects, and remote status 
 - [x] Persist and render `spoiler_text`.
 - [x] Support `in_reply_to_id`.
 - [x] Media upload and media attachment responses.
+- [x] Store uploaded media on disk with DB metadata only.
+- [x] Delete unreferenced media files when statuses are deleted.
+- [x] Add admin cleanup for broken media metadata and old unattached uploads.
 - [x] Federate remote mentions in status addressing.
 - [x] Exclude non-public statuses from ActivityPub outbox collection reads.
 - [x] Exclude non-public statuses from public timelines.

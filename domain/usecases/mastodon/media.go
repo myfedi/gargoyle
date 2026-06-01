@@ -2,6 +2,7 @@ package mastodon
 
 import (
 	"context"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -17,6 +18,11 @@ type UploadMediaInput struct {
 
 type UpdateMediaInput struct {
 	Description string
+}
+
+type CleanupMediaResult struct {
+	DeletedUnattached int
+	DeletedBroken     int
 }
 
 func (u UseCase) UploadMedia(ctx context.Context, account *models.Account, input UploadMediaInput) (*models.MediaAttachment, *domainerrors.DomainError) {
@@ -73,6 +79,41 @@ func (u UseCase) UpdateMedia(ctx context.Context, account *models.Account, id st
 	return updated, nil
 }
 
+func (u UseCase) CleanupMedia(ctx context.Context, olderThan time.Duration, limit int) (*CleanupMediaResult, *domainerrors.DomainError) {
+	if olderThan <= 0 {
+		olderThan = 24 * time.Hour
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	res := &CleanupMediaResult{}
+	broken, err := u.cfg.MediaRepo.ListMediaWithoutStorage(ctx, nil, limit)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	for _, media := range broken {
+		if err := u.cfg.MediaRepo.DeleteMediaAttachment(ctx, nil, media.ID); err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		res.DeletedBroken++
+	}
+	remaining := limit - res.DeletedBroken
+	if remaining <= 0 {
+		return res, nil
+	}
+	unattached, err := u.cfg.MediaRepo.ListUnattachedMediaOlderThan(ctx, nil, time.Now().UTC().Add(-olderThan), remaining)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	for _, media := range unattached {
+		if err := u.deleteMediaFilesAndRow(ctx, media); err != nil {
+			return nil, err
+		}
+		res.DeletedUnattached++
+	}
+	return res, nil
+}
+
 func (u UseCase) DeleteMedia(ctx context.Context, account *models.Account, id string) *domainerrors.DomainError {
 	media, derr := u.getOwnedMedia(ctx, account, id)
 	if derr != nil {
@@ -85,11 +126,31 @@ func (u UseCase) DeleteMedia(ctx context.Context, account *models.Account, id st
 	if attached {
 		return domainerrors.New(domainerrors.ErrBadRequest, "media is already attached to a status")
 	}
+	return u.deleteMediaFilesAndRow(ctx, *media)
+}
+
+func (u UseCase) deleteMediaFilesAndRow(ctx context.Context, media models.MediaAttachment) *domainerrors.DomainError {
 	if err := u.cfg.MediaRepo.DeleteMediaAttachment(ctx, nil, media.ID); err != nil {
 		return domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	if err := u.cfg.MediaStorage.DeleteMedia(ctx, media.StoragePath); err != nil {
 		return domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return nil
+}
+
+func (u UseCase) cleanupUnreferencedMedia(ctx context.Context, media []models.MediaAttachment) *domainerrors.DomainError {
+	for _, item := range media {
+		attached, err := u.cfg.MediaRepo.MediaAttachmentIsAttached(ctx, nil, item.ID)
+		if err != nil {
+			return domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		if attached {
+			continue
+		}
+		if derr := u.deleteMediaFilesAndRow(ctx, item); derr != nil {
+			return derr
+		}
 	}
 	return nil
 }

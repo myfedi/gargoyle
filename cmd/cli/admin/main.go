@@ -10,6 +10,7 @@ import (
 
 	"os"
 
+	"github.com/myfedi/gargoyle/adapters"
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/adapters/gcrypto"
 	pw "github.com/myfedi/gargoyle/adapters/password"
@@ -37,6 +38,59 @@ func main() {
 		Name:  "admin",
 		Usage: "Admin CLI for user management",
 		Commands: []*cli.Command{
+			{
+				Name:  "media-cleanup",
+				Usage: "Delete broken media metadata and unattached uploads older than a duration",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "config", Required: true},
+					&cli.DurationFlag{Name: "older-than", Value: 24 * time.Hour},
+					&cli.IntFlag{Name: "limit", Value: 100},
+				},
+				Action: func(c *cli.Context) error {
+					cfg, err := config.NewConfig(c.String("config"))
+					if err != nil {
+						return err
+					}
+					store := db.NewSqliteStore(db.SqliteStoreConfig{Debug: cfg.Debug, SqlitePath: cfg.Sqlite.Uri})
+					mediaRepo := repos.NewMediaRepo(store.Bun)
+					mediaStorage := adapters.NewLocalMediaStorage(cfg.Media.StorageDir)
+					ctx := context.Background()
+					limit := c.Int("limit")
+					if limit <= 0 || limit > 500 {
+						limit = 100
+					}
+					deletedBroken := 0
+					broken, err := mediaRepo.ListMediaWithoutStorage(ctx, nil, limit)
+					if err != nil {
+						return err
+					}
+					for _, media := range broken {
+						if err := mediaRepo.DeleteMediaAttachment(ctx, nil, media.ID); err != nil {
+							return err
+						}
+						deletedBroken++
+					}
+					deletedUnattached := 0
+					remaining := limit - deletedBroken
+					if remaining > 0 {
+						unattached, err := mediaRepo.ListUnattachedMediaOlderThan(ctx, nil, time.Now().UTC().Add(-c.Duration("older-than")), remaining)
+						if err != nil {
+							return err
+						}
+						for _, media := range unattached {
+							if err := mediaRepo.DeleteMediaAttachment(ctx, nil, media.ID); err != nil {
+								return err
+							}
+							if err := mediaStorage.DeleteMedia(ctx, media.StoragePath); err != nil {
+								return err
+							}
+							deletedUnattached++
+						}
+					}
+					fmt.Printf("deleted broken=%d unattached=%d\n", deletedBroken, deletedUnattached)
+					return nil
+				},
+			},
 			{
 				Name:  "jobs",
 				Usage: "Inspect durable delivery/fetch jobs",

@@ -126,6 +126,12 @@ go run cmd/cli/admin/main.go jobs --config ./config.yml --type delivery --status
 go run cmd/cli/admin/main.go jobs --config ./config.yml --type fetch --status pending
 ```
 
+Broken media metadata and old unattached uploads can be cleaned with:
+
+```sh
+go run cmd/cli/admin/main.go media-cleanup --config ./config.yml --older-than 24h
+```
+
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.
