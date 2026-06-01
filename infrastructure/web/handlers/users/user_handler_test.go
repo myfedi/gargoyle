@@ -24,6 +24,9 @@ type fakeDeliveryJobsRepo struct{}
 func (f fakeDeliveryJobsRepo) CreateDeliveryJob(ctx context.Context, tx *db.Tx, input repos.CreateDeliveryJobInput) (*models.DeliveryJob, error) {
 	return &models.DeliveryJob{ID: "job-1", AccountID: input.AccountID, InboxURL: input.InboxURL, Payload: input.Payload, NextAttemptAt: input.NextAttemptAt}, nil
 }
+func (f fakeDeliveryJobsRepo) ClaimDueDeliveryJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.DeliveryJob, error) {
+	return nil, nil
+}
 func (f fakeDeliveryJobsRepo) ListDueDeliveryJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.DeliveryJob, error) {
 	return nil, nil
 }
@@ -277,7 +280,6 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
 		})},
 		BodyLimitBytes:     1 << 20,
-		DeliveryQueueSize:  16,
 		AllowUnsignedInbox: true,
 		DeliveryRetries:    1,
 	})
@@ -346,65 +348,6 @@ func TestUserProfileHandlerAcceptsInboxActivities(t *testing.T) {
 	}
 }
 
-func TestUserProfileHandlerCreatesNoteFromOutboxPost(t *testing.T) {
-	app := fiber.New()
-	notes := &fakeNotesRepo{}
-	handler := NewUsersWebHandler(UsersWebHandlerConfig{
-		TxProvider:         fakeTxProvider{},
-		AccountsRepo:       fakeAccountsRepo{},
-		ActivitiesRepo:     &fakeActivitiesRepo{},
-		FollowsRepo:        &fakeFollowsRepo{},
-		NotesRepo:          notes,
-		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
-		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
-		ContentSanitizer:   adapters.NewContentSanitizer(),
-		BodyLimitBytes:     1 << 20,
-		DeliveryQueueSize:  16,
-		AllowUnsignedInbox: true,
-		DeliveryRetries:    1,
-	})
-	handler.SetupUserProfileHandler(app)
-
-	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/outbox", strings.NewReader(`{"content":"<p>hello <b>world</b></p>"}`)))
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusCreated {
-		t.Fatalf("expected 201, got %d", resp.StatusCode)
-	}
-	if len(notes.notes) != 1 {
-		t.Fatalf("expected one note, got %d", len(notes.notes))
-	}
-	if notes.notes[0].PlainText != "hello world" {
-		t.Fatalf("expected stripped plaintext, got %q", notes.notes[0].PlainText)
-	}
-}
-
-func TestUserProfileHandlerCreatesFollowing(t *testing.T) {
-	app := fiber.New()
-	follows := &fakeFollowsRepo{}
-	newTestHandler(fakeAccountsRepo{}, &fakeActivitiesRepo{}, follows).SetupUserProfileHandler(app)
-
-	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/following", strings.NewReader(`{"actor":"https://remote.example/users/bob","inbox":"https://remote.example/inbox"}`)))
-	if err != nil {
-		t.Fatalf("request failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusCreated {
-		t.Fatalf("expected 201, got %d", resp.StatusCode)
-	}
-	following, err := follows.ListFollowing(context.Background(), nil, "account-1")
-	if err != nil {
-		t.Fatalf("ListFollowing returned error: %v", err)
-	}
-	if len(following) != 1 || following[0].RemoteActor != "https://remote.example/users/bob" {
-		t.Fatalf("expected following bob, got %#v", following)
-	}
-}
-
 func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
@@ -418,7 +361,6 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
 		BodyLimitBytes:     1 << 20,
-		DeliveryQueueSize:  16,
 		AllowUnsignedInbox: true,
 		DeliveryRetries:    1,
 	})
@@ -435,6 +377,38 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 	}
 	if len(notes.notes) != 1 || notes.notes[0].PlainText != "remote" {
 		t.Fatalf("expected stored remote note, got %#v", notes.notes)
+	}
+}
+
+func TestUserProfileHandlerRejectsForgedInboundCreateAuthor(t *testing.T) {
+	app := fiber.New()
+	notes := &fakeNotesRepo{}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Create","actor":"https://remote.example/users/bob","object":{"id":"https://remote.example/notes/1","type":"Note","content":"forged","attributedTo":"https://remote.example/users/mallory","published":"2026-05-19T12:00:00Z"}}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+	if len(notes.notes) != 0 {
+		t.Fatalf("expected forged note to be rejected, got %#v", notes.notes)
 	}
 }
 

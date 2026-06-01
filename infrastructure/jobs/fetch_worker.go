@@ -59,7 +59,7 @@ func (w *FetchWorker) Start(ctx context.Context) {
 }
 
 func (w *FetchWorker) ProcessOnce(ctx context.Context) {
-	due, err := w.jobs.ListDueFetchJobs(ctx, nil, time.Now().UTC(), w.batchSize)
+	due, err := w.jobs.ClaimDueFetchJobs(ctx, nil, time.Now().UTC(), w.batchSize)
 	if err != nil {
 		return
 	}

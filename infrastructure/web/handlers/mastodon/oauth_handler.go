@@ -112,6 +112,7 @@ type tokenResponse struct {
 	TokenType   string `json:"token_type"`
 	Scope       string `json:"scope"`
 	CreatedAt   int64  `json:"created_at"`
+	ExpiresIn   int64  `json:"expires_in"`
 }
 
 func (h OAuthHandler) issueToken(c *fiber.Ctx) error {
@@ -123,7 +124,7 @@ func (h OAuthHandler) issueToken(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(tokenResponse{AccessToken: token.AccessToken, TokenType: token.TokenType, Scope: token.Scope, CreatedAt: time.Now().Unix()})
+	return c.JSON(tokenResponse{AccessToken: token.AccessToken, TokenType: token.TokenType, Scope: token.Scope, CreatedAt: token.CreatedAt, ExpiresIn: token.ExpiresIn})
 }
 
 type accountResponse struct {

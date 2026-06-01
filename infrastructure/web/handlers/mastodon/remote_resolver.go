@@ -36,10 +36,51 @@ type RemoteAccountResolver struct {
 }
 
 func NewRemoteAccountResolver(client *http.Client, exceptions []RemoteURLException) RemoteAccountResolver {
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
-	}
+	client = publicOnlyHTTPClient(client, exceptions)
 	return RemoteAccountResolver{client: client, exceptions: exceptions}
+}
+
+func publicOnlyHTTPClient(client *http.Client, exceptions []RemoteURLException) *http.Client {
+	if client == nil {
+		client = &http.Client{}
+	} else {
+		copy := *client
+		client = &copy
+	}
+	if client.Timeout == 0 {
+		client.Timeout = 10 * time.Second
+	}
+	if client.Transport == nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+		transport.DialContext = func(ctx context.Context, network string, address string) (net.Conn, error) {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return nil, err
+			}
+			conn, err := dialer.DialContext(ctx, network, address)
+			if err != nil {
+				return nil, err
+			}
+			remoteHost, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+			if err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			ip := net.ParseIP(remoteHost)
+			if ip == nil {
+				_ = conn.Close()
+				return nil, errors.New("remote connection address is not an IP")
+			}
+			if !remoteURLExceptionForHost(host, exceptions).AllowPrivateIP && !isPublicIP(ip) {
+				_ = conn.Close()
+				return nil, errors.New("remote URL dialed private address")
+			}
+			return conn, nil
+		}
+		client.Transport = transport
+	}
+	return client
 }
 
 func (r RemoteAccountResolver) ResolveAccount(ctx context.Context, query string, signer *models.Account) (*models.Account, error) {
@@ -208,11 +249,15 @@ func validateRemoteURL(ctx context.Context, raw string, exceptions []RemoteURLEx
 		return err
 	}
 	for _, ip := range ips {
-		if !exception.AllowPrivateIP && (ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsPrivate()) {
+		if !exception.AllowPrivateIP && !isPublicIP(ip) {
 			return errors.New("remote URL resolves to private address")
 		}
 	}
 	return nil
+}
+
+func isPublicIP(ip net.IP) bool {
+	return ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() && !ip.IsMulticast() && !ip.IsLinkLocalMulticast() && !ip.IsLinkLocalUnicast() && !ip.IsPrivate()
 }
 
 func remoteURLExceptionForHost(host string, exceptions []RemoteURLException) RemoteURLException {

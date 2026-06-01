@@ -18,6 +18,7 @@ type NotesRepo struct{ db bun.IDB }
 func NewNotesRepo(db *bun.DB) *NotesRepo { return &NotesRepo{db: db} }
 
 var _ repos.NotesRepository = &NotesRepo{}
+var _ repos.CommentsRepository = &NotesRepo{}
 
 func noteVisibility(visibility string) string {
 	if visibility == "" {
@@ -28,6 +29,10 @@ func noteVisibility(visibility string) string {
 
 func (r *NotesRepo) GetLocalPostsCount(ctx context.Context) (int, error) {
 	return r.db.NewSelect().Model((*dbModels.Note)(nil)).Count(ctx)
+}
+
+func (r *NotesRepo) GetLocalCommentsCount(ctx context.Context) (int, error) {
+	return r.db.NewSelect().Model((*dbModels.Note)(nil)).Where("in_reply_to_id IS NOT NULL OR in_reply_to_uri IS NOT NULL").Count(ctx)
 }
 
 func (r *NotesRepo) CreateNote(ctx context.Context, tx *dbPorts.Tx, input repos.CreateNoteInput) (*models.Note, error) {

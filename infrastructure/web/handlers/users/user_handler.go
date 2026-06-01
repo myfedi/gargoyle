@@ -16,7 +16,6 @@ import (
 	"github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
-	dbUtils "github.com/myfedi/gargoyle/infrastructure/db"
 	"github.com/myfedi/gargoyle/infrastructure/web"
 )
 
@@ -38,21 +37,18 @@ type UsersWebHandlerConfig struct {
 	HTTPClient          *http.Client
 	BodyLimitBytes      int
 	RemoteURLExceptions []RemoteURLException
-	DeliveryQueueSize   int
 	RequireSignedInbox  bool
 	AllowUnsignedInbox  bool
 	DeliveryRetries     int
 }
 
 type UsersWebHandler struct {
-	cfg                    UsersWebHandlerConfig
-	handler                apUsecases.GetUserProfileUseCase
-	getOutbox              apUsecases.GetOutboxUseCase
-	getFollowers           apUsecases.GetFollowersUseCase
-	getFollowing           apUsecases.GetFollowingUseCase
-	createFollowingUC      apUsecases.CreateFollowingUseCase
-	createOutboxActivityUC apUsecases.CreateOutboxActivityUseCase
-	handleInboxActivityUC  apUsecases.HandleInboxActivityUseCase
+	cfg                   UsersWebHandlerConfig
+	handler               apUsecases.GetUserProfileUseCase
+	getOutbox             apUsecases.GetOutboxUseCase
+	getFollowers          apUsecases.GetFollowersUseCase
+	getFollowing          apUsecases.GetFollowingUseCase
+	handleInboxActivityUC apUsecases.HandleInboxActivityUseCase
 }
 
 // NewWebfingerWebHandler creates a new Webfinger handler with the given dependencies.
@@ -144,14 +140,12 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		ContentSanitizer: cfg.ContentSanitizer,
 	}
 	h := &UsersWebHandler{
-		cfg:                    cfg,
-		handler:                handler,
-		getOutbox:              apUsecases.NewGetOutboxUseCase(flowCfg),
-		getFollowers:           apUsecases.NewGetFollowersUseCase(flowCfg),
-		getFollowing:           apUsecases.NewGetFollowingUseCase(flowCfg),
-		createFollowingUC:      apUsecases.NewCreateFollowingUseCase(flowCfg),
-		createOutboxActivityUC: apUsecases.NewCreateOutboxActivityUseCase(flowCfg),
-		handleInboxActivityUC:  apUsecases.NewHandleInboxActivityUseCase(flowCfg),
+		cfg:                   cfg,
+		handler:               handler,
+		getOutbox:             apUsecases.NewGetOutboxUseCase(flowCfg),
+		getFollowers:          apUsecases.NewGetFollowersUseCase(flowCfg),
+		getFollowing:          apUsecases.NewGetFollowingUseCase(flowCfg),
+		handleInboxActivityUC: apUsecases.NewHandleInboxActivityUseCase(flowCfg),
 	}
 	return h
 }
@@ -177,10 +171,8 @@ func (h *UsersWebHandler) SetupUserProfileHandler(app *fiber.App) {
 	})
 
 	app.Get("/users/:username/outbox", h.outboxCollection)
-	app.Post("/users/:username/outbox", h.createOutboxActivity)
 	app.Get("/users/:username/followers", h.followersCollection)
 	app.Get("/users/:username/following", h.followingCollection)
-	app.Post("/users/:username/following", h.createFollowing)
 
 	app.Post("/users/:username/inbox", h.handleInboxActivity)
 }
@@ -241,36 +233,6 @@ func (h *UsersWebHandler) followingCollection(c *fiber.Ctx) error {
 	})
 }
 
-func (h *UsersWebHandler) createFollowing(c *fiber.Ctx) error {
-	if err := ensureBodySize(c.Body(), h.cfg.BodyLimitBytes); err != nil {
-		return web.HandleDomainError(c, err)
-	}
-	var input struct {
-		Actor string `json:"actor"`
-		Inbox string `json:"inbox"`
-	}
-	if err := json.Unmarshal(c.Body(), &input); err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrBadRequest, err))
-	}
-	if input.Actor == "" {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "actor is required"))
-	}
-	followID, err := dbUtils.NewULID()
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-	res, derr := h.createFollowingUC.CreateFollowing(c.UserContext(), apUsecases.CreateFollowingInput{Username: c.Params("username"), Actor: input.Actor, Inbox: input.Inbox, FollowID: followID})
-	if derr != nil {
-		return web.HandleDomainError(c, derr)
-	}
-	if res.Inbox != "" {
-		if err := h.queueDelivery(res.RawJSON, res.Inbox, res.Account); err != nil {
-			return web.HandleDomainError(c, err)
-		}
-	}
-	return c.SendStatus(fiber.StatusCreated)
-}
-
 func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 	limit, offset := pagination(c)
 	res, derr := h.getFollowers.GetFollowers(c.UserContext(), c.Params("username"), apUsecases.PaginationInput{Limit: limit, Offset: offset})
@@ -318,30 +280,6 @@ func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {
 		}
 	}
 	return c.SendStatus(fiber.StatusAccepted)
-}
-
-func (h *UsersWebHandler) createOutboxActivity(c *fiber.Ctx) error {
-	if err := ensureBodySize(c.Body(), h.cfg.BodyLimitBytes); err != nil {
-		return web.HandleDomainError(c, err)
-	}
-	activityID, err := dbUtils.NewULID()
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-	objectID, err := dbUtils.NewULID()
-	if err != nil {
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
-	}
-	res, derr := h.createOutboxActivityUC.CreateOutboxActivity(c.UserContext(), apUsecases.CreateOutboxActivityInput{Username: c.Params("username"), RawJSON: append([]byte(nil), c.Body()...), ActivityID: activityID, ObjectID: objectID})
-	if derr != nil {
-		return web.HandleDomainError(c, derr)
-	}
-	for _, inbox := range res.FollowerInboxes {
-		if err := h.queueDelivery(res.RawJSON, inbox, res.Account); err != nil {
-			return web.HandleDomainError(c, err)
-		}
-	}
-	return c.SendStatus(fiber.StatusCreated)
 }
 
 func collectionType(c *fiber.Ctx) string {

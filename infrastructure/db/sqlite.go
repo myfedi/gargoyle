@@ -33,7 +33,16 @@ func NewSqliteStore(cfg SqliteStoreConfig) SqliteStore {
 		bun.AddQueryHook(bundebug.NewQueryHook(bundebug.WithVerbose(true)))
 	}
 
-	bun.Exec("PRAGMA foreign_keys = ON")
+	if _, err := bun.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		panic(err)
+	}
+	if _, err := bun.Exec("PRAGMA journal_mode = WAL"); err != nil {
+		panic(err)
+	}
+	if _, err := bun.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		panic(err)
+	}
+	sqlite.SetMaxOpenConns(1)
 
 	return SqliteStore{
 		Sqlite: sqlite,

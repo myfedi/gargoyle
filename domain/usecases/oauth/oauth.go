@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -23,6 +24,8 @@ type Config struct {
 	AccountsRepo repos.AccountsRepo
 	PasswordHash ports.PasswordHashProvider
 }
+
+const accessTokenTTL = 30 * 24 * time.Hour
 
 type UseCase struct{ cfg Config }
 
@@ -62,6 +65,7 @@ type IssuedToken struct {
 	TokenType   string
 	Scope       string
 	CreatedAt   int64
+	ExpiresIn   int64
 }
 
 type AuthenticatedUser struct {
@@ -152,14 +156,14 @@ func (u UseCase) IssueToken(ctx context.Context, input IssueTokenInput) (*Issued
 		return nil, derrors.New(derrors.ErrUnauthorized, "invalid client_id")
 	}
 	if input.GrantType == "password" {
-		if app.ClientSecret != input.ClientSecret {
+		if !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
 			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
 		}
 		return u.issuePasswordToken(ctx, app, input)
 	}
 	if input.GrantType == "authorization_code" {
 		clientSecretProvided := input.ClientSecret != ""
-		if clientSecretProvided && app.ClientSecret != input.ClientSecret {
+		if clientSecretProvided && !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
 			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
 		}
 		return u.issueAuthorizationCodeToken(ctx, app, input, clientSecretProvided)
@@ -204,10 +208,11 @@ func (u UseCase) issueAccessToken(ctx context.Context, applicationID string, use
 	if err != nil {
 		return nil, derrors.NewErr(derrors.ErrInternal, err)
 	}
-	if _, err := u.cfg.OAuthRepo.CreateAccessToken(ctx, nil, repos.CreateOAuthAccessTokenInput{ApplicationID: applicationID, UserID: userID, TokenHash: TokenHash(plain), Scopes: scope}); err != nil {
+	expiresAt := time.Now().UTC().Add(accessTokenTTL)
+	if _, err := u.cfg.OAuthRepo.CreateAccessToken(ctx, nil, repos.CreateOAuthAccessTokenInput{ApplicationID: applicationID, UserID: userID, TokenHash: TokenHash(plain), Scopes: scope, ExpiresAt: &expiresAt}); err != nil {
 		return nil, derrors.NewErr(derrors.ErrInternal, err)
 	}
-	return &IssuedToken{AccessToken: plain, TokenType: "Bearer", Scope: scope}, nil
+	return &IssuedToken{AccessToken: plain, TokenType: "Bearer", Scope: scope, CreatedAt: time.Now().Unix(), ExpiresIn: int64(accessTokenTTL.Seconds())}, nil
 }
 
 func (u UseCase) AuthenticateBearer(ctx context.Context, bearer string) (*AuthenticatedUser, *derrors.DomainError) {
@@ -217,6 +222,9 @@ func (u UseCase) AuthenticateBearer(ctx context.Context, bearer string) (*Authen
 	token, err := u.cfg.OAuthRepo.GetAccessTokenByHash(ctx, nil, TokenHash(bearer))
 	if err != nil {
 		return nil, derrors.New(derrors.ErrUnauthorized, "invalid bearer token")
+	}
+	if token.ExpiresAt != nil && time.Now().UTC().After(*token.ExpiresAt) {
+		return nil, derrors.New(derrors.ErrUnauthorized, "expired bearer token")
 	}
 	user, err := u.cfg.UsersRepo.GetUserByID(ctx, nil, token.UserID)
 	if err != nil {
@@ -256,6 +264,10 @@ func redirectURIMatches(registered string, requested string) bool {
 		}
 	}
 	return false
+}
+
+func constantTimeStringEqual(a string, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 func validPKCE(challenge string, method string, verifier string) bool {

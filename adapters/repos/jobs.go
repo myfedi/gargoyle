@@ -49,6 +49,38 @@ func (r *JobsRepo) CreateDeliveryJob(ctx context.Context, tx *dbPorts.Tx, input 
 	return &model, nil
 }
 
+func (r *JobsRepo) ClaimDueDeliveryJobs(ctx context.Context, tx *dbPorts.Tx, now time.Time, limit int) ([]models.DeliveryJob, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 25
+	}
+	staleBefore := now.Add(-15 * time.Minute)
+	var ids []string
+	if err := db.NewSelect().Model((*dbModels.DeliveryJob)(nil)).Column("id").WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+		return q.WhereOr("status = ? AND next_attempt_at <= ?", string(models.JobStatusPending), now).WhereOr("status = ? AND updated_at <= ?", "processing", staleBefore)
+	}).Order("next_attempt_at ASC").Limit(limit).Scan(ctx, &ids); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if _, err := db.NewUpdate().Model((*dbModels.DeliveryJob)(nil)).Set("status = ?", "processing").Set("updated_at = ?", now).Where("id IN (?)", bun.In(ids)).Exec(ctx); err != nil {
+		return nil, err
+	}
+	var rows []dbModels.DeliveryJob
+	if err := db.NewSelect().Model(&rows).Where("id IN (?)", bun.In(ids)).Order("next_attempt_at ASC").Scan(ctx); err != nil {
+		return nil, err
+	}
+	jobs := make([]models.DeliveryJob, 0, len(rows))
+	for _, row := range rows {
+		jobs = append(jobs, row.ToModel())
+	}
+	return jobs, nil
+}
+
 func (r *JobsRepo) ListDueDeliveryJobs(ctx context.Context, tx *dbPorts.Tx, now time.Time, limit int) ([]models.DeliveryJob, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
@@ -130,6 +162,38 @@ func (r *JobsRepo) CreateFetchJob(ctx context.Context, tx *dbPorts.Tx, input rep
 	}
 	model := job.ToModel()
 	return &model, nil
+}
+
+func (r *JobsRepo) ClaimDueFetchJobs(ctx context.Context, tx *dbPorts.Tx, now time.Time, limit int) ([]models.FetchJob, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 25
+	}
+	staleBefore := now.Add(-15 * time.Minute)
+	var ids []string
+	if err := db.NewSelect().Model((*dbModels.FetchJob)(nil)).Column("id").WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+		return q.WhereOr("status = ? AND next_attempt_at <= ?", string(models.JobStatusPending), now).WhereOr("status = ? AND updated_at <= ?", "processing", staleBefore)
+	}).Order("next_attempt_at ASC").Limit(limit).Scan(ctx, &ids); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if _, err := db.NewUpdate().Model((*dbModels.FetchJob)(nil)).Set("status = ?", "processing").Set("updated_at = ?", now).Where("id IN (?)", bun.In(ids)).Exec(ctx); err != nil {
+		return nil, err
+	}
+	var rows []dbModels.FetchJob
+	if err := db.NewSelect().Model(&rows).Where("id IN (?)", bun.In(ids)).Order("next_attempt_at ASC").Scan(ctx); err != nil {
+		return nil, err
+	}
+	jobs := make([]models.FetchJob, 0, len(rows))
+	for _, row := range rows {
+		jobs = append(jobs, row.ToModel())
+	}
+	return jobs, nil
 }
 
 func (r *JobsRepo) ListDueFetchJobs(ctx context.Context, tx *dbPorts.Tx, now time.Time, limit int) ([]models.FetchJob, error) {

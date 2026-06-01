@@ -22,6 +22,7 @@ type CreateOAuthAccessTokenInput struct {
 	UserID        string
 	TokenHash     string
 	Scopes        string
+	ExpiresAt     *time.Time
 }
 
 type CreateOAuthAuthorizationCodeInput struct {

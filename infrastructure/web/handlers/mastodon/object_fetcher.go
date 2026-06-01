@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 )
@@ -18,10 +17,7 @@ type RemoteObjectFetcher struct {
 }
 
 func NewRemoteObjectFetcher(client *http.Client, exceptions []RemoteURLException) RemoteObjectFetcher {
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
-	}
-	return RemoteObjectFetcher{client: client, exceptions: exceptions}
+	return RemoteObjectFetcher{client: publicOnlyHTTPClient(client, exceptions), exceptions: exceptions}
 }
 
 func (f RemoteObjectFetcher) FetchObject(ctx context.Context, objectURI string, signer *models.Account) ([]byte, error) {

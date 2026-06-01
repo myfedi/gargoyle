@@ -70,7 +70,7 @@ func (r *OAuthRepo) CreateAccessToken(ctx context.Context, tx *dbPorts.Tx, input
 	if err != nil {
 		return nil, err
 	}
-	token := &dbModels.OAuthAccessToken{ID: id, ApplicationID: input.ApplicationID, UserID: input.UserID, TokenHash: input.TokenHash, Scopes: input.Scopes}
+	token := &dbModels.OAuthAccessToken{ID: id, ApplicationID: input.ApplicationID, UserID: input.UserID, TokenHash: input.TokenHash, Scopes: input.Scopes, ExpiresAt: input.ExpiresAt}
 	if _, err := db.NewInsert().Model(token).Exec(ctx); err != nil {
 		return nil, err
 	}

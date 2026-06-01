@@ -62,7 +62,7 @@ func (w *DeliveryWorker) Start(ctx context.Context) {
 }
 
 func (w *DeliveryWorker) ProcessOnce(ctx context.Context) {
-	due, err := w.jobs.ListDueDeliveryJobs(ctx, nil, time.Now().UTC(), w.batchSize)
+	due, err := w.jobs.ClaimDueDeliveryJobs(ctx, nil, time.Now().UTC(), w.batchSize)
 	if err != nil {
 		return
 	}

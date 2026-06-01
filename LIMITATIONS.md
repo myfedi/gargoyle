@@ -1,11 +1,5 @@
 # Known Limitations
 
-## SSRF DNS rebinding protection
-
-Remote ActivityPub actor fetches and inbox deliveries validate the submitted URL and resolved IPs before issuing HTTP requests. This blocks obvious localhost, private, link-local, multicast, and unspecified targets.
-
-A stricter production-grade implementation should validate the IP address actually dialed by a custom `http.Transport.DialContext`, because DNS could theoretically change between preflight validation and connection establishment.
-
 ## HTTP Signature parser
 
 The current HTTP Signature header parser handles the common ActivityPub header shape, but it is intentionally simple. It splits on commas and `=` and does not fully implement quoted-string escaping edge cases.

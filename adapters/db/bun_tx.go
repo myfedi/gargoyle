@@ -33,16 +33,18 @@ func NewBunTxProvider(db bun.IDB) BunTxProvider {
 	return BunTxProvider{db: db}
 }
 
-// FIXME: options provided as pointer to sql.TxOptions fails detection and crashes
 func (b BunTxProvider) RunInTx(ctx context.Context, options interface{}, runIn func(ctx context.Context, tx db.Tx) error) error {
 	var opts *sql.TxOptions
 
 	if options != nil {
-		txOptions, ok := options.(sql.TxOptions)
-		if !ok {
+		switch txOptions := options.(type) {
+		case sql.TxOptions:
+			opts = &txOptions
+		case *sql.TxOptions:
+			opts = txOptions
+		default:
 			return fmt.Errorf("options not adhering to sql.TxOptions")
 		}
-		opts = &txOptions
 	}
 	return b.db.RunInTx(ctx, opts, func(ctx context.Context, tx bun.Tx) error {
 		adapted := BunTx{tx: tx}

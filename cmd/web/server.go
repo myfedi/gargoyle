@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/myfedi/gargoyle/adapters"
 	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
@@ -23,8 +26,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/myfedi/gargoyle/infrastructure/config"
-	"github.com/myfedi/gargoyle/mock"
 )
 
 func usersRemoteURLExceptions(exceptions []config.ActivityPubRemoteURLException) []users.RemoteURLException {
@@ -85,6 +88,12 @@ func main() {
 	// sets up the go-fiber server. The body limit protects ActivityPub endpoints
 	// from unbounded in-memory request bodies before handlers copy or parse them.
 	app := fiber.New(fiber.Config{BodyLimit: config.ActivityPub.BodyLimitBytes})
+	app.Use(limiter.New(limiter.Config{Max: 300, Expiration: 1 * time.Minute}))
+	app.Use("/oauth", limiter.New(limiter.Config{Max: 20, Expiration: 1 * time.Minute}))
+	app.Use("/api/v1/apps", limiter.New(limiter.Config{Max: 10, Expiration: 1 * time.Hour}))
+	app.Use("/api/v1/media", limiter.New(limiter.Config{Max: 30, Expiration: 1 * time.Minute}))
+	app.Use("/api/v2/media", limiter.New(limiter.Config{Max: 30, Expiration: 1 * time.Minute}))
+	app.Use("/users/:username/inbox", limiter.New(limiter.Config{Max: 120, Expiration: 1 * time.Minute}))
 	if len(config.Web.CORS.AllowedOrigins) > 0 {
 		app.Use(cors.New(cors.Config{
 			AllowOrigins:     strings.Join(config.Web.CORS.AllowedOrigins, ","),
@@ -114,7 +123,7 @@ func main() {
 	nodeInfoHandler := handlers.NewNodeInfoWebHandler(handlers.NodeInfoHandlerConfig{
 		UsersRepo:     usersRepo,
 		PostsRepo:     notesRepo,
-		CommentsRepo:  &mock.MockCommentsRepository{},
+		CommentsRepo:  notesRepo,
 		Host:          host,
 		ServerVersion: infra.ServerVersion,
 	})
@@ -136,7 +145,6 @@ func main() {
 		ContentSanitizer:    contentSanitizer,
 		BodyLimitBytes:      config.ActivityPub.BodyLimitBytes,
 		RemoteURLExceptions: userRemoteURLExceptions,
-		DeliveryQueueSize:   config.ActivityPub.DeliveryQueueSize,
 		RequireSignedInbox:  true,
 		DeliveryRetries:     3,
 	})
@@ -182,7 +190,8 @@ func main() {
 	})
 	mastodon.NewAPIHandler(mastodon.APIHandlerConfig{OAuth: oauthUC, API: mastodonAPIUC, QueueDelivery: userProfileHandler.QueueDelivery}).Setup(app)
 
-	workerCtx := context.Background()
+	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	defer stopWorkers()
 	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Deliverer: userProfileHandler.ActivityDeliverer()}).Start(workerCtx)
 	hydrateRemoteObjectUC := apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{Fetcher: mastodon.NewRemoteObjectFetcher(nil, mastodonRemoteURLExceptions), ActivitiesRepo: activitiesRepo, NotesRepo: notesRepo, Sanitizer: contentSanitizer})
 	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Hydrater: hydrateRemoteObjectUC}).Start(workerCtx)
@@ -190,8 +199,25 @@ func main() {
 
 	/// run server
 
-	err = app.Listen(fmt.Sprintf(":%d", config.Port))
-	if err != nil {
-		panic(err)
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- app.Listen(fmt.Sprintf(":%d", config.Port))
+	}()
+
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			panic(err)
+		}
+	case <-shutdown:
+		stopWorkers()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := app.ShutdownWithContext(ctx); err != nil {
+			panic(err)
+		}
+		_ = sqlite.Bun.Close()
 	}
 }

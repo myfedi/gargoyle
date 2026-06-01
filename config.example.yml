@@ -37,7 +37,6 @@ web:
 
 activitypub:
   body_limit_bytes: 1048576
-  delivery_queue_size: 128
   # Optional per-host exceptions for local compatibility setups. Production
   # federation should normally require HTTPS and public IP addresses.
   remote_url_exceptions: []

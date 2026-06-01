@@ -50,6 +50,9 @@ func (t httpActivityPubTransport) httpClient() *http.Client {
 	if client.Timeout == 0 {
 		client.Timeout = 10 * time.Second
 	}
+	if client.Transport == nil {
+		client.Transport = publicOnlyTransport(t.exceptions)
+	}
 	if client.CheckRedirect == nil {
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
@@ -59,6 +62,37 @@ func (t httpActivityPubTransport) httpClient() *http.Client {
 		}
 	}
 	return client
+}
+
+func publicOnlyTransport(exceptions []RemoteURLException) *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	transport.DialContext = func(ctx context.Context, network string, address string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		conn, err := dialer.DialContext(ctx, network, address)
+		if err != nil {
+			return nil, err
+		}
+		remoteHost, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		ip := net.ParseIP(remoteHost)
+		if ip == nil {
+			_ = conn.Close()
+			return nil, errors.New("remote connection address is not an IP")
+		}
+		if !remoteURLExceptionForHost(host, exceptions).AllowPrivateIP && !isPublicIP(ip) {
+			_ = conn.Close()
+			return nil, errors.New("remote URL dialed private address")
+		}
+		return conn, nil
+	}
+	return transport
 }
 
 func validateRemoteURL(ctx context.Context, raw string, exceptions []RemoteURLException) error {

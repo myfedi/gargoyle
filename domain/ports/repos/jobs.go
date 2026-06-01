@@ -18,6 +18,7 @@ type CreateDeliveryJobInput struct {
 
 type DeliveryJobsRepository interface {
 	CreateDeliveryJob(ctx context.Context, tx *db.Tx, input CreateDeliveryJobInput) (*models.DeliveryJob, error)
+	ClaimDueDeliveryJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.DeliveryJob, error)
 	ListDueDeliveryJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.DeliveryJob, error)
 	ListDeliveryJobsByStatus(ctx context.Context, tx *db.Tx, status models.JobStatus, limit int) ([]models.DeliveryJob, error)
 	MarkDeliveryJobDelivered(ctx context.Context, tx *db.Tx, id string, deliveredAt time.Time) error
@@ -33,6 +34,7 @@ type CreateFetchJobInput struct {
 
 type FetchJobsRepository interface {
 	CreateFetchJob(ctx context.Context, tx *db.Tx, input CreateFetchJobInput) (*models.FetchJob, error)
+	ClaimDueFetchJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.FetchJob, error)
 	ListDueFetchJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.FetchJob, error)
 	ListFetchJobsByStatus(ctx context.Context, tx *db.Tx, status models.JobStatus, limit int) ([]models.FetchJob, error)
 	MarkFetchJobFetched(ctx context.Context, tx *db.Tx, id string, fetchedAt time.Time) error

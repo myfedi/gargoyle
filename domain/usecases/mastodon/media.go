@@ -2,6 +2,8 @@ package mastodon
 
 import (
 	"context"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -15,6 +17,8 @@ type UploadMediaInput struct {
 	Data        []byte
 	Description string
 }
+
+const MaxMediaUploadBytes = 10 << 20
 
 type UpdateMediaInput struct {
 	Description string
@@ -32,8 +36,12 @@ func (u UseCase) UploadMedia(ctx context.Context, account *models.Account, input
 	if len(input.Data) == 0 {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "media file is required")
 	}
-	if input.ContentType == "" {
-		return nil, domainerrors.New(domainerrors.ErrBadRequest, "media content type is required")
+	if len(input.Data) > MaxMediaUploadBytes {
+		return nil, domainerrors.New(domainerrors.ErrBadRequest, "media file is too large")
+	}
+	contentType, derr := safeMediaContentType(input.ContentType, input.Data)
+	if derr != nil {
+		return nil, derr
 	}
 	id, err := u.cfg.IDGenerator.NewID()
 	if err != nil {
@@ -43,12 +51,34 @@ func (u UseCase) UploadMedia(ctx context.Context, account *models.Account, input
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	media, err := u.cfg.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: input.FileName, ContentType: input.ContentType, StoragePath: storagePath, Description: input.Description})
+	media, err := u.cfg.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: input.FileName, ContentType: contentType, StoragePath: storagePath, Description: input.Description})
 	if err != nil {
 		_ = u.cfg.MediaStorage.DeleteMedia(ctx, storagePath)
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return media, nil
+}
+
+func safeMediaContentType(declared string, data []byte) (string, *domainerrors.DomainError) {
+	declared = strings.ToLower(strings.TrimSpace(strings.Split(declared, ";")[0]))
+	sniffed := strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(data), ";")[0]))
+	allowed := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/webp": true,
+		"video/mp4":  true,
+		"audio/mpeg": true,
+		"audio/ogg":  true,
+		"audio/wav":  true,
+	}
+	if allowed[sniffed] {
+		return sniffed, nil
+	}
+	if allowed[declared] && strings.HasPrefix(declared, "video/") {
+		return declared, nil
+	}
+	return "", domainerrors.New(domainerrors.ErrBadRequest, "unsupported media content type")
 }
 
 func (u UseCase) GetMedia(ctx context.Context, id string) (*models.MediaAttachment, *domainerrors.DomainError) {

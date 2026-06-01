@@ -67,8 +67,8 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Put("/api/v1/media/:id", h.updateMedia)
 	app.Delete("/api/v1/media/:id", h.deleteMedia)
 	app.Get("/media/:id", h.media)
-	app.Head("/media/:id", h.media)
 	app.Get("/media/:id/:filename", h.media)
+	app.Head("/media/:id", h.media)
 	app.Head("/media/:id/:filename", h.media)
 	app.Get("/api/v1/accounts/:id/followers", h.followers)
 	app.Get("/api/v1/accounts/:id/following", h.following)
@@ -136,7 +136,7 @@ type mediaAttachmentResponse struct {
 }
 
 func (h APIHandler) uploadMedia(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -149,9 +149,12 @@ func (h APIHandler) uploadMedia(c *fiber.Ctx) error {
 		return err
 	}
 	defer opened.Close()
-	data, err := io.ReadAll(io.LimitReader(opened, 10<<20))
+	data, err := io.ReadAll(io.LimitReader(opened, mastodonUC.MaxMediaUploadBytes+1))
 	if err != nil {
 		return err
+	}
+	if len(data) > mastodonUC.MaxMediaUploadBytes {
+		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrBadRequest, "media file is too large"))
 	}
 	media, derr := h.api.UploadMedia(c.UserContext(), principal.Account, mastodonUC.UploadMediaInput{FileName: file.Filename, ContentType: file.Header.Get("Content-Type"), Data: data, Description: c.FormValue("description")})
 	if derr != nil {
@@ -180,7 +183,7 @@ func (h APIHandler) getMediaAttachment(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) updateMedia(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -196,7 +199,7 @@ func (h APIHandler) updateMedia(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) deleteMedia(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -212,6 +215,8 @@ func (h APIHandler) media(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	c.Set(fiber.HeaderContentType, media.ContentType)
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	return c.Send(media.Data)
 }
 
@@ -265,7 +270,7 @@ type createStatusRequest struct {
 }
 
 func (h APIHandler) createStatus(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -436,7 +441,7 @@ func (h APIHandler) following(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) followAccount(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "follow")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -453,7 +458,7 @@ func (h APIHandler) followAccount(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) unfollowAccount(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "follow")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -499,7 +504,7 @@ func (h APIHandler) notifications(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) clearNotifications(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -510,7 +515,7 @@ func (h APIHandler) clearNotifications(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) dismissNotification(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -544,7 +549,7 @@ func (h APIHandler) conversations(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) deleteConversation(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -555,7 +560,7 @@ func (h APIHandler) deleteConversation(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) readConversation(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -632,7 +637,7 @@ func (h APIHandler) unreblogStatus(c *fiber.Ctx) error {
 }
 
 func (h APIHandler) localStatusInteraction(c *fiber.Ctx, fn func(context.Context, *models.Account, string) (*mastodonUC.TimelineItem, *domainerrors.DomainError)) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -644,7 +649,7 @@ func (h APIHandler) localStatusInteraction(c *fiber.Ctx, fn func(context.Context
 }
 
 func (h APIHandler) interactStatus(c *fiber.Ctx, fn func(context.Context, *models.Account, string) (*mastodonUC.InteractionResult, *domainerrors.DomainError)) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -661,7 +666,7 @@ func (h APIHandler) interactStatus(c *fiber.Ctx, fn func(context.Context, *model
 }
 
 func (h APIHandler) deleteStatus(c *fiber.Ctx) error {
-	principal, derr := h.authenticate(c)
+	principal, derr := h.authenticate(c, "write")
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -718,10 +723,34 @@ func (h APIHandler) publicTimeline(c *fiber.Ctx) error {
 	return c.JSON(timelineItemsToStatuses(items))
 }
 
-func (h APIHandler) authenticate(c *fiber.Ctx) (*oauth.AuthenticatedUser, *domainerrors.DomainError) {
+func (h APIHandler) authenticate(c *fiber.Ctx, requiredScopes ...string) (*oauth.AuthenticatedUser, *domainerrors.DomainError) {
 	auth := c.Get(fiber.HeaderAuthorization)
 	bearer := strings.TrimPrefix(auth, "Bearer ")
-	return h.oauth.AuthenticateBearer(c.UserContext(), bearer)
+	principal, derr := h.oauth.AuthenticateBearer(c.UserContext(), bearer)
+	if derr != nil {
+		return nil, derr
+	}
+	for _, required := range requiredScopes {
+		if !scopeIncludes(principal.Scopes, required) {
+			return nil, domainerrors.New(domainerrors.ErrUnauthorized, "insufficient OAuth scope")
+		}
+	}
+	return principal, nil
+}
+
+func scopeIncludes(scopes string, required string) bool {
+	for _, scope := range strings.Fields(scopes) {
+		if scope == required {
+			return true
+		}
+		if required == "write" && strings.HasPrefix(scope, "write:") {
+			return true
+		}
+		if required == "read" && strings.HasPrefix(scope, "read:") {
+			return true
+		}
+	}
+	return false
 }
 
 type mentionResponse struct {

@@ -21,7 +21,6 @@ type ActivityPubRemoteURLException struct {
 type ActivityPubConfig struct {
 	BodyLimitBytes      int                             `mapstructure:"body_limit_bytes"`
 	RemoteURLExceptions []ActivityPubRemoteURLException `mapstructure:"remote_url_exceptions"`
-	DeliveryQueueSize   int                             `mapstructure:"delivery_queue_size"`
 }
 
 type CORSConfig struct {
@@ -102,7 +101,6 @@ func NewConfig(configFile string) (*Config, error) {
 	// defaults
 	viper.SetDefault("debug", false)
 	viper.SetDefault("activitypub.body_limit_bytes", 1<<20)
-	viper.SetDefault("activitypub.delivery_queue_size", 128)
 	viper.SetDefault("web.cors.allowed_methods", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 	viper.SetDefault("web.cors.allowed_headers", []string{"Authorization", "Content-Type"})
 	viper.SetDefault("web.cors.allow_credentials", false)
@@ -196,9 +194,6 @@ func verifyConfig(cfg *Config) error {
 	}
 	if cfg.ActivityPub.BodyLimitBytes <= 0 {
 		return fmt.Errorf("activitypub.body_limit_bytes must be greater than 0")
-	}
-	if cfg.ActivityPub.DeliveryQueueSize <= 0 {
-		return fmt.Errorf("activitypub.delivery_queue_size must be greater than 0")
 	}
 	if err := verifyRemoteURLExceptions(cfg.ActivityPub.RemoteURLExceptions); err != nil {
 		return err

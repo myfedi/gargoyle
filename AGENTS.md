@@ -67,17 +67,21 @@ panic("mastodon API use case requires NotesRepo")
 
 ## Security defaults
 
-Prefer secure-by-default behavior.
+Prefer secure-by-default behavior. If a behavior is unsafe for production, it must be disabled by default and require an explicit, clearly named opt-in.
 
+- Public routes must never mutate local account state unless they authenticate the local user/account first. ActivityPub C2S is not currently supported; do not add local outbox/following mutation routes unless C2S support is explicitly requested and designed with local authentication/authorization.
 - Inbound ActivityPub inbox writes require signatures.
 - Unsigned inbox processing must be explicit opt-in only.
 - Signed POST bodies require a signed `Digest` header.
+- Inbound ActivityPub mutation activities must prove ownership: e.g. `Create` note `attributedTo`, `Update`, and `Delete` objects must match the verified activity actor.
 - HTTP remote ActivityPub URLs are disabled by default and must be config-gated.
-- Remote URL fetching/delivery must validate schemes, hosts, redirects, and private IP ranges.
+- Remote URL fetching/delivery must validate schemes, hosts, redirects, private IP ranges, and the IP address actually dialed by the HTTP transport. Preflight DNS checks alone are not sufficient.
 - HTTP clients must have timeouts.
-- Request body limits must be configured and enforced by Fiber; handler-level checks are acceptable as defense in depth.
+- Request body limits must be configured and enforced by Fiber; handler-level checks are acceptable as defense in depth. Size-limited readers must reject over-limit bodies, not silently truncate them.
+- File/media upload endpoints must use an allowlist of safe content types, reject active content such as HTML/SVG, serve with `X-Content-Type-Options: nosniff`, and avoid same-origin executable content where possible.
+- OAuth/bearer-token handling must include expiration, scope enforcement on protected routes, brute-force/rate-limit protection on credential endpoints, and hashed-at-rest bearer tokens. Plaintext tokens are only returned at issue time.
 - Do not leak raw internal errors through HTTP responses.
-- Store bearer tokens hashed at rest; only return plaintext tokens at issue time.
+- Production composition roots must not depend on `mock` packages or placeholder adapters.
 
 Known limitations should be documented in `LIMITATIONS.md` rather than hidden in code comments.
 
@@ -86,7 +90,7 @@ Known limitations should be documented in `LIMITATIONS.md` rather than hidden in
 - Use cases own ActivityPub workflows.
 - HTTP signature verification and delivery are infrastructure/adapters behind ports.
 - Persist local side effects in a transaction, then deliver after commit.
-- Validate actor ownership for inbound mutation activities like `Update` and `Delete`.
+- Validate actor ownership for inbound mutation activities like `Create`, `Update`, and `Delete`.
 - Validate `Accept`/`Reject` Follow objects against the original follow relationship.
 
 ## Mastodon-compatible API rules

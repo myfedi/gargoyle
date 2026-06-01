@@ -51,6 +51,9 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 	}
 
 	// Validate before writing when possible.
+	if activity.Actor == "" {
+		return nil, domainerrors.New(domainerrors.ErrBadRequest, "activity actor is required")
+	}
 	if activity.Type == "Follow" && activity.Object != account.URI {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "follow object does not match local actor")
 	}
@@ -95,6 +98,9 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 		case "Create":
 			if u.cfg.NotesRepo != nil {
 				if note, ok := ExtractNote(input.RawJSON); ok {
+					if note.AttributedTo == "" || note.AttributedTo != activity.Actor {
+						return domainerrors.New(domainerrors.ErrUnauthorized, "create actor does not own note")
+					}
 					replyID, replyURI := replyIDs(ctx, u.cfg.NotesRepo, &tx, note)
 					if err := enqueueMissingReplyFetch(ctx, u.cfg.FetchJobsRepo, &tx, account.ID, note, replyID); err != nil {
 						return err

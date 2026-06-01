@@ -212,7 +212,5 @@ func newMigrator(cfgPath string) *migrate.Migrator {
 		bundebug.FromEnv(),
 	))
 
-	return migrate.NewMigrator(db, migrations.Migrations, migrate.WithTemplateData(map[string]string{
-		"Prefix": "example_", // FIXME
-	}))
+	return migrate.NewMigrator(db, migrations.Migrations)
 }
