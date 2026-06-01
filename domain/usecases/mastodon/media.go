@@ -50,13 +50,14 @@ func (u UseCase) GetMedia(ctx context.Context, id string) (*models.MediaAttachme
 	if err != nil {
 		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
 	}
-	if media.StoragePath != "" {
-		data, err := u.cfg.MediaStorage.ReadMedia(ctx, media.StoragePath)
-		if err != nil {
-			return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
-		}
-		media.Data = data
+	if media.StoragePath == "" {
+		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
 	}
+	data, err := u.cfg.MediaStorage.ReadMedia(ctx, media.StoragePath)
+	if err != nil {
+		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
+	}
+	media.Data = data
 	return media, nil
 }
 

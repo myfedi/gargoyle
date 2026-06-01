@@ -3,6 +3,7 @@ package mastodon
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -117,7 +118,7 @@ func applyMediaAttachments(noteDoc map[string]any, host string, media []models.M
 	attachments := make([]map[string]string, 0, len(media))
 	base := strings.TrimRight(host, "/")
 	for _, item := range media {
-		attachment := map[string]string{"type": "Document", "mediaType": item.ContentType, "url": base + "/media/" + item.ID}
+		attachment := map[string]string{"type": "Document", "mediaType": item.ContentType, "url": base + "/media/" + item.ID + "/" + url.PathEscape(item.FileName)}
 		if item.Description != "" {
 			attachment["name"] = item.Description
 		}
