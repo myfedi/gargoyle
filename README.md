@@ -6,7 +6,18 @@ Get started with the [documentation](https://github.com/myfedi/gargoyle/tree/mai
 
 ## Development
 
-To run it locally, just clone the repository, install the go dependencies, `cp config.example.yml config.yml`.
+To run it locally, clone the repository, install the Go dependencies, and copy the example config:
+
+```bash
+cp config.example.yml config.yml
+```
+
+For local development, change the SQLite URI in `config.yml` to a persistent file before running migrations or creating users. The example config uses an in-memory database, which is useful for tests but will not persist across separate CLI/server processes.
+
+```yaml
+sqlite:
+  uri: "file:gargoyle.db?cache=shared"
+```
 
 To init or migrate the database, you can use the db cli tool:
 
@@ -50,7 +61,6 @@ go run cmd/web/server.go ./config.yml
     -   [x] handles `Announce` / `Like` notifications for local posts
 -   [x] outbox
     -   [x] `GET /users/:username/outbox`
-    -   [x] `POST /users/:username/outbox`
     -   [x] stores local activities
     -   [x] persists local `Note`s
     -   [x] delivers to accepted followers
@@ -58,22 +68,24 @@ go run cmd/web/server.go ./config.yml
     -   [x] sanitizes note content
     -   [x] generated stable ULID-based activity/object IDs
     -   [x] persistent delivery queue
-    -   [x] auth/user-facing posting API
--   [ ] followers/following
+    -   [x] auth/user-facing posting API via Mastodon-compatible endpoints
+    -   [x] C2S-style `POST /users/:username/outbox` exists in code but is disabled in normal server mode unless explicitly enabled
+-   [x] followers/following
     -   [x] followers collection
     -   [x] inbound follow acceptance
-    -   [x] outbound follow flow
+    -   [x] outbound follow flow via Mastodon-compatible endpoints
     -   [x] following collection with accepted follows
+    -   [x] C2S-style `POST /users/:username/following` exists in code but is disabled in normal server mode unless explicitly enabled
 
 Implemented ActivityPub endpoints:
 
 -   `GET /users/:username` returns an ActivityPub actor.
 -   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow`, `Undo Follow`, `Create`, `Delete`, `Update`, `Accept`, `Reject`, `Like`, and `Announce`.
 -   `GET /users/:username/outbox` returns stored outbox activities.
--   `POST /users/:username/outbox` creates and stores local `Create`/`Note` activities and delivers them to followers.
 -   `GET /users/:username/followers` returns accepted followers.
 -   `GET /users/:username/following` returns accepted outbound follows.
--   `POST /users/:username/following` creates and delivers an outbound `Follow`.
+
+C2S-style mutation routes, `POST /users/:username/outbox` and `POST /users/:username/following`, are implemented for controlled/test configurations but are not enabled by the normal server wiring. Local posting and following should use the authenticated Mastodon-compatible API unless these routes are explicitly enabled with an authorization story.
 
 ## Federation
 
@@ -87,7 +99,7 @@ Compatibility notes:
 | Mastodon | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 | Akkoma/Pleroma | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
 
-See [`compat/README.md`](compat/README.md) for the local GoToSocial compatibility setup and the validated flow checklist.
+See [`integration/README.md`](integration/README.md) for the Dockerized GoToSocial integration suite. [`compat/README.md`](compat/README.md) contains the older/manual local compatibility setup and checklist.
 
 ### Browser UI hosting and CORS
 
@@ -119,6 +131,15 @@ Do not allow private remote fetching for untrusted production hosts.
 
 Implemented Mastodon-compatible client endpoints include OAuth app registration and authorization-code PKCE, account verification/search/follow/unfollow/relationships/followers/following/profile/statuses, status create/detail/delete/context, media upload/serving, notifications, favourites, boosts, and home/public timelines with local/remote filters.
 
+The GoToSocial integration suite can be run with:
+
+```sh
+cd integration/gts
+docker compose up -d --build
+GARGOYLE_RUN_INTEGRATION=1 go test -v -count=1 .
+docker compose down -v --remove-orphans
+```
+
 Delivery/fetch jobs can be inspected with:
 
 ```sh
@@ -135,7 +156,7 @@ go run cmd/cli/admin/main.go media-cleanup --config ./config.yml --older-than 24
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.
--   Media attachments, favourites, boosts, mention delivery, and notifications have Mastodon client API and ActivityPub support, but still need broader real-server validation.
+-   GoToSocial integration coverage includes discovery, follow/unfollow, outbound follow, multiple visibility statuses, direct mentions, favourites, boosts, replies, deletes, OAuth/token setup, and media upload/fetchability, but broader real-server validation is still needed.
 -   Fetch and delivery queues have basic observability and duplicate fetch suppression, but need richer operational tooling.
 -   Some security limitations remain documented in [`LIMITATIONS.md`](LIMITATIONS.md).
 
