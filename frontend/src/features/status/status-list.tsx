@@ -18,7 +18,7 @@ import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime, htmlToPlainText } from "@/lib/text";
 import type { MastodonMediaAttachment, MastodonStatus } from "@/types/mastodon";
 
-export type StatusAction = "bookmark" | "unbookmark" | "favourite" | "unfavourite" | "reblog" | "unreblog";
+export type StatusAction = "bookmark" | "unbookmark" | "pin" | "unpin" | "favourite" | "unfavourite" | "reblog" | "unreblog";
 
 type StatusListProps = {
   statuses: MastodonStatus[];
@@ -59,7 +59,9 @@ export function StatusList({
       <div className="divide-y divide-border">
         {statuses.map((status) => {
           const displayedStatus = status.reblog ?? status;
-          const canDelete = Boolean(onDelete && currentAccountId && displayedStatus.account.id === currentAccountId);
+          const canOwn = Boolean(currentAccountId && displayedStatus.account.id === currentAccountId);
+          const canDelete = Boolean(onDelete && canOwn);
+          const canPin = Boolean(onAction && canOwn && displayedStatus.visibility !== "direct");
           const canReply = Boolean(onReply);
           const canForward = Boolean(onForward);
           const canInteract = Boolean(onAction);
@@ -109,6 +111,11 @@ export function StatusList({
                           <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.favourited ? "unfavourite" : "favourite", displayedStatus)}>
                             {displayedStatus.favourited ? "Remove favourite" : "Favourite"}
                           </DropdownMenuItem>
+                          {canPin ? (
+                            <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.pinned ? "unpin" : "pin", displayedStatus)}>
+                              {displayedStatus.pinned ? "Unpin from profile" : "Pin to profile"}
+                            </DropdownMenuItem>
+                          ) : null}
                           <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.reblogged ? "unreblog" : "reblog", displayedStatus)}>
                             {displayedStatus.reblogged ? "Undo boost" : "Boost"}
                           </DropdownMenuItem>
@@ -201,6 +208,7 @@ function StatusStats({ status }: { status: MastodonStatus }) {
     status.bookmarked ? "Bookmarked" : null,
     status.favourited ? "Favourited" : null,
     status.reblogged ? "Boosted" : null,
+    status.pinned ? "Pinned" : null,
   ].filter(Boolean);
 
   if (stats.length === 0) {

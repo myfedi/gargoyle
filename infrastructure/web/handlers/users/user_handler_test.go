@@ -252,6 +252,33 @@ func (f *fakeFollowsRepo) ListFollowingIncludingPending(ctx context.Context, tx 
 	return res, nil
 }
 
+type fakeSocialRepo struct{}
+
+func (fakeSocialRepo) CreateInteraction(ctx context.Context, tx *db.Tx, localAccountID string, noteID string, typ string) (*models.StatusInteraction, error) {
+	return &models.StatusInteraction{LocalAccountID: localAccountID, NoteID: noteID, Type: typ}, nil
+}
+func (fakeSocialRepo) DeleteInteraction(ctx context.Context, tx *db.Tx, localAccountID string, noteID string, typ string) error {
+	return nil
+}
+func (fakeSocialRepo) InteractionExists(ctx context.Context, tx *db.Tx, localAccountID string, noteID string, typ string) (bool, error) {
+	return false, nil
+}
+func (fakeSocialRepo) ListInteractions(ctx context.Context, tx *db.Tx, localAccountID string, typ string, limit int) ([]models.StatusInteraction, error) {
+	return nil, nil
+}
+func (fakeSocialRepo) CreateNotification(ctx context.Context, tx *db.Tx, localAccountID string, actorAccountID string, typ string, statusID *string) (*models.Notification, error) {
+	return &models.Notification{}, nil
+}
+func (fakeSocialRepo) ListNotifications(ctx context.Context, tx *db.Tx, localAccountID string, limit int) ([]models.Notification, error) {
+	return nil, nil
+}
+func (fakeSocialRepo) DeleteNotification(ctx context.Context, tx *db.Tx, localAccountID string, notificationID string) error {
+	return nil
+}
+func (fakeSocialRepo) ClearNotifications(ctx context.Context, tx *db.Tx, localAccountID string) error {
+	return nil
+}
+
 type fakeTx struct{}
 
 func (fakeTx) NewInsert() any { return nil }
@@ -276,6 +303,7 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		ActivitiesRepo:   activities,
 		FollowsRepo:      follows,
 		NotesRepo:        &fakeNotesRepo{},
+		SocialRepo:       fakeSocialRepo{},
 		DeliveryJobsRepo: fakeDeliveryJobsRepo{},
 		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer: adapters.NewContentSanitizer(),
@@ -360,6 +388,7 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 		ActivitiesRepo:     &fakeActivitiesRepo{},
 		FollowsRepo:        &fakeFollowsRepo{},
 		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
 		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
@@ -392,6 +421,7 @@ func TestUserProfileHandlerRejectsForgedInboundCreateAuthor(t *testing.T) {
 		ActivitiesRepo:     &fakeActivitiesRepo{},
 		FollowsRepo:        &fakeFollowsRepo{},
 		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
 		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),

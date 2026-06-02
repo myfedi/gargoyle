@@ -419,3 +419,39 @@ func extractURLValue(raw json.RawMessage) string {
 	}
 	return ""
 }
+
+// MarshalFeaturedNoteObject serializes a stored local Note as an ActivityPub Note for featured collections.
+func MarshalFeaturedNoteObject(note models.Note, account models.Account) ([]byte, error) {
+	to := []string{"https://www.w3.org/ns/activitystreams#Public"}
+	cc := []string{account.FollowersURI}
+	if note.Visibility == "private" {
+		to = []string{account.FollowersURI}
+		cc = []string{}
+	} else if note.Visibility == "direct" {
+		to = []string{}
+		cc = []string{}
+	}
+	published := note.PublishedAt
+	if published.IsZero() {
+		published = note.CreatedAt
+	}
+	object := map[string]any{
+		"id":           note.URI,
+		"type":         "Note",
+		"attributedTo": account.URI,
+		"content":      note.Content,
+		"published":    published.UTC().Format(time.RFC3339),
+		"to":           to,
+		"cc":           cc,
+	}
+	if note.SpoilerText != "" {
+		object["summary"] = note.SpoilerText
+	}
+	if note.Sensitive {
+		object["sensitive"] = true
+	}
+	if note.InReplyToURI != nil && *note.InReplyToURI != "" {
+		object["inReplyTo"] = *note.InReplyToURI
+	}
+	return json.Marshal(object)
+}

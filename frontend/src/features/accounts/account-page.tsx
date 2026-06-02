@@ -19,6 +19,7 @@ export function AccountPage({ route }: AccountPageProps) {
   const accountId = decodeRouteParam(route.split("/")[2]);
   const [account, setAccount] = useState<MastodonAccount | null>(null);
   const [statuses, setStatuses] = useState<MastodonStatus[]>([]);
+  const [pinnedStatuses, setPinnedStatuses] = useState<MastodonStatus[]>([]);
   const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -38,14 +39,16 @@ export function AccountPage({ route }: AccountPageProps) {
     setError(null);
 
     try {
-      const [nextCurrentAccount, nextAccount, nextStatuses] = await Promise.all([
+      const [nextCurrentAccount, nextAccount, nextStatuses, nextPinnedStatuses] = await Promise.all([
         api.verifyCredentials(),
         api.account(accountId),
         api.accountStatuses(accountId),
+        api.accountStatuses(accountId, { pinned: true }),
       ]);
       setCurrentAccount(nextCurrentAccount);
       setAccount(nextAccount);
       setStatuses(nextStatuses);
+      setPinnedStatuses(nextPinnedStatuses);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not load account.");
     } finally {
@@ -86,6 +89,13 @@ export function AccountPage({ route }: AccountPageProps) {
     try {
       const nextStatus = await runStatusAction(api, action, status);
       setStatuses((current) => replaceStatus(current, nextStatus));
+      if (action === "unpin") {
+        setPinnedStatuses((current) => current.filter((item) => item.id !== status.id));
+      } else if (action === "pin") {
+        setPinnedStatuses((current) => [nextStatus, ...current.filter((item) => item.id !== nextStatus.id)]);
+      } else {
+        setPinnedStatuses((current) => replaceStatus(current, nextStatus));
+      }
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not update post.");
     } finally {
@@ -104,6 +114,7 @@ export function AccountPage({ route }: AccountPageProps) {
     try {
       await api.deleteStatus(status.id);
       setStatuses((current) => current.filter((item) => item.id !== status.id));
+      setPinnedStatuses((current) => current.filter((item) => item.id !== status.id));
       return true;
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not delete post.");
@@ -142,6 +153,21 @@ export function AccountPage({ route }: AccountPageProps) {
             <FieldRow label="Profile" value={account.url ? <a className="text-primary hover:underline" href={account.url} target="_blank" rel="noreferrer">{account.url}</a> : "No URL"} />
             <FieldRow label="Bio" value={account.note ? htmlToPlainText(account.note) : "No bio"} />
           </dl>
+        </Panel>
+      ) : null}
+
+      {pinnedStatuses.length > 0 ? (
+        <Panel title="Pinned posts">
+          <StatusList
+            statuses={pinnedStatuses}
+            currentAccountId={currentAccount?.id}
+            emptyTitle="No pinned posts"
+            emptyDescription="No posts are pinned."
+            deletingStatusId={deletingStatusId}
+            actingStatusId={actingStatusId}
+            onDelete={deleteStatus}
+            onAction={runAction}
+          />
         </Panel>
       ) : null}
 

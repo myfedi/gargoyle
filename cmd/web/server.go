@@ -144,6 +144,7 @@ func main() {
 		ActivitiesRepo:      activitiesRepo,
 		FollowsRepo:         followsRepo,
 		NotesRepo:           notesRepo,
+		SocialRepo:          socialRepo,
 		RemoteAccountsRepo:  remoteAccountsRepo,
 		DeliveryJobsRepo:    jobsRepo,
 		Serializer:          actorSerializer,

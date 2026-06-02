@@ -67,6 +67,7 @@ export type MastodonStatus = {
   favourited?: boolean;
   reblogged?: boolean;
   bookmarked?: boolean;
+  pinned?: boolean;
   media_attachments?: MastodonMediaAttachment[];
   mentions?: MastodonMention[];
   in_reply_to_id?: string | null;

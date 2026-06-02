@@ -93,6 +93,7 @@ type TimelineItem struct {
 	Reblogged          bool
 	Favourited         bool
 	Bookmarked         bool
+	Pinned             bool
 	ReblogsCount       int
 }
 

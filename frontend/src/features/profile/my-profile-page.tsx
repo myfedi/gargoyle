@@ -14,7 +14,7 @@ import { accountHref } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
 import type { MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
 
-type ProfileTab = "profile" | "posts" | "bookmarks" | "favourites" | "following" | "followers";
+type ProfileTab = "profile" | "posts" | "pinned" | "bookmarks" | "favourites" | "following" | "followers";
 
 type AccountSearchResult = {
   account: MastodonAccount;
@@ -24,6 +24,7 @@ type AccountSearchResult = {
 const profileTabs = [
   { value: "profile", label: "Profile" },
   { value: "posts", label: "Posts" },
+  { value: "pinned", label: "Pinned" },
   { value: "bookmarks", label: "Bookmarks" },
   { value: "favourites", label: "Favourites" },
   { value: "following", label: "Following" },
@@ -60,6 +61,8 @@ export function MyProfilePage() {
 
       if (activeTab === "posts") {
         setStatuses(await api.accountStatuses(nextAccount.id));
+      } else if (activeTab === "pinned") {
+        setStatuses(await api.accountStatuses(nextAccount.id, { pinned: true }));
       } else if (activeTab === "bookmarks") {
         setStatuses(await api.bookmarks());
       } else if (activeTab === "favourites") {
@@ -92,7 +95,7 @@ export function MyProfilePage() {
 
     try {
       const nextStatus = await runStatusAction(api, action, status);
-      if ((activeTab === "bookmarks" && action === "unbookmark") || (activeTab === "favourites" && action === "unfavourite")) {
+      if ((activeTab === "bookmarks" && action === "unbookmark") || (activeTab === "favourites" && action === "unfavourite") || (activeTab === "pinned" && action === "unpin")) {
         setStatuses((current) => current.filter((item) => item.id !== status.id));
       } else {
         setStatuses((current) => replaceStatus(current, nextStatus));
@@ -267,7 +270,7 @@ export function MyProfilePage() {
       );
     }
 
-    if (activeTab === "posts" || activeTab === "bookmarks" || activeTab === "favourites") {
+    if (activeTab === "posts" || activeTab === "pinned" || activeTab === "bookmarks" || activeTab === "favourites") {
       return (
         <StatusList
           statuses={statuses}
@@ -276,7 +279,7 @@ export function MyProfilePage() {
           deletingStatusId={deletingStatusId}
           emptyTitle="Nothing here"
           emptyDescription="No posts to show."
-          onDelete={activeTab === "posts" ? deleteStatus : undefined}
+          onDelete={activeTab === "posts" || activeTab === "pinned" ? deleteStatus : undefined}
           onAction={runAction}
         />
       );

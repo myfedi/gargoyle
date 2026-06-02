@@ -2,9 +2,7 @@ package users
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -30,6 +28,7 @@ type UsersWebHandlerConfig struct {
 	ActivitiesRepo      repos.ActivitiesRepository
 	FollowsRepo         repos.FollowsRepository
 	NotesRepo           repos.NotesRepository
+	SocialRepo          repos.SocialRepository
 	RemoteAccountsRepo  repos.RemoteAccountsRepository
 	DeliveryJobsRepo    repos.DeliveryJobsRepository
 	Serializer          activitypub.ActorSerializer
@@ -51,6 +50,7 @@ type UsersWebHandler struct {
 	getOutbox             apUsecases.GetOutboxUseCase
 	getFollowers          apUsecases.GetFollowersUseCase
 	getFollowing          apUsecases.GetFollowingUseCase
+	getFeatured           apUsecases.GetFeaturedUseCase
 	handleInboxActivityUC apUsecases.HandleInboxActivityUseCase
 }
 
@@ -71,6 +71,9 @@ func validateUsersWebHandlerConfig(cfg UsersWebHandlerConfig) {
 	}
 	if cfg.NotesRepo == nil {
 		panic("users web handler requires NotesRepo")
+	}
+	if cfg.SocialRepo == nil {
+		panic("users web handler requires SocialRepo")
 	}
 	if cfg.DeliveryJobsRepo == nil {
 		panic("users web handler requires DeliveryJobsRepo")
@@ -139,6 +142,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		ActivitiesRepo:     cfg.ActivitiesRepo,
 		FollowsRepo:        cfg.FollowsRepo,
 		NotesRepo:          cfg.NotesRepo,
+		SocialRepo:         cfg.SocialRepo,
 		RemoteAccountsRepo: cfg.RemoteAccountsRepo,
 		ActorFetcher:       cfg.ActorFetcher,
 		ContentSanitizer:   cfg.ContentSanitizer,
@@ -149,6 +153,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		getOutbox:             apUsecases.NewGetOutboxUseCase(flowCfg),
 		getFollowers:          apUsecases.NewGetFollowersUseCase(flowCfg),
 		getFollowing:          apUsecases.NewGetFollowingUseCase(flowCfg),
+		getFeatured:           apUsecases.NewGetFeaturedUseCase(flowCfg),
 		handleInboxActivityUC: apUsecases.NewHandleInboxActivityUseCase(flowCfg),
 	}
 	return h
@@ -221,23 +226,28 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 }
 
 func (h *UsersWebHandler) featuredCollection(c *fiber.Ctx) error {
-	account, err := h.cfg.AccountsRepo.GetLocalAccountByUsername(c.UserContext(), nil, c.Params("username"))
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrNotFound, "no such username"))
-		}
-		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+	res, derr := h.getFeatured.GetFeatured(c.UserContext(), c.Params("username"), c.QueryInt("limit"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
 	}
-	id := account.FeaturedCollectionURI
+	items := make([]json.RawMessage, 0, len(res.Notes))
+	for _, note := range res.Notes {
+		raw, err := apUsecases.MarshalFeaturedNoteObject(note, res.Account)
+		if err != nil {
+			return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+		}
+		items = append(items, json.RawMessage(raw))
+	}
+	id := res.Account.FeaturedCollectionURI
 	if id == "" {
-		id = account.URI + "/collections/featured"
+		id = res.Account.URI + "/collections/featured"
 	}
 	return sendActivityJSON(c, orderedCollectionResponse{
 		Context:      "https://www.w3.org/ns/activitystreams",
 		ID:           id,
 		Type:         "OrderedCollection",
-		TotalItems:   0,
-		OrderedItems: []json.RawMessage{},
+		TotalItems:   len(items),
+		OrderedItems: items,
 	})
 }
 

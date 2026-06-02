@@ -10,6 +10,10 @@ export async function runStatusAction(api: MastodonApi, action: StatusAction, st
       return api.bookmarkStatus(status.id);
     case "unbookmark":
       return api.unbookmarkStatus(status.id);
+    case "pin":
+      return api.pinStatus(status.id);
+    case "unpin":
+      return api.unpinStatus(status.id);
     case "favourite":
       return api.favouriteStatus(status.id);
     case "unfavourite":

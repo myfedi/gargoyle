@@ -83,6 +83,8 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Post("/api/v1/statuses/:id/unfavourite", h.unfavouriteStatus)
 	app.Post("/api/v1/statuses/:id/bookmark", h.bookmarkStatus)
 	app.Post("/api/v1/statuses/:id/unbookmark", h.unbookmarkStatus)
+	app.Post("/api/v1/statuses/:id/pin", h.pinStatus)
+	app.Post("/api/v1/statuses/:id/unpin", h.unpinStatus)
 	app.Post("/api/v1/statuses/:id/reblog", h.reblogStatus)
 	app.Post("/api/v1/statuses/:id/unreblog", h.unreblogStatus)
 	app.Get("/api/v1/statuses/:id", h.status)
@@ -467,6 +469,13 @@ func (h APIHandler) accountStatuses(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
+	if c.QueryBool("pinned") {
+		items, derr := h.api.PinnedAccountStatuses(c.UserContext(), principal.Account, c.Params("id"), c.QueryInt("limit"))
+		if derr != nil {
+			return web.HandleDomainError(c, derr)
+		}
+		return c.JSON(timelineItemsToStatuses(items))
+	}
 	items, derr := h.api.AccountStatuses(c.UserContext(), principal.Account, c.Params("id"), c.QueryInt("limit"), c.Query("max_id"), c.QueryBool("exclude_reblogs"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
@@ -689,6 +698,12 @@ func (h APIHandler) bookmarkStatus(c *fiber.Ctx) error {
 func (h APIHandler) unbookmarkStatus(c *fiber.Ctx) error {
 	return h.localStatusInteraction(c, h.api.UnbookmarkStatus)
 }
+func (h APIHandler) pinStatus(c *fiber.Ctx) error {
+	return h.localStatusInteraction(c, h.api.PinStatus)
+}
+func (h APIHandler) unpinStatus(c *fiber.Ctx) error {
+	return h.localStatusInteraction(c, h.api.UnpinStatus)
+}
 func (h APIHandler) reblogStatus(c *fiber.Ctx) error { return h.interactStatus(c, h.api.ReblogStatus) }
 func (h APIHandler) unreblogStatus(c *fiber.Ctx) error {
 	return h.interactStatus(c, h.api.UnreblogStatus)
@@ -870,6 +885,7 @@ func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
 		status.Reblogged = item.Reblogged
 		status.Favourited = item.Favourited
 		status.Bookmarked = item.Bookmarked
+		status.Pinned = item.Pinned
 		if item.Reblog != nil {
 			reblog := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item.Reblog})[0]
 			status.Content = ""

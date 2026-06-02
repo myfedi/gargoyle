@@ -46,6 +46,9 @@ type GetFollowersUseCase struct{ cfg ActivityPubFlowConfig }
 // GetFollowingUseCase reads the remote actors followed by a local actor.
 type GetFollowingUseCase struct{ cfg ActivityPubFlowConfig }
 
+// GetFeaturedUseCase reads a local actor's featured/pinned notes collection.
+type GetFeaturedUseCase struct{ cfg ActivityPubFlowConfig }
+
 // CreateFollowingUseCase creates a local Follow activity and following record atomically.
 type CreateFollowingUseCase struct{ cfg ActivityPubFlowConfig }
 
@@ -69,6 +72,16 @@ func NewGetFollowingUseCase(cfg ActivityPubFlowConfig) GetFollowingUseCase {
 	requireAccountsRepo(cfg)
 	requireFollowsRepo(cfg)
 	return GetFollowingUseCase{cfg: cfg}
+}
+func NewGetFeaturedUseCase(cfg ActivityPubFlowConfig) GetFeaturedUseCase {
+	requireAccountsRepo(cfg)
+	if cfg.NotesRepo == nil {
+		panic("activitypub use case requires NotesRepo")
+	}
+	if cfg.SocialRepo == nil {
+		panic("activitypub use case requires SocialRepo")
+	}
+	return GetFeaturedUseCase{cfg: cfg}
 }
 func NewCreateFollowingUseCase(cfg ActivityPubFlowConfig) CreateFollowingUseCase {
 	requireTxProvider(cfg)

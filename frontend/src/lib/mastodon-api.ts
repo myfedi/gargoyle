@@ -86,10 +86,13 @@ export function createMastodonApi(accessToken: string) {
     account(id: string) {
       return client.request<MastodonAccount>(`/api/v1/accounts/${encodeURIComponent(id)}`);
     },
-    accountStatuses(id: string, options: { limit?: number; maxId?: string } = {}) {
+    accountStatuses(id: string, options: { limit?: number; maxId?: string; pinned?: boolean } = {}) {
       const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
       if (options.maxId) {
         params.set("max_id", options.maxId);
+      }
+      if (options.pinned) {
+        params.set("pinned", "true");
       }
       return client.request<MastodonStatus[]>(`/api/v1/accounts/${encodeURIComponent(id)}/statuses?${params.toString()}`);
     },
@@ -117,6 +120,12 @@ export function createMastodonApi(accessToken: string) {
     },
     unbookmarkStatus(id: string) {
       return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/unbookmark`, { method: "POST" });
+    },
+    pinStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/pin`, { method: "POST" });
+    },
+    unpinStatus(id: string) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/unpin`, { method: "POST" });
     },
     reblogStatus(id: string) {
       return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}/reblog`, { method: "POST" });

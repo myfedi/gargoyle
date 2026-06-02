@@ -27,6 +27,11 @@ type FollowingResult struct {
 	Following []models.Follow
 }
 
+type FeaturedResult struct {
+	Account models.Account
+	Notes   []models.Note
+}
+
 // GetOutbox loads a local actor's outbox page and total count.
 func (u *GetOutboxUseCase) GetOutbox(ctx context.Context, username string, page PaginationInput) (*OutboxResult, *domainerrors.DomainError) {
 	account, derr := localAccount(ctx, u.cfg.AccountsRepo, username)
@@ -72,4 +77,25 @@ func (u *GetFollowingUseCase) GetFollowing(ctx context.Context, username string)
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return &FollowingResult{Account: *account, Following: following}, nil
+}
+
+// GetFeatured loads the accepted local actor's pinned public notes.
+func (u *GetFeaturedUseCase) GetFeatured(ctx context.Context, username string, limit int) (*FeaturedResult, *domainerrors.DomainError) {
+	account, derr := localAccount(ctx, u.cfg.AccountsRepo, username)
+	if derr != nil {
+		return nil, derr
+	}
+	interactions, err := u.cfg.SocialRepo.ListInteractions(ctx, nil, account.ID, "pin", limit)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	notes := make([]models.Note, 0, len(interactions))
+	for _, interaction := range interactions {
+		note, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, interaction.NoteID)
+		if err != nil || note.AttributedTo != account.URI || note.Visibility == "direct" {
+			continue
+		}
+		notes = append(notes, *note)
+	}
+	return &FeaturedResult{Account: *account, Notes: notes}, nil
 }
