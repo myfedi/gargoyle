@@ -87,7 +87,11 @@ func main() {
 
 	// sets up the go-fiber server. The body limit protects ActivityPub endpoints
 	// from unbounded in-memory request bodies before handlers copy or parse them.
-	app := fiber.New(fiber.Config{BodyLimit: config.ActivityPub.BodyLimitBytes})
+	bodyLimitBytes := config.ActivityPub.BodyLimitBytes
+	if mediaLimit := mastodonUsecases.MaxMediaUploadBytes + (1 << 20); bodyLimitBytes < mediaLimit {
+		bodyLimitBytes = mediaLimit
+	}
+	app := fiber.New(fiber.Config{BodyLimit: bodyLimitBytes})
 	app.Use(limiter.New(limiter.Config{Max: 300, Expiration: 1 * time.Minute}))
 	app.Use("/oauth", limiter.New(limiter.Config{Max: 20, Expiration: 1 * time.Minute}))
 	app.Use("/api/v1/apps", limiter.New(limiter.Config{Max: 10, Expiration: 1 * time.Hour}))
@@ -140,6 +144,7 @@ func main() {
 		ActivitiesRepo:      activitiesRepo,
 		FollowsRepo:         followsRepo,
 		NotesRepo:           notesRepo,
+		RemoteAccountsRepo:  remoteAccountsRepo,
 		DeliveryJobsRepo:    jobsRepo,
 		Serializer:          actorSerializer,
 		ContentSanitizer:    contentSanitizer,
@@ -159,25 +164,29 @@ func main() {
 	})
 	mastodon.NewOAuthHandler(oauthUC).Setup(app)
 	mastodonFlowCfg := apUsecases.ActivityPubFlowConfig{
-		TxProvider:       txProvider,
-		AccountsRepo:     accountsRepo,
-		ActivitiesRepo:   activitiesRepo,
-		FollowsRepo:      followsRepo,
-		NotesRepo:        notesRepo,
-		FetchJobsRepo:    jobsRepo,
-		SocialRepo:       socialRepo,
-		BoostsRepo:       boostsRepo,
-		ContentSanitizer: contentSanitizer,
+		TxProvider:         txProvider,
+		AccountsRepo:       accountsRepo,
+		ActivitiesRepo:     activitiesRepo,
+		FollowsRepo:        followsRepo,
+		NotesRepo:          notesRepo,
+		RemoteAccountsRepo: remoteAccountsRepo,
+		FetchJobsRepo:      jobsRepo,
+		SocialRepo:         socialRepo,
+		BoostsRepo:         boostsRepo,
+		ContentSanitizer:   contentSanitizer,
 	}
 	mastodonAPIUC := mastodonUsecases.NewUseCase(mastodonUsecases.Config{
 		Host:               host,
 		Domain:             config.Domain,
 		ServerVersion:      infra.ServerVersion,
+		TxProvider:         txProvider,
 		AccountsRepo:       accountsRepo,
+		ActivitiesRepo:     activitiesRepo,
 		NotesRepo:          notesRepo,
 		FollowsRepo:        followsRepo,
 		MediaRepo:          mediaRepo,
 		MediaStorage:       mediaStorage,
+		ContentSanitizer:   contentSanitizer,
 		SocialRepo:         socialRepo,
 		BoostsRepo:         boostsRepo,
 		ConversationsRepo:  conversationsRepo,
@@ -185,6 +194,7 @@ func main() {
 		RemoteAccountsRepo: remoteAccountsRepo,
 		IDGenerator:        adapters.NewULIDGenerator(),
 		RemoteResolver:     mastodon.NewRemoteAccountResolver(nil, mastodonRemoteURLExceptions),
+		ActorSerializer:    actorSerializer,
 		CreateOutboxUC:     apUsecases.NewCreateOutboxActivityUseCase(mastodonFlowCfg),
 		CreateFollowingUC:  apUsecases.NewCreateFollowingUseCase(mastodonFlowCfg),
 	})

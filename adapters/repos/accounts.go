@@ -3,6 +3,7 @@ package repos
 import (
 	"context"
 	"errors"
+	"time"
 
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/domain/models"
@@ -48,6 +49,10 @@ func (r *AccountsRepo) CreateAccount(ctx context.Context, tx *dbPorts.Tx, input 
 		Summary:               input.Summary,
 		URI:                   input.URI,
 		URL:                   input.URL,
+		AvatarMediaID:         input.AvatarMediaID,
+		HeaderMediaID:         input.HeaderMediaID,
+		AvatarURL:             input.AvatarURL,
+		HeaderURL:             input.HeaderURL,
 		InboxURI:              input.InboxURI,
 		OutboxURI:             input.OutboxURI,
 		FollowingURI:          input.FollowingURI,
@@ -83,6 +88,38 @@ func (r *AccountsRepo) GetAccountByID(ctx context.Context, tx *dbPorts.Tx, id st
 	}
 	model := account.ToModel()
 	return &model, nil
+}
+
+func (r *AccountsRepo) UpdateLocalAccountProfile(ctx context.Context, tx *dbPorts.Tx, id string, input repos.UpdateAccountProfileInput) (*models.Account, error) {
+	db := r.db
+	if tx != nil {
+		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
+			db = adapted.Unwrap()
+		} else {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+	}
+
+	updatedAt := input.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = time.Now().UTC()
+	}
+	_, err := db.NewUpdate().
+		Model((*dbModels.Account)(nil)).
+		Set("display_name = ?", input.DisplayName).
+		Set("summary = ?", input.Summary).
+		Set("avatar_media_id = ?", input.AvatarMediaID).
+		Set("header_media_id = ?", input.HeaderMediaID).
+		Set("avatar_url = ?", input.AvatarURL).
+		Set("header_url = ?", input.HeaderURL).
+		Set("updated_at = ?", updatedAt).
+		Where("id = ?", id).
+		Where("user_id IS NOT NULL").
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetAccountByID(ctx, tx, id)
 }
 
 func (r *AccountsRepo) GetAccountByUserID(ctx context.Context, tx *dbPorts.Tx, userID string) (*models.Account, error) {

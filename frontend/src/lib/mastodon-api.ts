@@ -10,12 +10,30 @@ export type CreateStatusInput = {
   media_ids?: string[];
 };
 
+export type UpdateCredentialsInput = {
+  display_name: string;
+  note: string;
+  avatar?: File | null;
+  header?: File | null;
+};
+
 export function createMastodonApi(accessToken: string) {
   const client = new ApiClient({ accessToken });
 
   return {
     verifyCredentials() {
       return client.request<MastodonAccount>("/api/v1/accounts/verify_credentials");
+    },
+    updateCredentials(input: UpdateCredentialsInput) {
+      const body = new FormData();
+      body.set("display_name", input.display_name);
+      body.set("note", input.note);
+      if (input.avatar) body.set("avatar", input.avatar);
+      if (input.header) body.set("header", input.header);
+      return client.request<MastodonAccount>("/api/v1/accounts/update_credentials", {
+        method: "PATCH",
+        body,
+      });
     },
     instance() {
       return client.request<MastodonInstance>("/api/v1/instance");

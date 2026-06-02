@@ -14,6 +14,10 @@ type Account struct {
 	Summary               *string
 	URI                   string
 	URL                   *string
+	AvatarMediaID         *string
+	HeaderMediaID         *string
+	AvatarURL             *string
+	HeaderURL             *string
 	InboxURI              string
 	OutboxURI             *string
 	FollowingURI          string

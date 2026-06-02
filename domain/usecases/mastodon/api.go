@@ -10,6 +10,8 @@ import (
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
 	"github.com/myfedi/gargoyle/domain/ports"
+	apPorts "github.com/myfedi/gargoyle/domain/ports/activitypub"
+	"github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 )
@@ -26,11 +28,14 @@ type Config struct {
 	Host               string
 	Domain             string
 	ServerVersion      string
+	TxProvider         db.TxProvider
 	AccountsRepo       repos.AccountsRepo
+	ActivitiesRepo     repos.ActivitiesRepository
 	NotesRepo          repos.NotesRepository
 	FollowsRepo        repos.FollowsRepository
 	MediaRepo          repos.MediaRepository
 	MediaStorage       ports.MediaStorage
+	ContentSanitizer   ports.ContentSanitizer
 	SocialRepo         repos.SocialRepository
 	BoostsRepo         repos.BoostsRepository
 	ConversationsRepo  repos.ConversationsRepository
@@ -38,6 +43,7 @@ type Config struct {
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	IDGenerator        ports.IDGenerator
 	RemoteResolver     RemoteAccountResolver
+	ActorSerializer    apPorts.ActorSerializer
 	CreateOutboxUC     apUsecases.CreateOutboxActivityUseCase
 	CreateFollowingUC  apUsecases.CreateFollowingUseCase
 }
@@ -109,12 +115,31 @@ type Relationship struct {
 	Requested bool
 }
 
+type UpdateCredentialsInput struct {
+	DisplayName string
+	Note        string
+	Avatar      *UploadMediaInput
+	Header      *UploadMediaInput
+}
+
+type UpdateCredentialsResult struct {
+	Account         models.Account
+	RawJSON         []byte
+	FollowerInboxes []string
+}
+
 func NewUseCase(cfg Config) UseCase {
 	if cfg.Host == "" || cfg.Domain == "" {
 		panic("mastodon API use case requires Host and Domain")
 	}
+	if cfg.TxProvider == nil {
+		panic("mastodon API use case requires TxProvider")
+	}
 	if cfg.AccountsRepo == nil {
 		panic("mastodon API use case requires AccountsRepo")
+	}
+	if cfg.ActivitiesRepo == nil {
+		panic("mastodon API use case requires ActivitiesRepo")
 	}
 	if cfg.NotesRepo == nil {
 		panic("mastodon API use case requires NotesRepo")
@@ -127,6 +152,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.MediaStorage == nil {
 		panic("mastodon API use case requires MediaStorage")
+	}
+	if cfg.ContentSanitizer == nil {
+		panic("mastodon API use case requires ContentSanitizer")
 	}
 	if cfg.SocialRepo == nil {
 		panic("mastodon API use case requires SocialRepo")
@@ -148,6 +176,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.RemoteResolver == nil {
 		panic("mastodon API use case requires RemoteResolver")
+	}
+	if cfg.ActorSerializer == nil {
+		panic("mastodon API use case requires ActorSerializer")
 	}
 	return UseCase{cfg: cfg}
 }

@@ -127,6 +127,16 @@ export function AccountPage({ route }: AccountPageProps) {
         </Panel>
       ) : account ? (
         <Panel title="Profile">
+          <div className="mb-4 space-y-4">
+            {account.header ? <img className="h-32 w-full rounded-lg border border-border object-cover" src={account.header} alt="Profile header" /> : null}
+            <div className="flex items-center gap-3">
+              {account.avatar ? <img className="size-16 rounded-full border border-border object-cover" src={account.avatar} alt="Profile avatar" /> : null}
+              <div>
+                <p className="font-semibold">{account.display_name || account.username}</p>
+                <p className="text-sm text-muted-foreground">@{account.acct}</p>
+              </div>
+            </div>
+          </div>
           <dl>
             <FieldRow label="Handle" value={`@${account.acct}`} />
             <FieldRow label="Profile" value={account.url ? <a className="text-primary hover:underline" href={account.url} target="_blank" rel="noreferrer">{account.url}</a> : "No URL"} />

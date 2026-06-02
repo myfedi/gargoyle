@@ -341,3 +341,81 @@ func MarshalAccept(account models.Account, follow models.Follow, followRaw []byt
 	accept := map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": account.URI + "/accepts/" + follow.ID, "type": "Accept", "actor": account.URI, "object": json.RawMessage(followRaw)}
 	return json.Marshal(accept)
 }
+
+// ExtractedActor is the cacheable subset of an ActivityPub actor document embedded in an Update.
+type ExtractedActor struct {
+	URI       string
+	Type      string
+	Username  string
+	Name      string
+	Summary   string
+	URL       string
+	AvatarURL string
+	HeaderURL string
+	Inbox     string
+	Outbox    string
+	Followers string
+	Following string
+	PublicKey string
+}
+
+// ExtractActorObject returns an actor from an activity object, used for profile Updates.
+func ExtractActorObject(raw []byte) (ExtractedActor, bool) {
+	var activity struct {
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(raw, &activity); err != nil || len(activity.Object) == 0 {
+		return ExtractedActor{}, false
+	}
+	var actor struct {
+		ID                string          `json:"id"`
+		Type              string          `json:"type"`
+		PreferredUsername string          `json:"preferredUsername"`
+		Name              string          `json:"name"`
+		Summary           string          `json:"summary"`
+		URL               json.RawMessage `json:"url"`
+		Icon              json.RawMessage `json:"icon"`
+		Image             json.RawMessage `json:"image"`
+		Inbox             string          `json:"inbox"`
+		Outbox            string          `json:"outbox"`
+		Followers         string          `json:"followers"`
+		Following         string          `json:"following"`
+		PublicKey         struct {
+			PublicKeyPem string `json:"publicKeyPem"`
+		} `json:"publicKey"`
+	}
+	if err := json.Unmarshal(activity.Object, &actor); err != nil || actor.ID == "" || actor.PreferredUsername == "" || !isActorType(actor.Type) {
+		return ExtractedActor{}, false
+	}
+	return ExtractedActor{URI: actor.ID, Type: actor.Type, Username: actor.PreferredUsername, Name: actor.Name, Summary: actor.Summary, URL: extractURLValue(actor.URL), AvatarURL: extractURLValue(actor.Icon), HeaderURL: extractURLValue(actor.Image), Inbox: actor.Inbox, Outbox: actor.Outbox, Followers: actor.Followers, Following: actor.Following, PublicKey: actor.PublicKey.PublicKeyPem}, true
+}
+
+func isActorType(value string) bool {
+	switch value {
+	case "Application", "Group", "Organization", "Person", "Service":
+		return true
+	default:
+		return false
+	}
+}
+
+func extractURLValue(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var single string
+	if err := json.Unmarshal(raw, &single); err == nil {
+		return single
+	}
+	var object struct {
+		URL json.RawMessage `json:"url"`
+	}
+	if err := json.Unmarshal(raw, &object); err == nil && len(object.URL) > 0 {
+		return extractURLValue(object.URL)
+	}
+	var list []json.RawMessage
+	if err := json.Unmarshal(raw, &list); err == nil && len(list) > 0 {
+		return extractURLValue(list[0])
+	}
+	return ""
+}

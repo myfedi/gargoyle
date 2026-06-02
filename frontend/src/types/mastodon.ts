@@ -6,6 +6,8 @@ export type MastodonAccount = {
   url: string;
   avatar?: string;
   avatar_static?: string;
+  header?: string;
+  header_static?: string;
   bot?: boolean;
   note?: string;
   followers_count?: number;

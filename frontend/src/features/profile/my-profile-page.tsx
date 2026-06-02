@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, FieldRow, FeaturePage, Panel } from "@/features/shared";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
@@ -39,6 +41,9 @@ export function MyProfilePage() {
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState<{ displayName: string; note: string; avatar: File | null; header: File | null }>({ displayName: "", note: "", avatar: null, header: null });
   const [error, setError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
@@ -51,6 +56,7 @@ export function MyProfilePage() {
     try {
       const nextAccount = await api.verifyCredentials();
       setAccount(nextAccount);
+      setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null });
 
       if (activeTab === "posts") {
         setStatuses(await api.accountStatuses(nextAccount.id));
@@ -148,6 +154,29 @@ export function MyProfilePage() {
     }
   }
 
+  async function saveProfile() {
+    if (!api) return;
+    setIsSavingProfile(true);
+    setError(null);
+
+    try {
+      const nextAccount = await api.updateCredentials({ display_name: profileForm.displayName, note: profileForm.note, avatar: profileForm.avatar, header: profileForm.header });
+      setAccount(nextAccount);
+      setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null });
+      setIsEditingProfile(false);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not update profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  }
+
+  function cancelProfileEdit() {
+    if (!account) return;
+    setProfileForm({ displayName: account.display_name || "", note: account.note ? htmlToPlainText(account.note) : "", avatar: null, header: null });
+    setIsEditingProfile(false);
+  }
+
   function updateRelationship(accountId: string, relationship: MastodonRelationship) {
     const update = (current: AccountSearchResult[]) => current.map((item) => item.account.id === accountId ? { ...item, relationship } : item);
     setFollowing(update);
@@ -172,15 +201,69 @@ export function MyProfilePage() {
     if (!account) return <EmptyState title="No account" description="Could not load account." />;
 
     if (activeTab === "profile") {
+      if (isEditingProfile) {
+        return (
+          <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium" htmlFor="profile-display-name">Display name</label>
+              <Input
+                id="profile-display-name"
+                maxLength={120}
+                value={profileForm.displayName}
+                onChange={(event) => setProfileForm((current) => ({ ...current, displayName: event.target.value }))}
+                disabled={isSavingProfile}
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="profile-avatar">Avatar</label>
+                <Input id="profile-avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={isSavingProfile} onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.files?.[0] ?? null }))} />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="profile-header">Header</label>
+                <Input id="profile-header" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={isSavingProfile} onChange={(event) => setProfileForm((current) => ({ ...current, header: event.target.files?.[0] ?? null }))} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium" htmlFor="profile-note">Bio</label>
+              <Textarea
+                id="profile-note"
+                maxLength={5000}
+                value={profileForm.note}
+                onChange={(event) => setProfileForm((current) => ({ ...current, note: event.target.value }))}
+                disabled={isSavingProfile}
+              />
+              <p className="text-xs text-muted-foreground">Your updated profile is federated to followers after it is saved.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={isSavingProfile}>{isSavingProfile ? "Saving..." : "Save profile"}</Button>
+              <Button type="button" variant="outline" disabled={isSavingProfile} onClick={cancelProfileEdit}>Cancel</Button>
+            </div>
+          </form>
+        );
+      }
       return (
-        <dl>
-          <FieldRow label="Handle" value={`@${account.acct}`} />
-          <FieldRow label="Profile" value={account.url ? <a className="text-primary hover:underline" href={account.url} target="_blank" rel="noreferrer">{account.url}</a> : "No URL"} />
-          <FieldRow label="Bio" value={account.note ? htmlToPlainText(account.note) : "No bio"} />
-          <FieldRow label="Posts" value={account.statuses_count ?? 0} />
-          <FieldRow label="Following" value={account.following_count ?? 0} />
-          <FieldRow label="Followers" value={account.followers_count ?? 0} />
-        </dl>
+        <div className="space-y-4">
+          {account.header ? <img className="h-32 w-full rounded-lg border border-border object-cover" src={account.header} alt="Profile header" /> : null}
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              {account.avatar ? <img className="size-16 rounded-full border border-border object-cover" src={account.avatar} alt="Profile avatar" /> : null}
+              <div>
+                <p className="font-semibold">{account.display_name || account.username}</p>
+                <p className="text-sm text-muted-foreground">@{account.acct}</p>
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => setIsEditingProfile(true)}>Edit profile</Button>
+          </div>
+          <dl>
+            <FieldRow label="Handle" value={`@${account.acct}`} />
+            <FieldRow label="Profile" value={account.url ? <a className="text-primary hover:underline" href={account.url} target="_blank" rel="noreferrer">{account.url}</a> : "No URL"} />
+            <FieldRow label="Bio" value={account.note ? htmlToPlainText(account.note) : "No bio"} />
+            <FieldRow label="Posts" value={account.statuses_count ?? 0} />
+            <FieldRow label="Following" value={account.following_count ?? 0} />
+            <FieldRow label="Followers" value={account.followers_count ?? 0} />
+          </dl>
+        </div>
       );
     }
 
@@ -224,14 +307,17 @@ function AccountList({ accounts, busyAccountId, emptyTitle, onFollow, onUnfollow
         const isBusy = busyAccountId === account.id;
         return (
           <article key={account.id} className="flex flex-col gap-4 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 gap-3">
+              {account.avatar ? <img className="size-10 rounded-full border border-border object-cover" src={account.avatar} alt="" aria-hidden="true" /> : null}
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
                 <a className="text-sm font-semibold hover:underline" href={accountHref(account.id)}>{account.display_name || account.username}</a>
                 <p className="text-sm text-muted-foreground">@{account.acct}</p>
                 {isRequested ? <Badge variant="secondary">Requested</Badge> : null}
                 {isFollowing ? <Badge variant="secondary">Following</Badge> : null}
               </div>
-              {account.note ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{htmlToPlainText(account.note)}</p> : null}
+                {account.note ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{htmlToPlainText(account.note)}</p> : null}
+              </div>
             </div>
             {isFollowing || isRequested ? (
               <Button variant="outline" disabled={isBusy} onClick={() => onUnfollow(account)}>{isBusy ? "Updating..." : "Unfollow"}</Button>

@@ -31,6 +31,10 @@ func (f fakeAccountsRepo) CreateAccount(ctx context.Context, tx *db.Tx, input re
 	return nil, nil
 }
 
+func (f fakeAccountsRepo) UpdateLocalAccountProfile(ctx context.Context, tx *db.Tx, id string, input repos.UpdateAccountProfileInput) (*models.Account, error) {
+	return nil, nil
+}
+
 func (f fakeAccountsRepo) GetAccountByID(ctx context.Context, tx *db.Tx, id string) (*models.Account, error) {
 	return nil, sql.ErrNoRows
 }

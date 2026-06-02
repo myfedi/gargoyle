@@ -21,6 +21,10 @@ type CreateAccountInput struct {
 	Summary               *string // optional
 	URI                   string
 	URL                   *string // optional
+	AvatarMediaID         *string // optional local media id
+	HeaderMediaID         *string // optional local media id
+	AvatarURL             *string // optional remote/external URL
+	HeaderURL             *string // optional remote/external URL
 	InboxURI              string
 	OutboxURI             *string
 	FollowingURI          string
@@ -31,8 +35,19 @@ type CreateAccountInput struct {
 	ActorType             models.ActorType // maps to enum
 }
 
+type UpdateAccountProfileInput struct {
+	DisplayName   *string
+	Summary       *string
+	AvatarMediaID *string
+	HeaderMediaID *string
+	AvatarURL     *string
+	HeaderURL     *string
+	UpdatedAt     time.Time // optional override
+}
+
 type AccountsRepo interface {
 	CreateAccount(ctx context.Context, tx *db.Tx, input CreateAccountInput) (*models.Account, error)
+	UpdateLocalAccountProfile(ctx context.Context, tx *db.Tx, id string, input UpdateAccountProfileInput) (*models.Account, error)
 	GetAccountByID(ctx context.Context, tx *db.Tx, id string) (*models.Account, error)
 	GetAccountByUserID(ctx context.Context, tx *db.Tx, userID string) (*models.Account, error)
 	GetLocalAccountByUsername(ctx context.Context, tx *db.Tx, username string) (*models.Account, error)

@@ -72,6 +72,7 @@ export function StatusList({
                 </p>
               ) : null}
               <div className="flex items-start gap-3">
+                {displayedStatus.account.avatar ? <img className="size-10 rounded-full border border-border object-cover" src={displayedStatus.account.avatar} alt="" aria-hidden="true" /> : null}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <a className="text-sm font-semibold hover:underline" href={accountHref(displayedStatus.account.id)}>

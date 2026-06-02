@@ -10,14 +10,18 @@ import (
 func TestActorSerializerMarshallUsesAccountURI(t *testing.T) {
 	serializer := NewActorSerializer(ActorSerializerConfig{})
 	actorJSON, err := serializer.Marshall(models.Account{
-		Username:     "alice",
-		URI:          "https://example.org/users/alice",
-		InboxURI:     "https://example.org/users/alice/inbox",
-		OutboxURI:    strPtr("https://example.org/users/alice/outbox"),
-		FollowersURI: "https://example.org/users/alice/followers",
-		FollowingURI: "https://example.org/users/alice/following",
-		PublicKey:    "public-key-pem",
-		ActorType:    models.ActorTypePerson,
+		Username:              "alice",
+		DisplayName:           strPtr("Alice A."),
+		AvatarMediaID:         strPtr("avatar-1"),
+		HeaderURL:             strPtr("https://cdn.example.org/header.png"),
+		URI:                   "https://example.org/users/alice",
+		InboxURI:              "https://example.org/users/alice/inbox",
+		OutboxURI:             strPtr("https://example.org/users/alice/outbox"),
+		FollowersURI:          "https://example.org/users/alice/followers",
+		FollowingURI:          "https://example.org/users/alice/following",
+		FeaturedCollectionURI: "https://example.org/users/alice/collections/featured",
+		PublicKey:             "public-key-pem",
+		ActorType:             models.ActorTypePerson,
 	})
 	if err != nil {
 		t.Fatalf("Marshall returned error: %v", err)
@@ -36,6 +40,20 @@ func TestActorSerializerMarshallUsesAccountURI(t *testing.T) {
 	}
 	if got["@context"] != "https://www.w3.org/ns/activitystreams" {
 		t.Fatalf("expected ActivityStreams context, got %v", got["@context"])
+	}
+	if got["name"] != "Alice A." {
+		t.Fatalf("expected display name in actor name, got %v", got["name"])
+	}
+	if got["featured"] != "https://example.org/users/alice/collections/featured" {
+		t.Fatalf("expected featured collection, got %v", got["featured"])
+	}
+	icon, ok := got["icon"].(map[string]any)
+	if !ok || icon["url"] != "https://example.org/media/avatar-1" {
+		t.Fatalf("expected local avatar icon URL, got %#v", got["icon"])
+	}
+	image, ok := got["image"].(map[string]any)
+	if !ok || image["url"] != "https://cdn.example.org/header.png" {
+		t.Fatalf("expected header image URL, got %#v", got["image"])
 	}
 }
 

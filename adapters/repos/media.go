@@ -87,7 +87,11 @@ func (r *MediaRepo) MediaAttachmentIsAttached(ctx context.Context, tx *dbPorts.T
 	if err != nil {
 		return false, err
 	}
-	return db.NewSelect().Model((*dbModels.NoteMediaAttachment)(nil)).Where("media_id = ?", id).Exists(ctx)
+	noteAttached, err := db.NewSelect().Model((*dbModels.NoteMediaAttachment)(nil)).Where("media_id = ?", id).Exists(ctx)
+	if err != nil || noteAttached {
+		return noteAttached, err
+	}
+	return db.NewSelect().Model((*dbModels.Account)(nil)).Where("avatar_media_id = ? OR header_media_id = ?", id, id).Exists(ctx)
 }
 
 func (r *MediaRepo) AttachMediaToNote(ctx context.Context, tx *dbPorts.Tx, noteID string, mediaID string) error {

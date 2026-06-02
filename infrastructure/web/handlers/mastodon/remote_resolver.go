@@ -166,6 +166,8 @@ func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string, 
 		Name              string `json:"name"`
 		Summary           string `json:"summary"`
 		URL               any    `json:"url"`
+		Icon              any    `json:"icon"`
+		Image             any    `json:"image"`
 		Inbox             string `json:"inbox"`
 		Outbox            string `json:"outbox"`
 		Followers         string `json:"followers"`
@@ -185,7 +187,7 @@ func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string, 
 		domain = parsed.Host
 	}
 	actorURLValue := stringURL(doc.URL)
-	return &models.Account{ID: mastodonAccountID(doc.ID), Username: doc.PreferredUsername, Domain: stringPtr(domain), DisplayName: stringPtr(firstNonEmpty(doc.Name, doc.PreferredUsername)), Summary: stringPtr(doc.Summary), URI: doc.ID, URL: stringPtr(firstNonEmpty(actorURLValue, doc.ID)), InboxURI: doc.Inbox, OutboxURI: stringPtr(doc.Outbox), FollowingURI: doc.Following, FollowersURI: doc.Followers, PublicKey: doc.PublicKey.PublicKeyPem, ActorType: models.ActorTypePerson}, nil
+	return &models.Account{ID: mastodonAccountID(doc.ID), Username: doc.PreferredUsername, Domain: stringPtr(domain), DisplayName: stringPtr(firstNonEmpty(doc.Name, doc.PreferredUsername)), Summary: stringPtr(doc.Summary), URI: doc.ID, URL: stringPtr(firstNonEmpty(actorURLValue, doc.ID)), AvatarURL: stringPtr(stringURL(doc.Icon)), HeaderURL: stringPtr(stringURL(doc.Image)), InboxURI: doc.Inbox, OutboxURI: stringPtr(doc.Outbox), FollowingURI: doc.Following, FollowersURI: doc.Followers, PublicKey: doc.PublicKey.PublicKeyPem, ActorType: models.ActorTypePerson}, nil
 }
 
 func mastodonAccountID(actor string) string {
@@ -273,20 +275,11 @@ func stringURL(value any) string {
 	switch v := value.(type) {
 	case string:
 		return v
+	case map[string]any:
+		return stringURL(v["url"])
 	case []any:
 		if len(v) > 0 {
-			if s, ok := v[0].(string); ok {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
+			return stringURL(v[0])
 		}
 	}
 	return ""

@@ -2,7 +2,9 @@ package users
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -28,6 +30,7 @@ type UsersWebHandlerConfig struct {
 	ActivitiesRepo      repos.ActivitiesRepository
 	FollowsRepo         repos.FollowsRepository
 	NotesRepo           repos.NotesRepository
+	RemoteAccountsRepo  repos.RemoteAccountsRepository
 	DeliveryJobsRepo    repos.DeliveryJobsRepository
 	Serializer          activitypub.ActorSerializer
 	ActorFetcher        activitypub.ActorFetcher
@@ -131,13 +134,14 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		cfg.SignatureVerifier = transport
 	}
 	flowCfg := apUsecases.ActivityPubFlowConfig{
-		TxProvider:       cfg.TxProvider,
-		AccountsRepo:     cfg.AccountsRepo,
-		ActivitiesRepo:   cfg.ActivitiesRepo,
-		FollowsRepo:      cfg.FollowsRepo,
-		NotesRepo:        cfg.NotesRepo,
-		ActorFetcher:     cfg.ActorFetcher,
-		ContentSanitizer: cfg.ContentSanitizer,
+		TxProvider:         cfg.TxProvider,
+		AccountsRepo:       cfg.AccountsRepo,
+		ActivitiesRepo:     cfg.ActivitiesRepo,
+		FollowsRepo:        cfg.FollowsRepo,
+		NotesRepo:          cfg.NotesRepo,
+		RemoteAccountsRepo: cfg.RemoteAccountsRepo,
+		ActorFetcher:       cfg.ActorFetcher,
+		ContentSanitizer:   cfg.ContentSanitizer,
 	}
 	h := &UsersWebHandler{
 		cfg:                   cfg,
@@ -171,6 +175,7 @@ func (h *UsersWebHandler) SetupUserProfileHandler(app *fiber.App) {
 	})
 
 	app.Get("/users/:username/outbox", h.outboxCollection)
+	app.Get("/users/:username/collections/featured", h.featuredCollection)
 	app.Get("/users/:username/followers", h.followersCollection)
 	app.Get("/users/:username/following", h.followingCollection)
 
@@ -212,6 +217,27 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 		First:        firstPage(c, id),
 		PartOf:       partOf(c, id),
 		OrderedItems: items,
+	})
+}
+
+func (h *UsersWebHandler) featuredCollection(c *fiber.Ctx) error {
+	account, err := h.cfg.AccountsRepo.GetLocalAccountByUsername(c.UserContext(), nil, c.Params("username"))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrNotFound, "no such username"))
+		}
+		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
+	}
+	id := account.FeaturedCollectionURI
+	if id == "" {
+		id = account.URI + "/collections/featured"
+	}
+	return sendActivityJSON(c, orderedCollectionResponse{
+		Context:      "https://www.w3.org/ns/activitystreams",
+		ID:           id,
+		Type:         "OrderedCollection",
+		TotalItems:   0,
+		OrderedItems: []json.RawMessage{},
 	})
 }
 

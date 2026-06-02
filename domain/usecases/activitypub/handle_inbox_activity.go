@@ -3,7 +3,9 @@ package activitypub
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
+	"net/url"
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -129,6 +131,22 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 						return err
 					}
 					return u.cfg.NotesRepo.UpdateNoteByURI(ctx, &tx, note.URI, u.cfg.ContentSanitizer.SanitizeHTML(note.Content), u.cfg.ContentSanitizer.StripHTMLFromText(note.Content))
+				}
+			}
+			if u.cfg.RemoteAccountsRepo != nil {
+				if actorUpdate, ok := ExtractActorObject(input.RawJSON); ok {
+					if actorUpdate.Inbox == "" {
+						return domainerrors.New(domainerrors.ErrBadRequest, "actor update is missing inbox")
+					}
+					if actorUpdate.URI != activity.Actor {
+						return domainerrors.New(domainerrors.ErrUnauthorized, "update actor does not own actor object")
+					}
+					updatedAccount := accountFromExtractedActor(actorUpdate)
+					if existing, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, &tx, actorUpdate.URI); err == nil {
+						mergeMissingRemoteAccountFields(&updatedAccount, *existing)
+					}
+					_, err := u.cfg.RemoteAccountsRepo.UpsertRemoteAccount(ctx, &tx, updatedAccount)
+					return err
 				}
 			}
 		case "Like":
@@ -272,4 +290,87 @@ func validateFollowResponseObject(raw []byte, localActor string, remoteActor str
 		return domainerrors.New(domainerrors.ErrBadRequest, "accept/reject object does not match local follow")
 	}
 	return nil
+}
+
+func accountFromExtractedActor(actor ExtractedActor) models.Account {
+	domain := ""
+	if parsed, err := url.Parse(actor.URI); err == nil {
+		domain = parsed.Host
+	}
+	return models.Account{
+		ID:           remoteAccountID(actor.URI),
+		Username:     actor.Username,
+		Domain:       stringPtr(domain),
+		DisplayName:  stringPtr(firstNonEmpty(actor.Name, actor.Username)),
+		Summary:      stringPtr(actor.Summary),
+		URI:          actor.URI,
+		URL:          stringPtr(firstNonEmpty(actor.URL, actor.URI)),
+		AvatarURL:    stringPtr(actor.AvatarURL),
+		HeaderURL:    stringPtr(actor.HeaderURL),
+		InboxURI:     actor.Inbox,
+		OutboxURI:    stringPtr(actor.Outbox),
+		FollowingURI: actor.Following,
+		FollowersURI: actor.Followers,
+		PublicKey:    actor.PublicKey,
+		ActorType:    actorTypeFromString(actor.Type),
+	}
+}
+
+func remoteAccountID(actor string) string {
+	return "remote:" + base64.RawURLEncoding.EncodeToString([]byte(actor))
+}
+
+func actorTypeFromString(value string) models.ActorType {
+	switch value {
+	case "Application":
+		return models.ActorTypeApplication
+	case "Group":
+		return models.ActorTypeGroup
+	case "Organization":
+		return models.ActorTypeOrganization
+	case "Service":
+		return models.ActorTypeService
+	default:
+		return models.ActorTypePerson
+	}
+}
+
+func stringPtr(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func mergeMissingRemoteAccountFields(account *models.Account, existing models.Account) {
+	if account.PublicKey == "" {
+		account.PublicKey = existing.PublicKey
+	}
+	if account.OutboxURI == nil {
+		account.OutboxURI = existing.OutboxURI
+	}
+	if account.FollowingURI == "" {
+		account.FollowingURI = existing.FollowingURI
+	}
+	if account.FollowersURI == "" {
+		account.FollowersURI = existing.FollowersURI
+	}
+	if account.URL == nil {
+		account.URL = existing.URL
+	}
+	if account.AvatarURL == nil {
+		account.AvatarURL = existing.AvatarURL
+	}
+	if account.HeaderURL == nil {
+		account.HeaderURL = existing.HeaderURL
+	}
 }

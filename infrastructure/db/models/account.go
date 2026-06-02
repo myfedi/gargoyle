@@ -19,8 +19,12 @@ type Account struct {
 	Summary     *string `bun:",nullzero"`
 	URI         string  `bun:",nullzero,notnull,unique"`
 	// null for local accounts
-	URL      *string `bun:",nullzero"`
-	InboxURI string  `bun:",nullzero"`
+	URL           *string `bun:",nullzero"`
+	AvatarMediaID *string `bun:"type:CHAR(26),nullzero"`
+	HeaderMediaID *string `bun:"type:CHAR(26),nullzero"`
+	AvatarURL     *string `bun:",nullzero"`
+	HeaderURL     *string `bun:",nullzero"`
+	InboxURI      string  `bun:",nullzero"`
 	// should be set, some implementations don't tho for service accounts
 	OutboxURI             *string `bun:",nullzero"`
 	FollowingURI          string  `bun:",nullzero"`
@@ -46,6 +50,10 @@ func (a *Account) ToModel() models.Account {
 		Summary:               a.Summary,
 		URI:                   a.URI,
 		URL:                   a.URL,
+		AvatarMediaID:         a.AvatarMediaID,
+		HeaderMediaID:         a.HeaderMediaID,
+		AvatarURL:             a.AvatarURL,
+		HeaderURL:             a.HeaderURL,
 		InboxURI:              a.InboxURI,
 		OutboxURI:             a.OutboxURI,
 		FollowingURI:          a.FollowingURI,

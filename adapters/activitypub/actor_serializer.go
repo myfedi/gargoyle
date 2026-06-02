@@ -3,6 +3,8 @@ package activitypub
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
+	"strings"
 
 	ap "github.com/go-ap/activitypub"
 	"github.com/myfedi/gargoyle/domain/models"
@@ -33,7 +35,7 @@ func (s ActorSerializer) Marshall(account models.Account) (string, error) {
 		return "", err
 	}
 
-	data, err = ensureActivityStreamsContext(data)
+	data, err = ensureActorDocumentMetadata(data, account)
 	if err != nil {
 		return "", err
 	}
@@ -69,7 +71,7 @@ func mapActor(account models.Account) (*ap.Actor, error) {
 		actor = ap.ServiceNew(id)
 	}
 
-	actor.Name = ap.DefaultNaturalLanguage(account.Username)
+	actor.Name = ap.DefaultNaturalLanguage(firstNonEmpty(stringValue(account.DisplayName), account.Username))
 	actor.PreferredUsername = ap.DefaultNaturalLanguage(account.Username)
 	actor.Summary = ap.DefaultNaturalLanguage(stringValue(account.Summary))
 	actor.Inbox = ap.IRI(account.InboxURI)
@@ -78,6 +80,12 @@ func mapActor(account models.Account) (*ap.Actor, error) {
 	}
 	actor.Followers = ap.IRI(account.FollowersURI)
 	actor.Following = ap.IRI(account.FollowingURI)
+	if avatarURL := accountAvatarURL(account); avatarURL != "" {
+		actor.Icon = ap.Image{Type: ap.ImageType, URL: ap.IRI(avatarURL)}
+	}
+	if headerURL := accountHeaderURL(account); headerURL != "" {
+		actor.Image = ap.Image{Type: ap.ImageType, URL: ap.IRI(headerURL)}
+	}
 	actor.PublicKey = ap.PublicKey{
 		ID:           ap.ID(id + "#main-key"),
 		Owner:        ap.IRI(id),
@@ -87,7 +95,7 @@ func mapActor(account models.Account) (*ap.Actor, error) {
 	return actor, nil
 }
 
-func ensureActivityStreamsContext(data []byte) ([]byte, error) {
+func ensureActorDocumentMetadata(data []byte, account models.Account) ([]byte, error) {
 	var actor map[string]json.RawMessage
 	if err := json.Unmarshal(data, &actor); err != nil {
 		return nil, err
@@ -95,6 +103,13 @@ func ensureActivityStreamsContext(data []byte) ([]byte, error) {
 
 	if _, ok := actor["@context"]; !ok {
 		actor["@context"] = json.RawMessage(`"https://www.w3.org/ns/activitystreams"`)
+	}
+	if account.FeaturedCollectionURI != "" {
+		featured, err := json.Marshal(account.FeaturedCollectionURI)
+		if err != nil {
+			return nil, err
+		}
+		actor["featured"] = featured
 	}
 
 	return json.Marshal(actor)
@@ -105,4 +120,41 @@ func stringValue(str *string) string {
 		return ""
 	}
 	return *str
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func accountAvatarURL(account models.Account) string {
+	if account.AvatarURL != nil && *account.AvatarURL != "" {
+		return *account.AvatarURL
+	}
+	if account.AvatarMediaID == nil || *account.AvatarMediaID == "" {
+		return ""
+	}
+	return accountMediaURL(account.URI, *account.AvatarMediaID)
+}
+
+func accountHeaderURL(account models.Account) string {
+	if account.HeaderURL != nil && *account.HeaderURL != "" {
+		return *account.HeaderURL
+	}
+	if account.HeaderMediaID == nil || *account.HeaderMediaID == "" {
+		return ""
+	}
+	return accountMediaURL(account.URI, *account.HeaderMediaID)
+}
+
+func accountMediaURL(actorURI string, mediaID string) string {
+	parsed, err := url.Parse(actorURI)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host + "/media/" + strings.TrimLeft(mediaID, "/")
 }

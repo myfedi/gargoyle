@@ -24,16 +24,17 @@ type PaginationInput struct {
 // mutation use cases. Mutating use cases use TxProvider for atomic local state
 // changes; network delivery remains outside the transaction via returned results.
 type ActivityPubFlowConfig struct {
-	TxProvider       db.TxProvider
-	AccountsRepo     repos.AccountsRepo
-	ActivitiesRepo   repos.ActivitiesRepository
-	FollowsRepo      repos.FollowsRepository
-	NotesRepo        repos.NotesRepository
-	FetchJobsRepo    repos.FetchJobsRepository
-	SocialRepo       repos.SocialRepository
-	BoostsRepo       repos.BoostsRepository
-	ActorFetcher     apPorts.ActorFetcher
-	ContentSanitizer ports.ContentSanitizer
+	TxProvider         db.TxProvider
+	AccountsRepo       repos.AccountsRepo
+	ActivitiesRepo     repos.ActivitiesRepository
+	FollowsRepo        repos.FollowsRepository
+	NotesRepo          repos.NotesRepository
+	RemoteAccountsRepo repos.RemoteAccountsRepository
+	FetchJobsRepo      repos.FetchJobsRepository
+	SocialRepo         repos.SocialRepository
+	BoostsRepo         repos.BoostsRepository
+	ActorFetcher       apPorts.ActorFetcher
+	ContentSanitizer   ports.ContentSanitizer
 }
 
 // GetOutboxUseCase reads a local actor's outbox collection.

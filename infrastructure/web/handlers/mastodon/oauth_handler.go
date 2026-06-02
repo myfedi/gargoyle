@@ -1,6 +1,7 @@
 package mastodon
 
 import (
+	"net/url"
 	"strings"
 	"time"
 
@@ -168,7 +169,46 @@ func accountToResponse(account *models.Account) accountResponse {
 	if account.Domain != nil && *account.Domain != "" {
 		acct = account.Username + "@" + *account.Domain
 	}
-	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: false, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: stringValue(account.URL), Avatar: "", AvatarStatic: "", Header: "", HeaderStatic: ""}
+	avatar := accountAvatarURL(account)
+	header := accountHeaderURL(account)
+	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: false, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header}
+}
+
+func accountAvatarURL(account *models.Account) string {
+	if account.AvatarURL != nil && *account.AvatarURL != "" {
+		return *account.AvatarURL
+	}
+	if account.AvatarMediaID == nil || *account.AvatarMediaID == "" {
+		return ""
+	}
+	return accountMediaURL(account.URI, *account.AvatarMediaID)
+}
+
+func accountHeaderURL(account *models.Account) string {
+	if account.HeaderURL != nil && *account.HeaderURL != "" {
+		return *account.HeaderURL
+	}
+	if account.HeaderMediaID == nil || *account.HeaderMediaID == "" {
+		return ""
+	}
+	return accountMediaURL(account.URI, *account.HeaderMediaID)
+}
+
+func accountMediaURL(actorURI string, mediaID string) string {
+	parsed, err := url.Parse(actorURI)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host + "/media/" + strings.TrimLeft(mediaID, "/")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func htmlEscape(value string) string {

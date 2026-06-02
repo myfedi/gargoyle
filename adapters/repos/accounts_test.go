@@ -40,6 +40,14 @@ func TestAccountsRepoCreateAndLoadPreservesActorType(t *testing.T) {
 	if account.ActorType != models.ActorTypePerson {
 		t.Fatalf("expected actor type Person, got %v", account.ActorType)
 	}
+
+	updated, err := repo.UpdateLocalAccountProfile(context.Background(), nil, account.ID, portrepos.UpdateAccountProfileInput{DisplayName: strPtr("Alice"), Summary: strPtr("bio"), AvatarMediaID: strPtr("avatar-1"), HeaderMediaID: strPtr("header-1")})
+	if err != nil {
+		t.Fatalf("UpdateLocalAccountProfile returned error: %v", err)
+	}
+	if updated.DisplayName == nil || *updated.DisplayName != "Alice" || updated.AvatarMediaID == nil || *updated.AvatarMediaID != "avatar-1" {
+		t.Fatalf("profile update was not persisted: %+v", updated)
+	}
 }
 
 func newTestDB(t *testing.T) *bun.DB {
@@ -66,6 +74,10 @@ CREATE TABLE accounts (
     summary TEXT,
     uri TEXT NOT NULL UNIQUE,
     url TEXT,
+    avatar_media_id CHAR(26),
+    header_media_id CHAR(26),
+    avatar_url TEXT,
+    header_url TEXT,
     inbox_uri TEXT,
     outbox_uri TEXT,
     following_uri TEXT,
