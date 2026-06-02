@@ -272,7 +272,7 @@ export function MyProfilePage() {
       <div>
         <div className="relative h-48 bg-[linear-gradient(135deg,hsl(var(--secondary)),hsl(var(--muted)))] sm:h-60">
           {currentAccount.header ? <img className="h-full w-full object-cover" src={currentAccount.header} alt="Profile header" /> : null}
-          <div className="absolute bottom-4 left-5 size-28 overflow-hidden rounded-full border-4 border-card bg-background shadow-sm sm:size-32">
+          <div className="absolute bottom-0 left-5 size-28 translate-y-1/2 overflow-hidden rounded-full border-4 border-card bg-background shadow-sm sm:size-32">
             {currentAccount.avatar ? (
               <img className="h-full w-full object-cover" src={currentAccount.avatar} alt="Profile avatar" />
             ) : (
@@ -280,7 +280,7 @@ export function MyProfilePage() {
             )}
           </div>
         </div>
-        <div className="px-5 pb-5 pt-4 sm:pl-40">
+        <div className="px-5 pb-5 pt-16 sm:pl-40 sm:pt-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">{currentAccount.display_name || currentAccount.username}</h1>
