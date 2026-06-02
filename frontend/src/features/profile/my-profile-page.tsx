@@ -14,7 +14,7 @@ import { accountHref } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
 import type { MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
 
-type ProfileTab = "posts" | "following" | "followers";
+type ProfileTab = "posts" | "following" | "followers" | "bookmarks";
 
 type AccountSearchResult = {
   account: MastodonAccount;
@@ -66,6 +66,8 @@ export function MyProfilePage() {
         ]);
         setStatuses(nextStatuses);
         setPinnedStatuses(nextPinnedStatuses);
+      } else if (activeTab === "bookmarks") {
+        setStatuses(await api.bookmarks());
       } else if (activeTab === "following" || activeTab === "followers") {
         const accounts = activeTab === "following" ? await api.following(nextAccount.id) : await api.followers(nextAccount.id);
         const ids = accounts.map((item) => item.id);
@@ -109,7 +111,9 @@ export function MyProfilePage() {
     try {
       const nextStatus = await runStatusAction(api, action, status);
       setStatuses((current) => replaceStatus(current, nextStatus));
-      if (action === "unpin") {
+      if (activeTab === "bookmarks" && action === "unbookmark") {
+        setStatuses((current) => current.filter((item) => item.id !== status.id));
+      } else if (action === "unpin") {
         setPinnedStatuses((current) => current.filter((item) => item.id !== status.id));
       } else if (action === "pin") {
         setPinnedStatuses((current) => [nextStatus, ...current.filter((item) => item.id !== nextStatus.id)]);
@@ -209,7 +213,7 @@ export function MyProfilePage() {
         {isLoading && !account ? <ProfileSkeleton /> : account ? renderProfileDetails(account) : <EmptyState title="No account" description="Could not load account." />}
       </div>
 
-      <Panel title="Activity">
+      <Panel title={activeTab === "bookmarks" ? "Bookmarks" : "Activity"}>
         <Tabs value={activeTab} onValueChange={setActiveTab} items={[...profileTabs]} />
 
         {error ? <p className="mt-5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}
@@ -266,30 +270,29 @@ export function MyProfilePage() {
 
     return (
       <div>
-        <div className="relative h-44 bg-secondary sm:h-56">
+        <div className="relative h-48 bg-[linear-gradient(135deg,hsl(var(--secondary)),hsl(var(--muted)))] sm:h-60">
           {currentAccount.header ? <img className="h-full w-full object-cover" src={currentAccount.header} alt="Profile header" /> : null}
+          <div className="absolute bottom-4 left-5 size-28 overflow-hidden rounded-full border-4 border-card bg-background shadow-sm sm:size-32">
+            {currentAccount.avatar ? (
+              <img className="h-full w-full object-cover" src={currentAccount.avatar} alt="Profile avatar" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-secondary text-3xl font-semibold text-secondary-foreground">{profileInitials(currentAccount)}</div>
+            )}
+          </div>
         </div>
-        <div className="px-5 pb-5">
-          <div className="-mt-12 flex flex-col gap-4 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex items-end gap-4">
-              <div className="size-24 overflow-hidden rounded-full border-4 border-card bg-secondary shadow-sm sm:size-28">
-                {currentAccount.avatar ? <img className="h-full w-full object-cover" src={currentAccount.avatar} alt="Profile avatar" /> : null}
-              </div>
-              <div className="pb-1">
-                <h1 className="text-2xl font-semibold tracking-tight">{currentAccount.display_name || currentAccount.username}</h1>
-                <p className="text-sm text-muted-foreground">@{currentAccount.acct}</p>
-              </div>
+        <div className="px-5 pb-5 pt-4 sm:pl-40">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">{currentAccount.display_name || currentAccount.username}</h1>
+              <p className="text-sm text-muted-foreground">@{currentAccount.acct}</p>
             </div>
-            <Button variant="outline" onClick={() => setIsEditingProfile(true)}>Edit profile</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setActiveTab("bookmarks")}>Bookmarks</Button>
+              <Button variant="outline" onClick={() => setIsEditingProfile(true)}>Edit profile</Button>
+            </div>
           </div>
 
           {currentAccount.note ? <p className="mt-5 max-w-3xl text-sm leading-6 text-muted-foreground">{htmlToPlainText(currentAccount.note)}</p> : null}
-
-          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-            <span><strong className="font-semibold text-foreground">{currentAccount.statuses_count ?? 0}</strong> <span className="text-muted-foreground">posts</span></span>
-            <span><strong className="font-semibold text-foreground">{currentAccount.following_count ?? 0}</strong> <span className="text-muted-foreground">following</span></span>
-            <span><strong className="font-semibold text-foreground">{currentAccount.followers_count ?? 0}</strong> <span className="text-muted-foreground">followers</span></span>
-          </div>
         </div>
       </div>
     );
@@ -297,6 +300,20 @@ export function MyProfilePage() {
 
   function renderTab() {
     if (!account) return <EmptyState title="No account" description="Could not load account." />;
+
+    if (activeTab === "bookmarks") {
+      return (
+        <StatusList
+          statuses={statuses}
+          currentAccountId={account.id}
+          actingStatusId={actingStatusId}
+          deletingStatusId={deletingStatusId}
+          emptyTitle="No bookmarks"
+          emptyDescription="Bookmarked posts will appear here."
+          onAction={runAction}
+        />
+      );
+    }
 
     if (activeTab === "posts") {
       return (
@@ -384,6 +401,11 @@ function AccountList({ accounts, busyAccountId, emptyTitle, onFollow, onUnfollow
       })}
     </div>
   );
+}
+
+function profileInitials(account: MastodonAccount) {
+  const source = account.display_name || account.username || account.acct || "?";
+  return source.trim().slice(0, 2).toUpperCase();
 }
 
 function ProfileSkeleton() {
