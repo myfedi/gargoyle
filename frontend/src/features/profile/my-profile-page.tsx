@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { EmptyState, FieldRow, FeaturePage, Panel } from "@/features/shared";
+import { EmptyState, Panel } from "@/features/shared";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
@@ -14,7 +14,7 @@ import { accountHref } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
 import type { MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
 
-type ProfileTab = "profile" | "posts" | "pinned" | "bookmarks" | "favourites" | "following" | "followers";
+type ProfileTab = "posts" | "following" | "followers";
 
 type AccountSearchResult = {
   account: MastodonAccount;
@@ -22,20 +22,17 @@ type AccountSearchResult = {
 };
 
 const profileTabs = [
-  { value: "profile", label: "Profile" },
   { value: "posts", label: "Posts" },
-  { value: "pinned", label: "Pinned" },
-  { value: "bookmarks", label: "Bookmarks" },
-  { value: "favourites", label: "Favourites" },
   { value: "following", label: "Following" },
   { value: "followers", label: "Followers" },
 ] as const;
 
 export function MyProfilePage() {
   const { session } = useAuth();
-  const [activeTab, setActiveTab] = useState<ProfileTab>("profile");
+  const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
   const [account, setAccount] = useState<MastodonAccount | null>(null);
   const [statuses, setStatuses] = useState<MastodonStatus[]>([]);
+  const [pinnedStatuses, setPinnedStatuses] = useState<MastodonStatus[]>([]);
   const [following, setFollowing] = useState<AccountSearchResult[]>([]);
   const [followers, setFollowers] = useState<AccountSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,6 +45,9 @@ export function MyProfilePage() {
   const [error, setError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
+  const oldestStatusId = statuses.at(-1)?.id;
+  const pinnedIDs = new Set(pinnedStatuses.map((status) => status.id));
+  const normalStatuses = statuses.filter((status) => !pinnedIDs.has(status.id));
 
   const loadProfile = useCallback(async () => {
     if (!api) return;
@@ -60,13 +60,12 @@ export function MyProfilePage() {
       setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null });
 
       if (activeTab === "posts") {
-        setStatuses(await api.accountStatuses(nextAccount.id));
-      } else if (activeTab === "pinned") {
-        setStatuses(await api.accountStatuses(nextAccount.id, { pinned: true }));
-      } else if (activeTab === "bookmarks") {
-        setStatuses(await api.bookmarks());
-      } else if (activeTab === "favourites") {
-        setStatuses(await api.favourites());
+        const [nextStatuses, nextPinnedStatuses] = await Promise.all([
+          api.accountStatuses(nextAccount.id),
+          api.accountStatuses(nextAccount.id, { pinned: true }),
+        ]);
+        setStatuses(nextStatuses);
+        setPinnedStatuses(nextPinnedStatuses);
       } else if (activeTab === "following" || activeTab === "followers") {
         const accounts = activeTab === "following" ? await api.following(nextAccount.id) : await api.followers(nextAccount.id);
         const ids = accounts.map((item) => item.id);
@@ -87,6 +86,20 @@ export function MyProfilePage() {
     void loadProfile();
   }, [loadProfile]);
 
+  async function loadMore() {
+    if (!api || !account || !oldestStatusId) return;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const nextStatuses = await api.accountStatuses(account.id, { maxId: oldestStatusId });
+      setStatuses((current) => [...current, ...nextStatuses]);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not load more posts.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   async function runAction(action: StatusAction, status: MastodonStatus) {
     if (!api) return;
@@ -95,10 +108,13 @@ export function MyProfilePage() {
 
     try {
       const nextStatus = await runStatusAction(api, action, status);
-      if ((activeTab === "bookmarks" && action === "unbookmark") || (activeTab === "favourites" && action === "unfavourite") || (activeTab === "pinned" && action === "unpin")) {
-        setStatuses((current) => current.filter((item) => item.id !== status.id));
+      setStatuses((current) => replaceStatus(current, nextStatus));
+      if (action === "unpin") {
+        setPinnedStatuses((current) => current.filter((item) => item.id !== status.id));
+      } else if (action === "pin") {
+        setPinnedStatuses((current) => [nextStatus, ...current.filter((item) => item.id !== nextStatus.id)]);
       } else {
-        setStatuses((current) => replaceStatus(current, nextStatus));
+        setPinnedStatuses((current) => replaceStatus(current, nextStatus));
       }
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not update post.");
@@ -115,6 +131,7 @@ export function MyProfilePage() {
     try {
       await api.deleteStatus(status.id);
       setStatuses((current) => current.filter((item) => item.id !== status.id));
+      setPinnedStatuses((current) => current.filter((item) => item.id !== status.id));
       return true;
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not delete post.");
@@ -187,104 +204,139 @@ export function MyProfilePage() {
   }
 
   return (
-    <FeaturePage eyebrow="Profile" title="My profile" description={account ? `@${account.acct}` : "Your account and saved posts."}>
-      <Panel title={account?.display_name || account?.username || "Profile"}>
+    <section className="space-y-6">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        {isLoading && !account ? <ProfileSkeleton /> : account ? renderProfileDetails(account) : <EmptyState title="No account" description="Could not load account." />}
+      </div>
+
+      <Panel title="Activity">
         <Tabs value={activeTab} onValueChange={setActiveTab} items={[...profileTabs]} />
 
         {error ? <p className="mt-5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}
 
         <div className="mt-5">
-          {isLoading ? <LoadingRows /> : renderTab()}
+          {isLoading && !account ? <LoadingRows /> : renderTab()}
         </div>
       </Panel>
-    </FeaturePage>
+    </section>
   );
 
-  function renderTab() {
-    if (!account) return <EmptyState title="No account" description="Could not load account." />;
-
-    if (activeTab === "profile") {
-      if (isEditingProfile) {
-        return (
-          <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
-            <div className="grid gap-2">
-              <label className="text-sm font-medium" htmlFor="profile-display-name">Display name</label>
-              <Input
-                id="profile-display-name"
-                maxLength={120}
-                value={profileForm.displayName}
-                onChange={(event) => setProfileForm((current) => ({ ...current, displayName: event.target.value }))}
-                disabled={isSavingProfile}
-              />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="profile-avatar">Avatar</label>
-                <Input id="profile-avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={isSavingProfile} onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.files?.[0] ?? null }))} />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="profile-header">Header</label>
-                <Input id="profile-header" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={isSavingProfile} onChange={(event) => setProfileForm((current) => ({ ...current, header: event.target.files?.[0] ?? null }))} />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <label className="text-sm font-medium" htmlFor="profile-note">Bio</label>
-              <Textarea
-                id="profile-note"
-                maxLength={5000}
-                value={profileForm.note}
-                onChange={(event) => setProfileForm((current) => ({ ...current, note: event.target.value }))}
-                disabled={isSavingProfile}
-              />
-              <p className="text-xs text-muted-foreground">Your updated profile is federated to followers after it is saved.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit" disabled={isSavingProfile}>{isSavingProfile ? "Saving..." : "Save profile"}</Button>
-              <Button type="button" variant="outline" disabled={isSavingProfile} onClick={cancelProfileEdit}>Cancel</Button>
-            </div>
-          </form>
-        );
-      }
+  function renderProfileDetails(currentAccount: MastodonAccount) {
+    if (isEditingProfile) {
       return (
-        <div className="space-y-4">
-          {account.header ? <img className="h-32 w-full rounded-lg border border-border object-cover" src={account.header} alt="Profile header" /> : null}
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              {account.avatar ? <img className="size-16 rounded-full border border-border object-cover" src={account.avatar} alt="Profile avatar" /> : null}
-              <div>
-                <p className="font-semibold">{account.display_name || account.username}</p>
-                <p className="text-sm text-muted-foreground">@{account.acct}</p>
+        <form className="space-y-5 p-5" onSubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
+          <div className="grid gap-2">
+            <label className="text-sm font-medium" htmlFor="profile-display-name">Display name</label>
+            <Input
+              id="profile-display-name"
+              maxLength={120}
+              value={profileForm.displayName}
+              onChange={(event) => setProfileForm((current) => ({ ...current, displayName: event.target.value }))}
+              disabled={isSavingProfile}
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium" htmlFor="profile-avatar">Avatar</label>
+              <Input id="profile-avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={isSavingProfile} onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.files?.[0] ?? null }))} />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium" htmlFor="profile-header">Header</label>
+              <Input id="profile-header" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={isSavingProfile} onChange={(event) => setProfileForm((current) => ({ ...current, header: event.target.files?.[0] ?? null }))} />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <label className="text-sm font-medium" htmlFor="profile-note">Bio</label>
+            <Textarea
+              id="profile-note"
+              maxLength={5000}
+              value={profileForm.note}
+              onChange={(event) => setProfileForm((current) => ({ ...current, note: event.target.value }))}
+              disabled={isSavingProfile}
+            />
+            <p className="text-xs text-muted-foreground">Your updated profile is federated to followers after it is saved.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={isSavingProfile}>{isSavingProfile ? "Saving..." : "Save profile"}</Button>
+            <Button type="button" variant="outline" disabled={isSavingProfile} onClick={cancelProfileEdit}>Cancel</Button>
+          </div>
+        </form>
+      );
+    }
+
+    return (
+      <div>
+        <div className="relative h-44 bg-secondary sm:h-56">
+          {currentAccount.header ? <img className="h-full w-full object-cover" src={currentAccount.header} alt="Profile header" /> : null}
+        </div>
+        <div className="px-5 pb-5">
+          <div className="-mt-12 flex flex-col gap-4 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-end gap-4">
+              <div className="size-24 overflow-hidden rounded-full border-4 border-card bg-secondary shadow-sm sm:size-28">
+                {currentAccount.avatar ? <img className="h-full w-full object-cover" src={currentAccount.avatar} alt="Profile avatar" /> : null}
+              </div>
+              <div className="pb-1">
+                <h1 className="text-2xl font-semibold tracking-tight">{currentAccount.display_name || currentAccount.username}</h1>
+                <p className="text-sm text-muted-foreground">@{currentAccount.acct}</p>
               </div>
             </div>
             <Button variant="outline" onClick={() => setIsEditingProfile(true)}>Edit profile</Button>
           </div>
-          <dl>
-            <FieldRow label="Handle" value={`@${account.acct}`} />
-            <FieldRow label="Profile" value={account.url ? <a className="text-primary hover:underline" href={account.url} target="_blank" rel="noreferrer">{account.url}</a> : "No URL"} />
-            <FieldRow label="Bio" value={account.note ? htmlToPlainText(account.note) : "No bio"} />
-            <FieldRow label="Posts" value={account.statuses_count ?? 0} />
-            <FieldRow label="Following" value={account.following_count ?? 0} />
-            <FieldRow label="Followers" value={account.followers_count ?? 0} />
-          </dl>
+
+          {currentAccount.note ? <p className="mt-5 max-w-3xl text-sm leading-6 text-muted-foreground">{htmlToPlainText(currentAccount.note)}</p> : null}
+
+          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <span><strong className="font-semibold text-foreground">{currentAccount.statuses_count ?? 0}</strong> <span className="text-muted-foreground">posts</span></span>
+            <span><strong className="font-semibold text-foreground">{currentAccount.following_count ?? 0}</strong> <span className="text-muted-foreground">following</span></span>
+            <span><strong className="font-semibold text-foreground">{currentAccount.followers_count ?? 0}</strong> <span className="text-muted-foreground">followers</span></span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderTab() {
+    if (!account) return <EmptyState title="No account" description="Could not load account." />;
+
+    if (activeTab === "posts") {
+      return (
+        <div className="space-y-7">
+          {pinnedStatuses.length > 0 ? (
+            <section>
+              <h2 className="mb-3 text-sm font-semibold">Pinned posts</h2>
+              <StatusList
+                statuses={pinnedStatuses}
+                currentAccountId={account.id}
+                actingStatusId={actingStatusId}
+                deletingStatusId={deletingStatusId}
+                emptyTitle="No pinned posts"
+                emptyDescription="No posts are pinned."
+                onDelete={deleteStatus}
+                onAction={runAction}
+              />
+            </section>
+          ) : null}
+          <section>
+            <h2 className="mb-3 text-sm font-semibold">Posts</h2>
+            <StatusList
+              statuses={normalStatuses}
+              currentAccountId={account.id}
+              actingStatusId={actingStatusId}
+              deletingStatusId={deletingStatusId}
+              emptyTitle="No posts"
+              emptyDescription="No posts to show."
+              onDelete={deleteStatus}
+              onAction={runAction}
+            />
+            {statuses.length > 0 ? (
+              <div className="mt-5">
+                <Button variant="outline" onClick={() => void loadMore()} disabled={isLoading}>{isLoading ? "Loading..." : "Load more"}</Button>
+              </div>
+            ) : null}
+          </section>
         </div>
       );
     }
-
-    if (activeTab === "posts" || activeTab === "pinned" || activeTab === "bookmarks" || activeTab === "favourites") {
-      return (
-        <StatusList
-          statuses={statuses}
-          currentAccountId={account.id}
-          actingStatusId={actingStatusId}
-          deletingStatusId={deletingStatusId}
-          emptyTitle="Nothing here"
-          emptyDescription="No posts to show."
-          onDelete={activeTab === "posts" || activeTab === "pinned" ? deleteStatus : undefined}
-          onAction={runAction}
-        />
-      );
-    }
-
 
     const accounts = activeTab === "following" ? following : followers;
     return <AccountList accounts={accounts} busyAccountId={busyAccountId} onFollow={followAccount} onUnfollow={unfollowAccount} emptyTitle={activeTab === "following" ? "Not following anyone" : "No followers"} />;
@@ -314,11 +366,11 @@ function AccountList({ accounts, busyAccountId, emptyTitle, onFollow, onUnfollow
               {account.avatar ? <img className="size-10 rounded-full border border-border object-cover" src={account.avatar} alt="" aria-hidden="true" /> : null}
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                <a className="text-sm font-semibold hover:underline" href={accountHref(account.id)}>{account.display_name || account.username}</a>
-                <p className="text-sm text-muted-foreground">@{account.acct}</p>
-                {isRequested ? <Badge variant="secondary">Requested</Badge> : null}
-                {isFollowing ? <Badge variant="secondary">Following</Badge> : null}
-              </div>
+                  <a className="text-sm font-semibold hover:underline" href={accountHref(account.id)}>{account.display_name || account.username}</a>
+                  <p className="text-sm text-muted-foreground">@{account.acct}</p>
+                  {isRequested ? <Badge variant="secondary">Requested</Badge> : null}
+                  {isFollowing ? <Badge variant="secondary">Following</Badge> : null}
+                </div>
                 {account.note ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{htmlToPlainText(account.note)}</p> : null}
               </div>
             </div>
@@ -332,6 +384,10 @@ function AccountList({ accounts, busyAccountId, emptyTitle, onFollow, onUnfollow
       })}
     </div>
   );
+}
+
+function ProfileSkeleton() {
+  return <div className="h-72 animate-pulse bg-secondary" />;
 }
 
 function LoadingRows() {

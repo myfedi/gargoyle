@@ -4,4 +4,5 @@ config.yml
 *.db-shm
 *.db-wal
 compat/gts-data/
+media/
 .vscode/
