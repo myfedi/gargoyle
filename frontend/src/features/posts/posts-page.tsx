@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs } from "@/components/ui/tabs";
 import { DirectMessageForm } from "@/features/direct/direct-message-form";
-import { EmptyState, FeaturePage, Panel } from "@/features/shared";
+import { EmptyState } from "@/features/shared";
 import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
@@ -200,30 +200,31 @@ export function PostsPage() {
   }
 
   return (
-    <FeaturePage eyebrow="Timeline" title="Timeline" description="Read recent activity.">
-      <Panel title="Posts">
-        <div className="mb-5">
-          <ComposeForm
-            submitLabel="Publish"
-            submittingLabel="Publishing..."
-            placeholder="Write a post"
-            isSubmitting={isPosting}
-            error={publishError}
-            onSubmit={submitPost}
-            onUploadMedia={api?.uploadMedia}
-            onDeleteMedia={api?.deleteMedia}
-            onUpdateMedia={api?.updateMedia}
-            searchKnownAccounts={searchKnownAccounts}
-            compact
-          />
-        </div>
+    <section className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={activeTimeline} onValueChange={setActiveTimeline} items={[...timelineTabs]} />
+        <Button variant="outline" size="sm" onClick={() => void loadTimeline(activeTimeline)} disabled={isLoading}>
+          {isLoading ? "Refreshing..." : "Refresh"}
+        </Button>
+      </div>
 
-        <div className="mb-5 flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <Tabs value={activeTimeline} onValueChange={setActiveTimeline} items={[...timelineTabs]} />
-          <Button variant="outline" size="sm" onClick={() => void loadTimeline(activeTimeline)} disabled={isLoading}>
-            {isLoading ? "Refreshing..." : "Refresh"}
-          </Button>
-        </div>
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <ComposeForm
+          submitLabel="Publish"
+          submittingLabel="Publishing..."
+          placeholder="Write a post"
+          isSubmitting={isPosting}
+          error={publishError}
+          onSubmit={submitPost}
+          onUploadMedia={api?.uploadMedia}
+          onDeleteMedia={api?.deleteMedia}
+          onUpdateMedia={api?.updateMedia}
+          searchKnownAccounts={searchKnownAccounts}
+          compact
+        />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
 
         {replyingTo ? (
           <div className="mb-5">
@@ -272,7 +273,7 @@ export function PostsPage() {
             </div>
           </>
         )}
-      </Panel>
+      </div>
 
       <Dialog open={Boolean(forwardingStatus)} onOpenChange={(open) => !open && setForwardingStatus(null)}>
         <DialogContent>
@@ -282,6 +283,6 @@ export function PostsPage() {
           {forwardingStatus ? <DirectMessageForm forwardedStatus={forwardingStatus} onSent={() => setForwardingStatus(null)} onCancel={() => setForwardingStatus(null)} /> : null}
         </DialogContent>
       </Dialog>
-    </FeaturePage>
+    </section>
   );
 }
