@@ -25,27 +25,28 @@ type RemoteAccountResolver interface {
 // Config wires Mastodon-compatible client API workflows to repositories,
 // application ports, and lower-level ActivityPub use cases.
 type Config struct {
-	Host               string
-	Domain             string
-	ServerVersion      string
-	TxProvider         db.TxProvider
-	AccountsRepo       repos.AccountsRepo
-	ActivitiesRepo     repos.ActivitiesRepository
-	NotesRepo          repos.NotesRepository
-	FollowsRepo        repos.FollowsRepository
-	MediaRepo          repos.MediaRepository
-	MediaStorage       ports.MediaStorage
-	ContentSanitizer   ports.ContentSanitizer
-	SocialRepo         repos.SocialRepository
-	BoostsRepo         repos.BoostsRepository
-	ConversationsRepo  repos.ConversationsRepository
-	MentionsRepo       repos.MentionsRepository
-	RemoteAccountsRepo repos.RemoteAccountsRepository
-	IDGenerator        ports.IDGenerator
-	RemoteResolver     RemoteAccountResolver
-	ActorSerializer    apPorts.ActorSerializer
-	CreateOutboxUC     apUsecases.CreateOutboxActivityUseCase
-	CreateFollowingUC  apUsecases.CreateFollowingUseCase
+	Host                string
+	Domain              string
+	ServerVersion       string
+	TxProvider          db.TxProvider
+	AccountsRepo        repos.AccountsRepo
+	ActivitiesRepo      repos.ActivitiesRepository
+	NotesRepo           repos.NotesRepository
+	FollowsRepo         repos.FollowsRepository
+	MediaRepo           repos.MediaRepository
+	MediaStorage        ports.MediaStorage
+	ContentSanitizer    ports.ContentSanitizer
+	SocialRepo          repos.SocialRepository
+	BoostsRepo          repos.BoostsRepository
+	ConversationsRepo   repos.ConversationsRepository
+	MentionsRepo        repos.MentionsRepository
+	RemoteAccountsRepo  repos.RemoteAccountsRepository
+	IDGenerator         ports.IDGenerator
+	RemoteResolver      RemoteAccountResolver
+	RemoteObjectFetcher ports.RemoteObjectFetcher
+	ActorSerializer     apPorts.ActorSerializer
+	CreateOutboxUC      apUsecases.CreateOutboxActivityUseCase
+	CreateFollowingUC   apUsecases.CreateFollowingUseCase
 }
 
 // UseCase groups the Mastodon-compatible client API workflows. Individual
@@ -177,6 +178,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.RemoteResolver == nil {
 		panic("mastodon API use case requires RemoteResolver")
+	}
+	if cfg.RemoteObjectFetcher == nil {
+		panic("mastodon API use case requires RemoteObjectFetcher")
 	}
 	if cfg.ActorSerializer == nil {
 		panic("mastodon API use case requires ActorSerializer")

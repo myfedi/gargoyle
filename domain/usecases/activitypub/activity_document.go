@@ -190,6 +190,15 @@ func ExtractNote(raw []byte) (ExtractedNote, bool) {
 	return extractedNoteFromJSON(note), true
 }
 
+// ExtractStandaloneNote returns a Note document fetched directly by URI.
+func ExtractStandaloneNote(raw []byte) (ExtractedNote, bool) {
+	var note extractedNoteJSON
+	if err := json.Unmarshal(raw, &note); err != nil || note.Type != "Note" || note.ID == "" {
+		return ExtractedNote{}, false
+	}
+	return extractedNoteFromJSON(note), true
+}
+
 // ExtractNoteObject returns a Note from an activity object, used for Updates.
 func ExtractNoteObject(raw []byte) (ExtractedNote, bool) {
 	var activity struct {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
-import { FeaturePage, FieldRow, Panel } from "@/features/shared";
+import { FieldRow, Panel } from "@/features/shared";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
@@ -165,7 +165,7 @@ export function AccountPage({ route }: AccountPageProps) {
   }
 
   return (
-    <FeaturePage eyebrow="Account" title={account?.display_name || account?.username || "Account"} description={account ? `@${account.acct}` : ""}>
+    <section className="space-y-6">
       {error ? (
         <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
           {error}
@@ -241,7 +241,7 @@ export function AccountPage({ route }: AccountPageProps) {
           </>
         )}
       </Panel>
-    </FeaturePage>
+    </section>
   );
 }
 

@@ -42,6 +42,9 @@ func (u UseCase) AccountStatuses(ctx context.Context, localAccount *models.Accou
 	if account.ID == localAccount.ID {
 		notes, err = u.cfg.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, localAccount.URI, limit, maxID)
 	} else {
+		if maxID == "" {
+			_ = u.cacheRemoteOutbox(ctx, localAccount, *account)
+		}
 		notes, err = u.cfg.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
 	}
 	if err != nil {
