@@ -8,7 +8,7 @@ import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { decodeRouteParam } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
-import type { MastodonAccount, MastodonStatus } from "@/types/mastodon";
+import type { MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
 
 type AccountPageProps = {
   route: string;
@@ -21,8 +21,10 @@ export function AccountPage({ route }: AccountPageProps) {
   const [statuses, setStatuses] = useState<MastodonStatus[]>([]);
   const [pinnedStatuses, setPinnedStatuses] = useState<MastodonStatus[]>([]);
   const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(null);
+  const [relationship, setRelationship] = useState<MastodonRelationship | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isUpdatingFollow, setIsUpdatingFollow] = useState(false);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,8 +47,10 @@ export function AccountPage({ route }: AccountPageProps) {
         api.accountStatuses(accountId),
         api.accountStatuses(accountId, { pinned: true }),
       ]);
+      const [nextRelationship] = nextAccount.id !== nextCurrentAccount.id ? await api.relationships([nextAccount.id]) : [];
       setCurrentAccount(nextCurrentAccount);
       setAccount(nextAccount);
+      setRelationship(nextRelationship ?? null);
       setStatuses(nextStatuses);
       setPinnedStatuses(nextPinnedStatuses);
     } catch (caughtError) {
@@ -103,6 +107,42 @@ export function AccountPage({ route }: AccountPageProps) {
     }
   }
 
+  async function followAccount() {
+    if (!api || !account || account.id === currentAccount?.id) {
+      return;
+    }
+    setIsUpdatingFollow(true);
+    setError(null);
+
+    try {
+      await api.followAccount(account.id);
+      const [nextRelationship] = await api.relationships([account.id]);
+      setRelationship(nextRelationship ?? null);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not follow account.");
+    } finally {
+      setIsUpdatingFollow(false);
+    }
+  }
+
+  async function unfollowAccount() {
+    if (!api || !account || account.id === currentAccount?.id) {
+      return;
+    }
+    setIsUpdatingFollow(true);
+    setError(null);
+
+    try {
+      await api.unfollowAccount(account.id);
+      const [nextRelationship] = await api.relationships([account.id]);
+      setRelationship(nextRelationship ?? null);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not unfollow account.");
+    } finally {
+      setIsUpdatingFollow(false);
+    }
+  }
+
   async function deleteStatus(status: MastodonStatus) {
     if (!api) {
       return false;
@@ -140,12 +180,15 @@ export function AccountPage({ route }: AccountPageProps) {
         <Panel title="Profile">
           <div className="mb-4 space-y-4">
             {account.header ? <img className="h-32 w-full rounded-lg border border-border object-cover" src={account.header} alt="Profile header" /> : null}
-            <div className="flex items-center gap-3">
-              {account.avatar ? <img className="size-16 rounded-full border border-border object-cover" src={account.avatar} alt="Profile avatar" /> : null}
-              <div>
-                <p className="font-semibold">{account.display_name || account.username}</p>
-                <p className="text-sm text-muted-foreground">@{account.acct}</p>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                {account.avatar ? <img className="size-16 rounded-full border border-border object-cover" src={account.avatar} alt="Profile avatar" /> : null}
+                <div>
+                  <p className="font-semibold">{account.display_name || account.username}</p>
+                  <p className="text-sm text-muted-foreground">@{account.acct}</p>
+                </div>
               </div>
+              {account.id !== currentAccount?.id ? <FollowButton relationship={relationship} isBusy={isUpdatingFollow} onFollow={followAccount} onUnfollow={unfollowAccount} /> : null}
             </div>
           </div>
           <dl>
@@ -200,4 +243,24 @@ export function AccountPage({ route }: AccountPageProps) {
       </Panel>
     </FeaturePage>
   );
+}
+
+type FollowButtonProps = {
+  relationship: MastodonRelationship | null;
+  isBusy: boolean;
+  onFollow: () => void;
+  onUnfollow: () => void;
+};
+
+function FollowButton({ relationship, isBusy, onFollow, onUnfollow }: FollowButtonProps) {
+  const isFollowing = Boolean(relationship?.following);
+  const isRequested = Boolean(relationship?.requested);
+  if (isFollowing || isRequested) {
+    return (
+      <Button variant="outline" disabled={isBusy} onClick={onUnfollow}>
+        {isBusy ? "Updating..." : isRequested ? "Cancel request" : "Unfollow"}
+      </Button>
+    );
+  }
+  return <Button disabled={isBusy} onClick={onFollow}>{isBusy ? "Following..." : "Follow"}</Button>;
 }
