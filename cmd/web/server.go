@@ -27,6 +27,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/myfedi/gargoyle/infrastructure/config"
 )
 
@@ -92,6 +93,9 @@ func main() {
 		bodyLimitBytes = mediaLimit
 	}
 	app := fiber.New(fiber.Config{BodyLimit: bodyLimitBytes})
+	if config.Debug {
+		app.Use(logger.New(logger.Config{Format: "${time} ${method} ${path} ${status} ${latency}\n"}))
+	}
 	app.Use(limiter.New(limiter.Config{Max: 300, Expiration: 1 * time.Minute}))
 	app.Use("/oauth", limiter.New(limiter.Config{Max: 20, Expiration: 1 * time.Minute}))
 	app.Use("/api/v1/apps", limiter.New(limiter.Config{Max: 10, Expiration: 1 * time.Hour}))

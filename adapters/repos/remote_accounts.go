@@ -75,7 +75,7 @@ func (r *RemoteAccountsRepo) SearchRemoteAccounts(ctx context.Context, tx *dbPor
 	var rows []dbModels.RemoteAccount
 	err = db.NewSelect().Model(&rows).
 		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
-			return q.Where("username LIKE ?", pattern).WhereOr("domain LIKE ?", pattern).WhereOr("display_name LIKE ?", pattern).WhereOr("uri LIKE ?", pattern)
+			return q.Where("username LIKE ?", pattern).WhereOr("domain LIKE ?", pattern).WhereOr("display_name LIKE ?", pattern).WhereOr("uri LIKE ?", pattern).WhereOr("url LIKE ?", pattern).WhereOr("(username || '@' || COALESCE(domain, '')) LIKE ?", pattern)
 		}).
 		Order("fetched_at DESC").
 		Limit(limit).

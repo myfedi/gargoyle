@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -94,6 +95,9 @@ func (r RemoteAccountResolver) ResolveAccount(ctx context.Context, query string,
 func (r RemoteAccountResolver) actorURL(ctx context.Context, query string) (string, error) {
 	query = strings.TrimSpace(strings.TrimPrefix(query, "@"))
 	if strings.HasPrefix(query, "http://") || strings.HasPrefix(query, "https://") {
+		if acct := accountHandleFromProfileURL(query); acct != "" {
+			return r.actorURL(ctx, acct)
+		}
 		return query, nil
 	}
 	parts := strings.Split(query, "@")
@@ -269,6 +273,20 @@ func remoteURLExceptionForHost(host string, exceptions []RemoteURLException) Rem
 		}
 	}
 	return RemoteURLException{}
+}
+
+func accountHandleFromProfileURL(value string) string {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Hostname() == "" {
+		return ""
+	}
+	if match := regexp.MustCompile(`^/@([^/@\s]+)@([^/@\s]+)/?$`).FindStringSubmatch(parsed.Path); len(match) == 3 {
+		return match[1] + "@" + match[2]
+	}
+	if match := regexp.MustCompile(`^/(?:@|users/)([^/@\s]+)/?$`).FindStringSubmatch(parsed.Path); len(match) == 2 {
+		return match[1] + "@" + parsed.Hostname()
+	}
+	return ""
 }
 
 func stringURL(value any) string {

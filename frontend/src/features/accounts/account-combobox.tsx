@@ -191,6 +191,10 @@ export function knownAccountSearchQuery(value: string) {
 
 export function normalizeRemoteQuery(value: string) {
   const query = value.trim();
+  const profileHandle = handleFromProfileUrl(query);
+  if (profileHandle) {
+    return `@${profileHandle}`;
+  }
   if (query.startsWith("http://") || query.startsWith("https://") || query.startsWith("@")) {
     return query;
   }
@@ -232,8 +236,15 @@ function isProfileUrl(value: string) {
 function handleFromProfileUrl(value: string) {
   try {
     const url = new URL(value);
-    const match = url.pathname.match(/^\/(?:@|users\/)([^/@\s]+)@*\/?$/);
-    return match?.[1]?.replace(/@+$/, "") || null;
+    const remoteHandle = url.pathname.match(/^\/@([^/@\s]+)@([^/@\s]+)\/?$/);
+    if (remoteHandle) {
+      return `${remoteHandle[1]}@${remoteHandle[2]}`;
+    }
+    const localHandle = url.pathname.match(/^\/(?:@|users\/)([^/@\s]+)\/?$/);
+    if (localHandle) {
+      return `${localHandle[1]}@${url.hostname}`;
+    }
+    return null;
   } catch {
     return null;
   }
