@@ -186,6 +186,8 @@ export function MyProfilePage() {
     try {
       const nextAccount = await api.updateCredentials({ display_name: profileForm.displayName, note: profileForm.note, avatar: profileForm.avatar, header: profileForm.header });
       setAccount(nextAccount);
+      setStatuses((current) => replaceAccountInStatuses(current, nextAccount));
+      setPinnedStatuses((current) => replaceAccountInStatuses(current, nextAccount));
       setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null });
       setIsEditingProfile(false);
     } catch (caughtError) {
@@ -406,6 +408,16 @@ function AccountList({ accounts, busyAccountId, emptyTitle, onFollow, onUnfollow
 function profileInitials(account: MastodonAccount) {
   const source = account.display_name || account.username || account.acct || "?";
   return source.trim().slice(0, 2).toUpperCase();
+}
+
+function replaceAccountInStatuses(statuses: MastodonStatus[], account: MastodonAccount): MastodonStatus[] {
+  return statuses.map((status) => {
+    const nextStatus = status.account.id === account.id ? { ...status, account } : status;
+    if (nextStatus.reblog) {
+      return { ...nextStatus, reblog: replaceAccountInStatuses([nextStatus.reblog], account)[0] };
+    }
+    return nextStatus;
+  });
 }
 
 function ProfileSkeleton() {
