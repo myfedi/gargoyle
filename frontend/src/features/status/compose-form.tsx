@@ -26,6 +26,7 @@ type ComposeFormProps = {
   onDeleteMedia?: (id: string) => Promise<void>;
   onUpdateMedia?: (id: string, description: string) => Promise<MastodonMediaAttachment>;
   searchKnownAccounts?: (query: string) => Promise<MastodonAccount[]>;
+  compact?: boolean;
 };
 
 const maxLength = 500;
@@ -42,6 +43,7 @@ export function ComposeForm({
   onDeleteMedia,
   onUpdateMedia,
   searchKnownAccounts,
+  compact = false,
 }: ComposeFormProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -59,6 +61,8 @@ export function ComposeForm({
   const [mentionResults, setMentionResults] = useState<MastodonAccount[]>([]);
   const [isSearchingMentions, setIsSearchingMentions] = useState(false);
   const [mentionError, setMentionError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(!compact || initialText.length > 0);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const mentionQuery = currentMentionQuery(status, caretPosition);
   const mentionSearchQuery = mentionQuery?.endsWith("@") ? mentionQuery.slice(0, -1) : mentionQuery;
   const remaining = maxLength - status.length;
@@ -104,6 +108,10 @@ export function ComposeForm({
     setSpoilerText("");
     setMedia(null);
     setMediaDescription("");
+    setShowAdvanced(false);
+    if (compact) {
+      setIsExpanded(false);
+    }
   }
 
   function insertMention(account: MastodonAccount) {
@@ -196,12 +204,14 @@ export function ComposeForm({
           onChange={(event) => {
             setStatus(event.target.value);
             setCaretPosition(event.target.selectionStart);
+            if (compact) setIsExpanded(true);
           }}
           onClick={(event) => setCaretPosition(event.currentTarget.selectionStart)}
+          onFocus={() => compact && setIsExpanded(true)}
           onKeyUp={(event) => setCaretPosition(event.currentTarget.selectionStart)}
           placeholder={placeholder}
           aria-label="Post content"
-          rows={6}
+          rows={isExpanded ? 5 : 1}
         />
         {mentionSearchQuery && mentionSearchQuery.length >= 2 ? (
           <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-border bg-card shadow-lg">
@@ -231,51 +241,59 @@ export function ComposeForm({
         ) : null}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
-        <label className="space-y-1 text-sm font-medium">
-          <span>Visibility</span>
-          <select
-            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-            value={visibility}
-            onChange={(event) => setVisibility(event.target.value as ComposeValues["visibility"])}
-          >
-            <option value="public">Public</option>
-            <option value="unlisted">Unlisted</option>
-            <option value="private">Private</option>
-          </select>
-        </label>
-
-        <label className="space-y-1 text-sm font-medium">
-          <span>Content warning</span>
-          <Input value={spoilerText} onChange={(event) => setSpoilerText(event.target.value)} placeholder="Optional" />
-        </label>
-      </div>
-
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <input type="checkbox" checked={sensitive} onChange={(event) => setSensitive(event.target.checked)} />
-        Mark as sensitive
-      </label>
-
-      {onUploadMedia ? (
-        <div className="rounded-md border border-border bg-background p-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <label className="flex-1 space-y-1 text-sm font-medium">
-              <span>Media description</span>
-              <Input value={mediaDescription} onChange={(event) => setMediaDescription(event.target.value)} placeholder="Optional alt text" />
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(event) => void uploadSelectedFile(event.target.files?.[0])}
-            />
-            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-              {isUploading ? "Uploading..." : "Upload media"}
+      {isExpanded ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setShowAdvanced((current) => !current)}>
+              {showAdvanced ? "Hide options" : "Options"}
             </Button>
+            {onUploadMedia ? (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => void uploadSelectedFile(event.target.files?.[0])}
+                />
+                <Button type="button" variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                  {isUploading ? "Uploading..." : media ? "Change media" : "Add media"}
+                </Button>
+              </>
+            ) : null}
           </div>
+
+          {showAdvanced ? (
+            <div className="space-y-4 rounded-md border border-border bg-background p-3">
+              <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
+                <label className="space-y-1 text-sm font-medium">
+                  <span>Visibility</span>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                    value={visibility}
+                    onChange={(event) => setVisibility(event.target.value as ComposeValues["visibility"])}
+                  >
+                    <option value="public">Public</option>
+                    <option value="unlisted">Unlisted</option>
+                    <option value="private">Private</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-sm font-medium">
+                  <span>Content warning</span>
+                  <Input value={spoilerText} onChange={(event) => setSpoilerText(event.target.value)} placeholder="Optional" />
+                </label>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input type="checkbox" checked={sensitive} onChange={(event) => setSensitive(event.target.checked)} />
+                Mark as sensitive
+              </label>
+            </div>
+          ) : null}
+
           {media ? (
-            <div className="mt-3 space-y-3 rounded-md border border-border bg-card px-3 py-3">
+            <div className="space-y-3 rounded-md border border-border bg-background px-3 py-3">
               {media.type === "image" ? (
                 <img className="max-h-48 rounded-md border border-border object-contain" src={media.preview_url || media.url} alt={media.description || "Uploaded media preview"} />
               ) : null}
@@ -287,18 +305,13 @@ export function ComposeForm({
                 <Button type="button" variant="outline" onClick={() => void saveMediaDescription()} disabled={isUpdatingMedia}>
                   {isUpdatingMedia ? "Saving..." : "Save alt text"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={isDeletingMedia}
-                  onClick={() => void removeMedia()}
-                >
+                <Button type="button" variant="ghost" disabled={isDeletingMedia} onClick={() => void removeMedia()}>
                   {isDeletingMedia ? "Removing..." : "Remove"}
                 </Button>
               </div>
             </div>
           ) : null}
-          {mediaError ? <p className="mt-2 text-sm text-destructive">{mediaError}</p> : null}
+          {mediaError ? <p className="text-sm text-destructive">{mediaError}</p> : null}
         </div>
       ) : null}
 
@@ -308,14 +321,23 @@ export function ComposeForm({
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className={remaining < 0 ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-          {remaining} characters remaining
-        </p>
-        <Button type="submit" disabled={isSubmitting || !status.trim() || remaining < 0}>
-          {isSubmitting ? submittingLabel : submitLabel}
-        </Button>
-      </div>
+      {isExpanded ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className={remaining < 0 ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+            {remaining} characters remaining
+          </p>
+          <div className="flex justify-end gap-2">
+            {compact ? (
+              <Button type="button" variant="ghost" disabled={isSubmitting} onClick={() => { setIsExpanded(false); setShowAdvanced(false); }}>
+                Collapse
+              </Button>
+            ) : null}
+            <Button type="submit" disabled={isSubmitting || !status.trim() || remaining < 0}>
+              {isSubmitting ? submittingLabel : submitLabel}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }

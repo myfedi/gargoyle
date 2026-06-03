@@ -200,24 +200,25 @@ export function PostsPage() {
   }
 
   return (
-    <FeaturePage eyebrow="Timeline" title="Timeline" description="Write posts and read recent activity.">
-      <Panel title="New post">
-        <ComposeForm
-          submitLabel="Publish"
-          submittingLabel="Publishing..."
-          placeholder="What would you like to share?"
-          isSubmitting={isPosting}
-          error={publishError}
-          onSubmit={submitPost}
-          onUploadMedia={api?.uploadMedia}
-          onDeleteMedia={api?.deleteMedia}
-          onUpdateMedia={api?.updateMedia}
-          searchKnownAccounts={searchKnownAccounts}
-        />
-      </Panel>
-
+    <FeaturePage eyebrow="Timeline" title="Timeline" description="Read recent activity.">
       <Panel title="Posts">
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-5">
+          <ComposeForm
+            submitLabel="Publish"
+            submittingLabel="Publishing..."
+            placeholder="Write a post"
+            isSubmitting={isPosting}
+            error={publishError}
+            onSubmit={submitPost}
+            onUploadMedia={api?.uploadMedia}
+            onDeleteMedia={api?.deleteMedia}
+            onUpdateMedia={api?.updateMedia}
+            searchKnownAccounts={searchKnownAccounts}
+            compact
+          />
+        </div>
+
+        <div className="mb-5 flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
           <Tabs value={activeTimeline} onValueChange={setActiveTimeline} items={[...timelineTabs]} />
           <Button variant="outline" size="sm" onClick={() => void loadTimeline(activeTimeline)} disabled={isLoading}>
             {isLoading ? "Refreshing..." : "Refresh"}
