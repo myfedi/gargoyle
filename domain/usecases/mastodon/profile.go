@@ -38,8 +38,6 @@ func (u UseCase) UpdateCredentials(ctx context.Context, account *models.Account,
 	sanitizedNote := u.cfg.ContentSanitizer.SanitizeHTML(note)
 	avatarMediaID := account.AvatarMediaID
 	headerMediaID := account.HeaderMediaID
-	oldAvatarMediaID := account.AvatarMediaID
-	oldHeaderMediaID := account.HeaderMediaID
 	createdMedia := []models.MediaAttachment{}
 	if input.Avatar != nil {
 		media, derr := u.createProfileMedia(ctx, account, *input.Avatar)
@@ -78,12 +76,6 @@ func (u UseCase) UpdateCredentials(ctx context.Context, account *models.Account,
 	if err != nil {
 		u.deleteCreatedProfileMedia(ctx, createdMedia)
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-	}
-	if input.Avatar != nil && oldAvatarMediaID != nil && *oldAvatarMediaID != *avatarMediaID {
-		u.cleanupProfileMediaID(ctx, *oldAvatarMediaID)
-	}
-	if input.Header != nil && oldHeaderMediaID != nil && *oldHeaderMediaID != *headerMediaID {
-		u.cleanupProfileMediaID(ctx, *oldHeaderMediaID)
 	}
 	inboxes, derr := u.followerInboxes(ctx, updated.ID)
 	if derr != nil {
@@ -181,17 +173,6 @@ func safeProfileImageContentType(declared string, data []byte) (string, *domaine
 func (u UseCase) deleteCreatedProfileMedia(ctx context.Context, media []models.MediaAttachment) {
 	for _, item := range media {
 		_ = u.deleteMediaFilesAndRow(ctx, item)
-	}
-}
-
-func (u UseCase) cleanupProfileMediaID(ctx context.Context, id string) {
-	media, err := u.cfg.MediaRepo.GetMediaAttachmentByID(ctx, nil, id)
-	if err != nil {
-		return
-	}
-	attached, err := u.cfg.MediaRepo.MediaAttachmentIsAttached(ctx, nil, id)
-	if err == nil && !attached {
-		_ = u.deleteMediaFilesAndRow(ctx, *media)
 	}
 }
 
