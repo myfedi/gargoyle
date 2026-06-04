@@ -89,7 +89,18 @@ function base64UrlEncode(bytes: Uint8Array) {
   bytes.forEach((byte) => {
     binary += String.fromCharCode(byte);
   });
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return trimBase64UrlPadding(btoa(binary).replace(/\+/g, "-").replace(/\//g, "_"));
+}
+
+function trimBase64UrlPadding(value: string) {
+  // Standard base64 may end with '=' padding, but PKCE code challenges use
+  // unpadded base64url, so remove only trailing padding characters.
+  const paddingCode = "=".charCodeAt(0);
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === paddingCode) {
+    end -= 1;
+  }
+  return end === value.length ? value : value.slice(0, end);
 }
 
 async function readTokenResponse(response: Response): Promise<unknown> {

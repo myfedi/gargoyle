@@ -18,7 +18,7 @@ export function getOAuthConfig(): OAuthClientConfig | null {
     return null;
   }
 
-  const baseUrl = getApiBaseUrl().replace(/\/+$/, "");
+  const baseUrl = trimTrailingSlash(getApiBaseUrl());
 
   return {
     clientId,
@@ -27,6 +27,15 @@ export function getOAuthConfig(): OAuthClientConfig | null {
     redirectUri: import.meta.env.VITE_GARGOYLE_OAUTH_REDIRECT_URI ?? `${window.location.origin}/oauth/callback`,
     scopes: parseScopes(import.meta.env.VITE_GARGOYLE_OAUTH_SCOPES ?? "read write follow"),
   };
+}
+
+export function trimTrailingSlash(value: string) {
+  const slashCode = "/".charCodeAt(0);
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === slashCode) {
+    end -= 1;
+  }
+  return end === value.length ? value : value.slice(0, end);
 }
 
 function parseScopes(value: string) {

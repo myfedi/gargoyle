@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/config";
+import { getApiBaseUrl, trimTrailingSlash } from "@/lib/config";
 
 
 export type ApiErrorBody = {
@@ -82,10 +82,6 @@ export class ApiClient {
 }
 
 export const apiClient = new ApiClient();
-
-function trimTrailingSlash(value: string) {
-  return value.replace(/\/+$/, "");
-}
 
 function normalizePath(path: string) {
   return path.startsWith("/") ? path : `/${path}`;
