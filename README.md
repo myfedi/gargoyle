@@ -1,10 +1,25 @@
 # nondogmatic, hackable, pragmatic activitypub server
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=myfedi_gargoyle&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=myfedi_gargoyle)
+
 This project tries to provide a hackable, open to as much federation as possible single user or small user group activitypub server.
 
 Get started with the [documentation](https://github.com/myfedi/gargoyle/tree/main/docs) to get an overview.
 
 ## Development
+
+### Prerequisites
+
+Install Go and the local development hooks:
+
+```bash
+brew install pre-commit trufflehog
+pre-commit install
+```
+
+The pre-commit hook runs TruffleHog to catch verified secrets before they are committed.
+
+### Running locally
 
 To run it locally, clone the repository, install the Go dependencies, and copy the example config:
 
@@ -36,6 +51,14 @@ To run the server, run:
 
 ```bash
 go run cmd/web/server.go ./config.yml
+```
+
+Before opening a pull request, run the same core checks as CI:
+
+```bash
+gofmt -w .
+go vet ./...
+go test ./...
 ```
 
 ## Status
