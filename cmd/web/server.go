@@ -166,6 +166,8 @@ func main() {
 		OAuthRepo:          oauthRepo,
 		UsersRepo:          usersRepo,
 		AccountsRepo:       accountsRepo,
+		FollowsRepo:        followsRepo,
+		NotesRepo:          notesRepo,
 		PasswordHash:       passwordAdapters.NewBCryptPasswordHasher(),
 		TxProvider:         txProvider,
 		AllowPasswordGrant: config.OAuth.AllowPasswordGrant,

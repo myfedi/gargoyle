@@ -147,7 +147,7 @@ func (h OAuthHandler) verifyCredentials(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(accountToResponse(principal.Account))
+	return c.JSON(accountToResponseWithStats(principal.Account, principal.Stats))
 }
 
 func appToResponse(app *models.OAuthApplication) appResponse {
@@ -155,6 +155,10 @@ func appToResponse(app *models.OAuthApplication) appResponse {
 }
 
 func accountToResponse(account *models.Account) accountResponse {
+	return accountToResponseWithStats(account, oauth.AccountStats{})
+}
+
+func accountToResponseWithStats(account *models.Account, stats oauth.AccountStats) accountResponse {
 	created := account.CreatedAt.UTC().Format(time.RFC3339)
 	acct := account.Username
 	if account.Domain != nil && *account.Domain != "" {
@@ -162,7 +166,7 @@ func accountToResponse(account *models.Account) accountResponse {
 	}
 	avatar := accountAvatarURL(account)
 	header := accountHeaderURL(account)
-	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: false, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header}
+	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: false, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header, FollowersCount: stats.FollowersCount, FollowingCount: stats.FollowingCount, StatusesCount: stats.StatusesCount}
 }
 
 func accountAvatarURL(account *models.Account) string {

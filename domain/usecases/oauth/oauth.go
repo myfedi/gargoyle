@@ -23,6 +23,8 @@ type Config struct {
 	OAuthRepo          repos.OAuthRepository
 	UsersRepo          repos.UsersRepository
 	AccountsRepo       repos.AccountsRepo
+	FollowsRepo        repos.FollowsRepository
+	NotesRepo          repos.NotesRepository
 	PasswordHash       ports.PasswordHashProvider
 	TxProvider         db.TxProvider
 	AllowPasswordGrant bool
@@ -115,10 +117,17 @@ type IssuedToken struct {
 	ExpiresIn   int64
 }
 
+type AccountStats struct {
+	FollowersCount int
+	FollowingCount int
+	StatusesCount  int
+}
+
 type AuthenticatedUser struct {
 	User    *models.User
 	Account *models.Account
 	Scopes  string
+	Stats   AccountStats
 }
 
 func NewUseCase(cfg Config) UseCase {
@@ -130,6 +139,12 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.AccountsRepo == nil {
 		panic("oauth use case requires AccountsRepo")
+	}
+	if cfg.FollowsRepo == nil {
+		panic("oauth use case requires FollowsRepo")
+	}
+	if cfg.NotesRepo == nil {
+		panic("oauth use case requires NotesRepo")
 	}
 	if cfg.PasswordHash == nil {
 		panic("oauth use case requires PasswordHashProvider")
@@ -337,7 +352,27 @@ func (u UseCase) AuthenticateBearer(ctx context.Context, bearer string) (*Authen
 	if err != nil {
 		return nil, derrors.NewErr(derrors.ErrInternal, err)
 	}
-	return &AuthenticatedUser{User: user, Account: account, Scopes: token.Scopes}, nil
+	stats, derr := u.accountStats(ctx, account)
+	if derr != nil {
+		return nil, derr
+	}
+	return &AuthenticatedUser{User: user, Account: account, Scopes: token.Scopes, Stats: stats}, nil
+}
+
+func (u UseCase) accountStats(ctx context.Context, account *models.Account) (AccountStats, *derrors.DomainError) {
+	followers, err := u.cfg.FollowsRepo.CountFollowers(ctx, nil, account.ID)
+	if err != nil {
+		return AccountStats{}, derrors.NewErr(derrors.ErrInternal, err)
+	}
+	following, err := u.cfg.FollowsRepo.ListFollowing(ctx, nil, account.ID)
+	if err != nil {
+		return AccountStats{}, derrors.NewErr(derrors.ErrInternal, err)
+	}
+	statuses, err := u.cfg.NotesRepo.ListAttributedNotesPaged(ctx, nil, account.ID, account.URI, 0, "")
+	if err != nil {
+		return AccountStats{}, derrors.NewErr(derrors.ErrInternal, err)
+	}
+	return AccountStats{FollowersCount: followers, FollowingCount: len(following), StatusesCount: len(statuses)}, nil
 }
 
 func (u UseCase) userByLogin(ctx context.Context, login string) (*models.User, error) {
