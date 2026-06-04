@@ -1,5 +1,5 @@
 import { Check, MoreHorizontal } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +34,7 @@ type StatusListProps = {
   onForward?: (status: MastodonStatus) => void;
   onAction?: (action: StatusAction, status: MastodonStatus) => Promise<void> | void;
   onVotePoll?: (status: MastodonStatus, choices: number[]) => Promise<void> | void;
+  renderAfterStatus?: (status: MastodonStatus) => ReactNode;
 };
 
 export function StatusList({
@@ -49,6 +50,7 @@ export function StatusList({
   onForward,
   onAction,
   onVotePoll,
+  renderAfterStatus,
 }: StatusListProps) {
   const [statusPendingDeletion, setStatusPendingDeletion] = useState<MastodonStatus | null>(null);
   const [statusBeingEdited, setStatusBeingEdited] = useState<MastodonStatus | null>(null);
@@ -79,6 +81,7 @@ export function StatusList({
           const canForward = Boolean(onForward);
           const canInteract = Boolean(onAction);
           const isActing = actingStatusId === displayedStatus.id;
+          const afterStatus = renderAfterStatus?.(displayedStatus) ?? null;
           return (
             <article key={status.id} data-status-id={(status.reblog ?? status).id} className="py-4 first:pt-0 last:pb-0">
               {status.reblog ? (
@@ -144,6 +147,7 @@ export function StatusList({
                   </DropdownMenu>
                 ) : null}
               </div>
+              {afterStatus ? <div className="mt-4 sm:ml-[3.25rem]">{afterStatus}</div> : null}
             </article>
           );
         })}

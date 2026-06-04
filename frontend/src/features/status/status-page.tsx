@@ -75,6 +75,18 @@ export function StatusPage({ route }: StatusPageProps) {
   }, [api, statusId]);
 
   useEffect(() => {
+    setStatus(null);
+    setAncestors([]);
+    setDescendants([]);
+    setContextWarnings([]);
+    setReplyingTo(null);
+    setReplyError(null);
+    setForwardingStatus(null);
+    setActingStatusId(null);
+    setDeletingStatusId(null);
+  }, [statusId]);
+
+  useEffect(() => {
     void loadStatus();
   }, [loadStatus]);
 
@@ -229,21 +241,20 @@ export function StatusPage({ route }: StatusPageProps) {
               setReplyingTo(nextStatus);
               setReplyError(null);
             }}
+            renderAfterStatus={(threadStatus) => replyingTo?.id === threadStatus.id ? (
+              <ReplyComposer
+                status={replyingTo}
+                isSubmitting={isReplying}
+                error={replyError}
+                onCancel={() => setReplyingTo(null)}
+                onSubmit={submitReply}
+              />
+            ) : null}
           />
         ) : (
           <EmptyState title="Post not found" description="No post to show." />
         )}
       </Panel>
-
-      {replyingTo ? (
-        <ReplyComposer
-          status={replyingTo}
-          isSubmitting={isReplying}
-          error={replyError}
-          onCancel={() => setReplyingTo(null)}
-          onSubmit={submitReply}
-        />
-      ) : null}
 
       <Button variant="outline" onClick={() => globalThis.history.back()}>Back</Button>
       <Dialog open={Boolean(forwardingStatus)} onOpenChange={(open) => !open && setForwardingStatus(null)}>

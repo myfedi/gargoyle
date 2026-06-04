@@ -343,9 +343,19 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
         poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined,
         in_reply_to_id: replyingTo.id,
       });
+      const parentID = replyingTo.id;
       setReplyingTo(null);
       if (activeTimeline === "home") {
-        setStatuses((current) => [createdStatus, ...current]);
+        setStatuses((current) => {
+          if (current.some((status) => status.id === createdStatus.id)) {
+            return current;
+          }
+          const parentIndex = current.findIndex((status) => (status.reblog ?? status).id === parentID);
+          if (parentIndex === -1) {
+            return [createdStatus, ...current];
+          }
+          return [...current.slice(0, parentIndex + 1), createdStatus, ...current.slice(parentIndex + 1)];
+        });
       }
     } catch (caughtError) {
       setReplyError(caughtError instanceof Error ? caughtError.message : "Could not post reply.");
@@ -422,19 +432,6 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
       </div>
 
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
-
-        {replyingTo ? (
-          <div className="mb-5">
-            <ReplyComposer
-              status={replyingTo}
-              isSubmitting={isReplying}
-              error={replyError}
-              onCancel={() => setReplyingTo(null)}
-              onSubmit={submitReply}
-            />
-          </div>
-        ) : null}
-
         {timelineError ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
             {timelineError}
@@ -464,6 +461,15 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
                 setReplyingTo(status);
                 setReplyError(null);
               }}
+              renderAfterStatus={(status) => replyingTo?.id === status.id ? (
+                <ReplyComposer
+                  status={replyingTo}
+                  isSubmitting={isReplying}
+                  error={replyError}
+                  onCancel={() => setReplyingTo(null)}
+                  onSubmit={submitReply}
+                />
+              ) : null}
             />
             <div className="mt-5 flex justify-center">
               <Button variant="outline" onClick={() => void loadMore()} disabled={isLoadingMore || !hasMore}>
