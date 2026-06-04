@@ -1,0 +1,69 @@
+name: gargoyle-integration-gts
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "18080:80"
+    networks:
+      default:
+        aliases:
+          - gargoyle.test
+          - gts.test
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://gargoyle.test/api/v1/instance >/dev/null && wget -qO- http://gts.test/nodeinfo/2.0 >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  gargoyle:
+    build:
+      context: ../..
+      dockerfile: integration/docker/gargoyle.Dockerfile
+    environment:
+      GARGOYLE_CONFIG: /config/config.yml
+      GARGOYLE_USERNAME: alice
+      GARGOYLE_EMAIL: alice@gargoyle.test
+      GARGOYLE_PASSWORD: Str0ngP@ssword!
+    volumes:
+      - ./gargoyle.yml:/config/config.yml:ro
+      - gargoyle-data:/data
+      - gargoyle-media:/media
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/v1/instance >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  gotosocial:
+    image: superseriousbusiness/gotosocial:latest
+    environment:
+      GTS_HOST: gts.test
+      GTS_ACCOUNT_DOMAIN: gts.test
+      GTS_PROTOCOL: http
+      GTS_BIND_ADDRESS: 0.0.0.0
+      GTS_PORT: 8080
+      GTS_DB_TYPE: sqlite
+      GTS_DB_ADDRESS: /gotosocial/storage/sqlite.db
+      GTS_STORAGE_BACKEND: local
+      GTS_STORAGE_LOCAL_BASE_PATH: /gotosocial/storage
+      GTS_LETSENCRYPT_ENABLED: "false"
+      GTS_HTTP_CLIENT_ALLOW_IPS: "0.0.0.0/0"
+      GTS_HTTP_CLIENT_INSECURE_OUTGOING: "true"
+      GTS_ADVANCED_RATE_LIMIT_REQUESTS: "0"
+      GTS_ADVANCED_RATE_LIMIT_EXCEPTIONS: "0.0.0.0/0,::/0"
+      GTS_ADVANCED_THROTTLING_MULTIPLIER: "0"
+    volumes:
+      - gts-data:/gotosocial/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/nodeinfo/2.0 >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+volumes:
+  gargoyle-data:
+  gargoyle-media:
+  gts-data:

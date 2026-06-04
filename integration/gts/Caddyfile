@@ -1,0 +1,11 @@
+{
+	auto_https off
+}
+
+http://gargoyle.test {
+	reverse_proxy gargoyle:3000
+}
+
+http://gts.test {
+	reverse_proxy gotosocial:8080
+}
