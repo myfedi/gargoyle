@@ -7,6 +7,6 @@ import (
 )
 
 type ConversationsRepository interface {
-	DismissConversation(ctx context.Context, tx *db.Tx, localAccountID string, conversationID string) error
-	ConversationDismissed(ctx context.Context, tx *db.Tx, localAccountID string, conversationID string) (bool, error)
+	DismissConversation(ctx context.Context, tx *db.Tx, localAccountID, conversationID string) error
+	ConversationDismissed(ctx context.Context, tx *db.Tx, localAccountID, conversationID string) (bool, error)
 }

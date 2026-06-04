@@ -26,7 +26,7 @@ func NewStdLoggerAdapter(cfg StdLoggerAdapterConfig) *StdLoggerAdapter {
 		showStacktraces: cfg.ShowStacktraces,
 	}
 }
-func (l *StdLoggerAdapter) log(out *os.File, level string, format string, args ...interface{}) {
+func (l *StdLoggerAdapter) log(out *os.File, level, format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	if l.showStacktraces && (level == "ERROR" || level == "FATAL") {
 		msg += "\n" + string(debug.Stack())

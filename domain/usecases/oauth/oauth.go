@@ -316,7 +316,7 @@ func (u UseCase) issueAuthorizationCodeToken(ctx context.Context, app *models.OA
 	return issued, nil
 }
 
-func (u UseCase) issueAccessToken(ctx context.Context, tx *db.Tx, applicationID string, userID string, scope string) (*IssuedToken, *derrors.DomainError) {
+func (u UseCase) issueAccessToken(ctx context.Context, tx *db.Tx, applicationID, userID, scope string) (*IssuedToken, *derrors.DomainError) {
 	plain, err := randomToken(48)
 	if err != nil {
 		return nil, derrors.NewErr(derrors.ErrInternal, err)
@@ -329,7 +329,7 @@ func (u UseCase) issueAccessToken(ctx context.Context, tx *db.Tx, applicationID 
 	return issuedTokenResponse(plain, scope, issuedAt), nil
 }
 
-func issuedTokenResponse(plain string, scope string, issuedAt time.Time) *IssuedToken {
+func issuedTokenResponse(plain, scope string, issuedAt time.Time) *IssuedToken {
 	return &IssuedToken{AccessToken: plain, TokenType: "Bearer", Scope: scope, CreatedAt: issuedAt.Unix(), ExpiresIn: int64(accessTokenTTL.Seconds())}
 }
 
@@ -384,7 +384,7 @@ func (u UseCase) userByLogin(ctx context.Context, login string) (*models.User, e
 	return u.cfg.UsersRepo.GetUserByUsername(ctx, nil, login)
 }
 
-func (u UseCase) validatedApplication(ctx context.Context, clientID string, redirectURI string) (*models.OAuthApplication, *derrors.DomainError) {
+func (u UseCase) validatedApplication(ctx context.Context, clientID, redirectURI string) (*models.OAuthApplication, *derrors.DomainError) {
 	app, err := u.cfg.OAuthRepo.GetApplicationByClientID(ctx, nil, clientID)
 	if err != nil {
 		return nil, derrors.New(derrors.ErrUnauthorized, "invalid client_id")
@@ -395,7 +395,7 @@ func (u UseCase) validatedApplication(ctx context.Context, clientID string, redi
 	return app, nil
 }
 
-func redirectURIMatches(registered string, requested string) bool {
+func redirectURIMatches(registered, requested string) bool {
 	for _, candidate := range strings.Fields(registered) {
 		if candidate == requested {
 			return true
@@ -404,7 +404,7 @@ func redirectURIMatches(registered string, requested string) bool {
 	return false
 }
 
-func normalizeRequestedScopes(requested string, fallback string) (string, *derrors.DomainError) {
+func normalizeRequestedScopes(requested, fallback string) (string, *derrors.DomainError) {
 	requested = strings.TrimSpace(requested)
 	if requested == "" {
 		requested = fallback
@@ -427,7 +427,7 @@ func normalizeRequestedScopes(requested string, fallback string) (string, *derro
 	return strings.Join(scopes, " "), nil
 }
 
-func ensureScopesAllowed(requested string, allowed string) *derrors.DomainError {
+func ensureScopesAllowed(requested, allowed string) *derrors.DomainError {
 	allowedSet := map[string]bool{}
 	for _, scope := range strings.Fields(allowed) {
 		allowedSet[scope] = true
@@ -446,11 +446,11 @@ func parentScopeAllowed(scope string, allowedSet map[string]bool) bool {
 	return ok && allowedSet[parent]
 }
 
-func constantTimeStringEqual(a string, b string) bool {
+func constantTimeStringEqual(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
-func validPKCE(challenge string, method string, verifier string) bool {
+func validPKCE(challenge, method, verifier string) bool {
 	if challenge == "" {
 		return true
 	}

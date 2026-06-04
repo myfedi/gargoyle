@@ -61,7 +61,7 @@ func (r *MediaRepo) GetMediaAttachmentByID(ctx context.Context, tx *dbPorts.Tx, 
 	return &model, nil
 }
 
-func (r *MediaRepo) UpdateMediaAttachmentDescription(ctx context.Context, tx *dbPorts.Tx, id string, description string) (*models.MediaAttachment, error) {
+func (r *MediaRepo) UpdateMediaAttachmentDescription(ctx context.Context, tx *dbPorts.Tx, id, description string) (*models.MediaAttachment, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return nil, err
@@ -94,7 +94,7 @@ func (r *MediaRepo) MediaAttachmentIsAttached(ctx context.Context, tx *dbPorts.T
 	return db.NewSelect().Model((*dbModels.Account)(nil)).Where("avatar_media_id = ? OR header_media_id = ?", id, id).Exists(ctx)
 }
 
-func (r *MediaRepo) AttachMediaToNote(ctx context.Context, tx *dbPorts.Tx, noteID string, mediaID string) error {
+func (r *MediaRepo) AttachMediaToNote(ctx context.Context, tx *dbPorts.Tx, noteID, mediaID string) error {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return err

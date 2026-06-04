@@ -11,7 +11,7 @@ type LocalMediaStorage struct{ dir string }
 
 func NewLocalMediaStorage(dir string) *LocalMediaStorage { return &LocalMediaStorage{dir: dir} }
 
-func (s *LocalMediaStorage) SaveMedia(ctx context.Context, id string, fileName string, data []byte) (string, error) {
+func (s *LocalMediaStorage) SaveMedia(ctx context.Context, id, fileName string, data []byte) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

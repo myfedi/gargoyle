@@ -6,7 +6,7 @@ type PublicKey interface {
 	// ToPEM returns a PEM representation of the public key
 	ToPEM() []byte
 	// VerifySignature verifies the signature of data
-	VerifySignature(data []byte, sig []byte) error
+	VerifySignature(data, sig []byte) error
 }
 
 // PrivateKey is a key that can be represented as PEM and can be used

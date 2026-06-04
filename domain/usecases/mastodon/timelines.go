@@ -183,7 +183,7 @@ func filterTimelineItemsByActor(items []TimelineItem, actors map[string]bool) []
 	return filtered
 }
 
-func mergeTimelineItems(a []TimelineItem, b []TimelineItem, limit int) []TimelineItem {
+func mergeTimelineItems(a, b []TimelineItem, limit int) []TimelineItem {
 	items := append(a, b...)
 	sort.SliceStable(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
 	if limit > 0 && len(items) > limit {

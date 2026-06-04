@@ -34,7 +34,7 @@ func (u UseCase) UnreblogStatus(ctx context.Context, account *models.Account, id
 	return u.undoInteract(ctx, account, id, "reblog", "Announce")
 }
 
-func (u UseCase) interact(ctx context.Context, account *models.Account, id string, typ string, apType string) (*InteractionResult, *domainerrors.DomainError) {
+func (u UseCase) interact(ctx context.Context, account *models.Account, id, typ, apType string) (*InteractionResult, *domainerrors.DomainError) {
 	item, derr := u.GetStatus(ctx, account, id)
 	if derr != nil {
 		return nil, derr
@@ -66,7 +66,7 @@ func (u UseCase) interact(ctx context.Context, account *models.Account, id strin
 	}
 	return &InteractionResult{Status: *item, Delivery: payload}, nil
 }
-func (u UseCase) undoInteract(ctx context.Context, account *models.Account, id string, typ string, apType string) (*InteractionResult, *domainerrors.DomainError) {
+func (u UseCase) undoInteract(ctx context.Context, account *models.Account, id, typ, apType string) (*InteractionResult, *domainerrors.DomainError) {
 	item, derr := u.GetStatus(ctx, account, id)
 	if derr != nil {
 		return nil, derr

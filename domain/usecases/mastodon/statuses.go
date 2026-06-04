@@ -187,7 +187,7 @@ func applyVisibilityAddressing(noteDoc map[string]any, visibility string, accoun
 	}
 }
 
-func (u UseCase) persistMentions(ctx context.Context, localAccountID string, noteID string, mentions []models.Account) *domainerrors.DomainError {
+func (u UseCase) persistMentions(ctx context.Context, localAccountID, noteID string, mentions []models.Account) *domainerrors.DomainError {
 	for _, mention := range mentions {
 		input := repos.CreateMentionInput{LocalAccountID: localAccountID, NoteID: noteID, AccountID: mention.ID, Username: mention.Username, Acct: mentionAcct(mention), URL: mentionURL(mention, u.cfg.Host)}
 		if _, err := u.cfg.MentionsRepo.CreateMention(ctx, nil, input); err != nil {

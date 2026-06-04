@@ -26,7 +26,7 @@ func (e BcryptPasswordHasher) HashPassword(password string) (string, error) {
 	return string(encryptedPassword), nil
 }
 
-func (e BcryptPasswordHasher) CompareHashAndPassword(hash string, password string) error {
+func (e BcryptPasswordHasher) CompareHashAndPassword(hash, password string) error {
 	return bcrypt.CompareHashAndPassword(
 		[]byte(hash),
 		[]byte(password),

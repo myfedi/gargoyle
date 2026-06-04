@@ -19,10 +19,10 @@ type CreateMediaAttachmentInput struct {
 type MediaRepository interface {
 	CreateMediaAttachment(ctx context.Context, tx *db.Tx, input CreateMediaAttachmentInput) (*models.MediaAttachment, error)
 	GetMediaAttachmentByID(ctx context.Context, tx *db.Tx, id string) (*models.MediaAttachment, error)
-	UpdateMediaAttachmentDescription(ctx context.Context, tx *db.Tx, id string, description string) (*models.MediaAttachment, error)
+	UpdateMediaAttachmentDescription(ctx context.Context, tx *db.Tx, id, description string) (*models.MediaAttachment, error)
 	DeleteMediaAttachment(ctx context.Context, tx *db.Tx, id string) error
 	MediaAttachmentIsAttached(ctx context.Context, tx *db.Tx, id string) (bool, error)
-	AttachMediaToNote(ctx context.Context, tx *db.Tx, noteID string, mediaID string) error
+	AttachMediaToNote(ctx context.Context, tx *db.Tx, noteID, mediaID string) error
 	ReplaceMediaForNote(ctx context.Context, tx *db.Tx, noteID string, mediaIDs []string) error
 	ListMediaForNote(ctx context.Context, tx *db.Tx, noteID string) ([]models.MediaAttachment, error)
 	ListUnattachedMediaOlderThan(ctx context.Context, tx *db.Tx, cutoff time.Time, limit int) ([]models.MediaAttachment, error)

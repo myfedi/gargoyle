@@ -29,6 +29,6 @@ func New(code error, msg string) *DomainError {
 	return &DomainError{Code: code, Message: msg}
 }
 
-func NewErr(code error, err error) *DomainError {
+func NewErr(code, err error) *DomainError {
 	return &DomainError{Code: code, Message: err.Error(), ParentError: &err}
 }

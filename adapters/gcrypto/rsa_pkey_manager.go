@@ -29,7 +29,7 @@ func (p PublicRSAKey) ToPEM() []byte {
 	})
 }
 
-func (p PublicRSAKey) VerifySignature(data []byte, sig []byte) error {
+func (p PublicRSAKey) VerifySignature(data, sig []byte) error {
 	hashed := sha256.Sum256(data)
 	// ActivityPub HTTP Signatures commonly use "rsa-sha256", which maps to
 	// RSASSA-PKCS1-v1_5 with SHA-256. RSA-PSS would be preferable for new

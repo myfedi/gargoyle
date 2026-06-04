@@ -100,7 +100,7 @@ func (u UseCase) editableStatus(ctx context.Context, account *models.Account, st
 	return note, nil
 }
 
-func statusWithEdits(note models.Note, input UpdateStatusInput, visibility string, content string, plainText string) models.Note {
+func statusWithEdits(note models.Note, input UpdateStatusInput, visibility, content, plainText string) models.Note {
 	note.Content = content
 	note.PlainText = plainText
 	note.Visibility = visibility
@@ -173,7 +173,7 @@ func (u UseCase) replaceStatusMedia(ctx context.Context, tx *db.Tx, noteID strin
 	return u.cfg.MediaRepo.ReplaceMediaForNote(ctx, tx, noteID, mediaIDs)
 }
 
-func (u UseCase) replaceStatusMentions(ctx context.Context, tx *db.Tx, accountID string, noteID string, mentions []models.Account) error {
+func (u UseCase) replaceStatusMentions(ctx context.Context, tx *db.Tx, accountID, noteID string, mentions []models.Account) error {
 	if err := u.cfg.MentionsRepo.DeleteMentionsForNote(ctx, tx, noteID); err != nil {
 		return err
 	}

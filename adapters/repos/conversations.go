@@ -28,7 +28,7 @@ func (r *ConversationsRepo) resolveDB(tx *dbPorts.Tx) (bun.IDB, error) {
 	return adapted.Unwrap(), nil
 }
 
-func (r *ConversationsRepo) DismissConversation(ctx context.Context, tx *dbPorts.Tx, localAccountID string, conversationID string) error {
+func (r *ConversationsRepo) DismissConversation(ctx context.Context, tx *dbPorts.Tx, localAccountID, conversationID string) error {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return err
@@ -37,7 +37,7 @@ func (r *ConversationsRepo) DismissConversation(ctx context.Context, tx *dbPorts
 	return err
 }
 
-func (r *ConversationsRepo) ConversationDismissed(ctx context.Context, tx *dbPorts.Tx, localAccountID string, conversationID string) (bool, error) {
+func (r *ConversationsRepo) ConversationDismissed(ctx context.Context, tx *dbPorts.Tx, localAccountID, conversationID string) (bool, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return false, err

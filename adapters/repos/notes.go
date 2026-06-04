@@ -138,7 +138,7 @@ func (r *NotesRepo) UpdateNoteByID(ctx context.Context, tx *dbPorts.Tx, id strin
 	return r.GetNoteByID(ctx, tx, id)
 }
 
-func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri string, content string, plainText string) error {
+func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri, content, plainText string) error {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)
@@ -285,15 +285,15 @@ func (r *NotesRepo) ListKnownPublicTimelineNotesPaged(ctx context.Context, tx *d
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, publicOnly: true, limit: limit, maxID: maxID})
 }
 
-func (r *NotesRepo) ListKnownLocalTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
+func (r *NotesRepo) ListKnownLocalTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, localActorPrefix: localActorPrefix, localOnly: true, publicOnly: true, limit: limit, maxID: maxID})
 }
 
-func (r *NotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
+func (r *NotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, localActorPrefix: localActorPrefix, remoteOnly: true, publicOnly: true, limit: limit, maxID: maxID})
 }
 
-func (r *NotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
+func (r *NotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID, attributedTo string, limit int, maxID string) ([]models.Note, error) {
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, attributedTo: attributedTo, limit: limit, maxID: maxID})
 }
 
@@ -310,7 +310,7 @@ type noteListFilter struct {
 	maxID            string
 }
 
-func (r *NotesRepo) ListReplies(ctx context.Context, tx *dbPorts.Tx, localAccountID string, parentID string, parentURI string) ([]models.Note, error) {
+func (r *NotesRepo) ListReplies(ctx context.Context, tx *dbPorts.Tx, localAccountID, parentID, parentURI string) ([]models.Note, error) {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)

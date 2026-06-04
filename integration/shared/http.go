@@ -31,19 +31,19 @@ func NewHostClient(baseURL, hostHeader string) Client {
 	return client
 }
 
-func (c Client) GetJSON(ctx context.Context, path string, bearer string, out any) (*http.Response, string, error) {
+func (c Client) GetJSON(ctx context.Context, path, bearer string, out any) (*http.Response, string, error) {
 	return c.do(ctx, http.MethodGet, path, bearer, "", nil, out)
 }
 
-func (c Client) PostForm(ctx context.Context, path string, bearer string, form url.Values, out any) (*http.Response, string, error) {
+func (c Client) PostForm(ctx context.Context, path, bearer string, form url.Values, out any) (*http.Response, string, error) {
 	return c.do(ctx, http.MethodPost, path, bearer, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()), out)
 }
 
-func (c Client) PatchForm(ctx context.Context, path string, bearer string, form url.Values, out any) (*http.Response, string, error) {
+func (c Client) PatchForm(ctx context.Context, path, bearer string, form url.Values, out any) (*http.Response, string, error) {
 	return c.do(ctx, http.MethodPatch, path, bearer, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()), out)
 }
 
-func (c Client) PostJSON(ctx context.Context, path string, bearer string, payload any, out any) (*http.Response, string, error) {
+func (c Client) PostJSON(ctx context.Context, path, bearer string, payload, out any) (*http.Response, string, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return nil, "", err
@@ -51,7 +51,7 @@ func (c Client) PostJSON(ctx context.Context, path string, bearer string, payloa
 	return c.do(ctx, http.MethodPost, path, bearer, "application/json", bytes.NewReader(raw), out)
 }
 
-func (c Client) PostMultipart(ctx context.Context, path string, bearer string, fields map[string]string, fileField, fileName, contentType string, data []byte, out any) (*http.Response, string, error) {
+func (c Client) PostMultipart(ctx context.Context, path, bearer string, fields map[string]string, fileField, fileName, contentType string, data []byte, out any) (*http.Response, string, error) {
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	for key, value := range fields {
@@ -77,7 +77,7 @@ func (c Client) PostMultipart(ctx context.Context, path string, bearer string, f
 	return c.do(ctx, http.MethodPost, path, bearer, writer.FormDataContentType(), &body, out)
 }
 
-func (c Client) Delete(ctx context.Context, path string, bearer string, out any) (*http.Response, string, error) {
+func (c Client) Delete(ctx context.Context, path, bearer string, out any) (*http.Response, string, error) {
 	return c.do(ctx, http.MethodDelete, path, bearer, "", nil, out)
 }
 

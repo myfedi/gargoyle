@@ -23,7 +23,7 @@ func (u UseCase) BookmarkedStatuses(ctx context.Context, account *models.Account
 	return u.interactionStatuses(ctx, account, "bookmark", limit)
 }
 
-func (u UseCase) localInteraction(ctx context.Context, account *models.Account, id string, typ string, create bool) (*TimelineItem, *domainerrors.DomainError) {
+func (u UseCase) localInteraction(ctx context.Context, account *models.Account, id, typ string, create bool) (*TimelineItem, *domainerrors.DomainError) {
 	item, derr := u.GetStatus(ctx, account, id)
 	if derr != nil {
 		return nil, derr

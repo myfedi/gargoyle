@@ -47,7 +47,7 @@ func (r *BoostsRepo) CreateBoost(ctx context.Context, tx *dbPorts.Tx, input repo
 	model := row.ToModel()
 	return &model, nil
 }
-func (r *BoostsRepo) DeleteBoost(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actor string, noteID string) error {
+func (r *BoostsRepo) DeleteBoost(ctx context.Context, tx *dbPorts.Tx, localAccountID, actor, noteID string) error {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return err
@@ -58,10 +58,10 @@ func (r *BoostsRepo) DeleteBoost(ctx context.Context, tx *dbPorts.Tx, localAccou
 func (r *BoostsRepo) ListTimelineBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, maxID string) ([]models.Boost, error) {
 	return r.listBoosts(ctx, tx, localAccountID, "", limit, maxID)
 }
-func (r *BoostsRepo) ListActorBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actor string, limit int, maxID string) ([]models.Boost, error) {
+func (r *BoostsRepo) ListActorBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID, actor string, limit int, maxID string) ([]models.Boost, error) {
 	return r.listBoosts(ctx, tx, localAccountID, actor, limit, maxID)
 }
-func (r *BoostsRepo) listBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actor string, limit int, maxID string) ([]models.Boost, error) {
+func (r *BoostsRepo) listBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID, actor string, limit int, maxID string) ([]models.Boost, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func (r *BoostsRepo) CountBoostsForNote(ctx context.Context, tx *dbPorts.Tx, not
 	}
 	return db.NewSelect().Model((*dbModels.Boost)(nil)).Where("note_id = ?", noteID).Count(ctx)
 }
-func (r *BoostsRepo) BoostExists(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actor string, noteID string) (bool, error) {
+func (r *BoostsRepo) BoostExists(ctx context.Context, tx *dbPorts.Tx, localAccountID, actor, noteID string) (bool, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return false, err

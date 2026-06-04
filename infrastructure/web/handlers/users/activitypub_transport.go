@@ -68,7 +68,7 @@ func newHTTPActivityPubTransport(client *http.Client, retries int, exceptions []
 func publicOnlyTransport(exceptions []RemoteURLException) *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-	transport.DialContext = func(ctx context.Context, network string, address string) (net.Conn, error) {
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, _, err := net.SplitHostPort(address)
 		if err != nil {
 			return nil, err
@@ -347,7 +347,7 @@ func validateHTTPDate(value string) *domainerrors.DomainError {
 	return nil
 }
 
-func validKeyID(keyID string, actor string, doc *activitypub.RemoteActorDocument) bool {
+func validKeyID(keyID, actor string, doc *activitypub.RemoteActorDocument) bool {
 	if keyID == "" || actor == "" {
 		return false
 	}
