@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DirectMessageForm } from "@/features/direct/direct-message-form";
 import { Tabs } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Panel } from "@/features/shared";
 import type { ComposeValues } from "@/features/status/compose-form";
+import { ReplyComposer } from "@/features/status/reply-composer";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
@@ -43,6 +45,10 @@ export function MyProfilePage() {
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<MastodonStatus | null>(null);
+  const [forwardingStatus, setForwardingStatus] = useState<MastodonStatus | null>(null);
+  const [isReplying, setIsReplying] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isAvatarPreviewOpen, setIsAvatarPreviewOpen] = useState(false);
@@ -71,6 +77,9 @@ export function MyProfilePage() {
         ]);
         setStatuses(nextStatuses);
         setPinnedStatuses(nextPinnedStatuses);
+        setReplyingTo(null);
+        setReplyError(null);
+        setForwardingStatus(null);
       } else if (activeTab === "bookmarks") {
         setStatuses(await api.bookmarks());
       } else if (activeTab === "requests") {
@@ -180,6 +189,49 @@ export function MyProfilePage() {
     }
   }
 
+  async function submitReply(values: ComposeValues) {
+    if (!api || !replyingTo) return;
+    setIsReplying(true);
+    setReplyError(null);
+
+    try {
+      const parentID = replyingTo.id;
+      const createdStatus = await api.createStatus({
+        status: values.status,
+        visibility: values.visibility,
+        sensitive: values.sensitive,
+        spoiler_text: values.spoilerText,
+        media_ids: values.mediaIds,
+        activitypub_type: values.objectType,
+        poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined,
+        in_reply_to_id: parentID,
+      });
+      setReplyingTo(null);
+      setStatuses((current) => insertStatusAfter(current, createdStatus, parentID));
+    } catch (caughtError) {
+      setReplyError(caughtError instanceof Error ? caughtError.message : "Could not post reply.");
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
+  function reply(status: MastodonStatus) {
+    setReplyingTo(status);
+    setReplyError(null);
+  }
+
+  function renderReplyComposer(status: MastodonStatus) {
+    return replyingTo?.id === status.id ? (
+      <ReplyComposer
+        status={replyingTo}
+        isSubmitting={isReplying}
+        error={replyError}
+        onCancel={() => setReplyingTo(null)}
+        onSubmit={submitReply}
+      />
+    ) : null;
+  }
+
   async function followAccount(accountToFollow: MastodonAccount) {
     if (!api) return;
     setBusyAccountId(accountToFollow.id);
@@ -282,6 +334,15 @@ export function MyProfilePage() {
               <img className="max-h-[75vh] max-w-full rounded-md object-contain" src={account.avatar} alt={`${account.display_name || account.username} avatar`} />
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(forwardingStatus)} onOpenChange={(open) => !open && setForwardingStatus(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Forward by direct message</DialogTitle>
+          </DialogHeader>
+          {forwardingStatus ? <DirectMessageForm forwardedStatus={forwardingStatus} onSent={() => setForwardingStatus(null)} onCancel={() => setForwardingStatus(null)} /> : null}
         </DialogContent>
       </Dialog>
 
@@ -403,8 +464,13 @@ export function MyProfilePage() {
           deletingStatusId={deletingStatusId}
           emptyTitle="No bookmarks"
           emptyDescription="Bookmarked posts will appear here."
+          onDelete={deleteStatus}
+          onEdit={editStatus}
           onAction={runAction}
-            onVotePoll={votePoll}
+          onVotePoll={votePoll}
+          onForward={setForwardingStatus}
+          onReply={reply}
+          renderAfterStatus={renderReplyComposer}
         />
       );
     }
@@ -425,7 +491,10 @@ export function MyProfilePage() {
                 onDelete={deleteStatus}
                 onEdit={editStatus}
                 onAction={runAction}
-            onVotePoll={votePoll}
+                onVotePoll={votePoll}
+                onForward={setForwardingStatus}
+                onReply={reply}
+                renderAfterStatus={renderReplyComposer}
               />
             </section>
           ) : null}
@@ -441,7 +510,10 @@ export function MyProfilePage() {
               onDelete={deleteStatus}
               onEdit={editStatus}
               onAction={runAction}
-            onVotePoll={votePoll}
+              onVotePoll={votePoll}
+              onForward={setForwardingStatus}
+              onReply={reply}
+              renderAfterStatus={renderReplyComposer}
             />
             {statuses.length > 0 ? (
               <div className="mt-5 flex justify-center">
@@ -540,6 +612,17 @@ function FollowRequestList({ accounts, busyAccountId, onDecision }: FollowReques
       })}
     </div>
   );
+}
+
+function insertStatusAfter(statuses: MastodonStatus[], status: MastodonStatus, parentID: string) {
+  if (statuses.some((item) => item.id === status.id)) {
+    return statuses;
+  }
+  const parentIndex = statuses.findIndex((item) => (item.reblog ?? item).id === parentID);
+  if (parentIndex === -1) {
+    return [status, ...statuses];
+  }
+  return [...statuses.slice(0, parentIndex + 1), status, ...statuses.slice(parentIndex + 1)];
 }
 
 function profileInitials(account: MastodonAccount) {
