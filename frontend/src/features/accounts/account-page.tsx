@@ -200,7 +200,7 @@ export function AccountPage({ route }: AccountPageProps) {
       ) : null}
 
       {pinnedStatuses.length > 0 ? (
-        <Panel title="Pinned posts">
+        <Panel title="Pinned posts" className="mx-auto max-w-2xl">
           <StatusList
             statuses={pinnedStatuses}
             currentAccountId={currentAccount?.id}
@@ -214,7 +214,7 @@ export function AccountPage({ route }: AccountPageProps) {
         </Panel>
       ) : null}
 
-      <Panel title="Posts">
+      <Panel title="Posts" className="mx-auto max-w-2xl">
         {isLoading ? (
           <div className="space-y-3">
             {[0, 1, 2].map((item) => <div key={item} className="h-24 animate-pulse rounded-md bg-secondary" />)}
