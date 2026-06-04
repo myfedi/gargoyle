@@ -366,7 +366,7 @@ export function MyProfilePage() {
               onAction={runAction}
             />
             {statuses.length > 0 ? (
-              <div className="mt-5">
+              <div className="mt-5 flex justify-center">
                 <Button variant="outline" onClick={() => void loadMore()} disabled={isLoading}>{isLoading ? "Loading..." : "Load more"}</Button>
               </div>
             ) : null}

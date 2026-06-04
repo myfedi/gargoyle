@@ -232,7 +232,7 @@ export function AccountPage({ route }: AccountPageProps) {
               onAction={runAction}
             />
             {statuses.length > 0 ? (
-              <div className="mt-5">
+              <div className="mt-5 flex justify-center">
                 <Button variant="outline" onClick={() => void loadMore()} disabled={isLoadingMore}>
                   {isLoadingMore ? "Loading..." : "Load more"}
                 </Button>
