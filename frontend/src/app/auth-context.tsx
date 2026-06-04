@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import { clearAuthSession, readAuthSession, writeAuthSession } from "@/lib/auth-storage";
 import { getOAuthConfig } from "@/lib/config";
-import { clearOAuthTransaction, createAuthorizationUrl, exchangeAuthorizationCode, validateOAuthState } from "@/lib/oauth";
+import { clearOAuthTransaction, createAuthorizationUrl, exchangeAuthorizationCode, revokeAccessToken, validateOAuthState } from "@/lib/oauth";
 import type { AuthSession } from "@/types/auth";
 
 type AuthStatus = "checking" | "authenticated" | "unauthenticated";
@@ -13,7 +13,7 @@ type AuthContextValue = {
   status: AuthStatus;
   error: string | null;
   signIn: () => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -128,13 +128,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     globalThis.location.assign(url.toString());
   }, []);
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback(async () => {
+    const sessionToRevoke = session;
     clearAuthSession();
     clearOAuthTransaction();
     setSession(null);
     setStatus("unauthenticated");
     setError(null);
-  }, []);
+
+    const config = getOAuthConfig();
+    if (!sessionToRevoke?.accessToken || !config) {
+      return;
+    }
+
+    try {
+      await revokeAccessToken(config, sessionToRevoke.accessToken);
+    } catch (caughtError) {
+      console.warn("OAuth token revocation failed", caughtError);
+    }
+  }, [session]);
 
   const value = useMemo(
     () => ({ session, status, error, signIn, signOut }),

@@ -109,6 +109,12 @@ type IssueTokenInput struct {
 	CodeVerifier string
 }
 
+type RevokeTokenInput struct {
+	ClientID     string
+	ClientSecret string
+	Token        string
+}
+
 type IssuedToken struct {
 	AccessToken string
 	TokenType   string
@@ -258,6 +264,28 @@ func (u UseCase) IssueToken(ctx context.Context, input IssueTokenInput) (*Issued
 		return u.issueAuthorizationCodeToken(ctx, app, input, clientSecretProvided)
 	}
 	return nil, derrors.New(derrors.ErrBadRequest, "unsupported grant_type")
+}
+
+func (u UseCase) RevokeToken(ctx context.Context, input RevokeTokenInput) *derrors.DomainError {
+	if strings.TrimSpace(input.Token) == "" {
+		return derrors.New(derrors.ErrBadRequest, "token is required")
+	}
+	app, err := u.cfg.OAuthRepo.GetApplicationByClientID(ctx, nil, input.ClientID)
+	if err != nil {
+		return derrors.New(derrors.ErrUnauthorized, "invalid client_id")
+	}
+	if input.ClientSecret != "" && !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
+		return derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+	}
+	tokenHash := TokenHash(input.Token)
+	token, err := u.cfg.OAuthRepo.GetAccessTokenByHash(ctx, nil, tokenHash)
+	if err != nil || token.ApplicationID != app.ID {
+		return nil
+	}
+	if err := u.cfg.OAuthRepo.DeleteAccessTokenByHash(ctx, nil, tokenHash); err != nil {
+		return derrors.NewErr(derrors.ErrInternal, err)
+	}
+	return nil
 }
 
 func (u UseCase) issuePasswordToken(ctx context.Context, app *models.OAuthApplication, input IssueTokenInput) (*IssuedToken, *derrors.DomainError) {

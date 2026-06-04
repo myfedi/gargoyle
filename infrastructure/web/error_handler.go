@@ -50,7 +50,7 @@ func publicErrorMessage(err *errors.DomainError) string {
 
 func wantsAPIError(c *fiber.Ctx) bool {
 	path := c.Path()
-	if strings.HasPrefix(path, "/api/") || path == "/oauth/token" {
+	if strings.HasPrefix(path, "/api/") || path == "/oauth/token" || path == "/oauth/revoke" {
 		return true
 	}
 	accept := c.Get(fiber.HeaderAccept)

@@ -21,6 +21,7 @@ func (h OAuthHandler) Setup(app *fiber.App) {
 	app.Get("/oauth/authorize", h.authorizeForm)
 	app.Post("/oauth/authorize", h.authorize)
 	app.Post("/oauth/token", h.issueToken)
+	app.Post("/oauth/revoke", h.revokeToken)
 	app.Get("/api/v1/accounts/verify_credentials", h.verifyCredentials)
 }
 
@@ -105,6 +106,12 @@ type tokenResponse struct {
 	ExpiresIn   int64  `json:"expires_in"`
 }
 
+type revokeTokenRequest struct {
+	Token        string `json:"token" form:"token"`
+	ClientID     string `json:"client_id" form:"client_id"`
+	ClientSecret string `json:"client_secret" form:"client_secret"`
+}
+
 func (h OAuthHandler) issueToken(c *fiber.Ctx) error {
 	var req tokenRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -117,6 +124,19 @@ func (h OAuthHandler) issueToken(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderCacheControl, "no-store")
 	c.Set(fiber.HeaderPragma, "no-cache")
 	return c.JSON(tokenResponse{AccessToken: token.AccessToken, TokenType: token.TokenType, Scope: token.Scope, CreatedAt: token.CreatedAt, ExpiresIn: token.ExpiresIn})
+}
+
+func (h OAuthHandler) revokeToken(c *fiber.Ctx) error {
+	var req revokeTokenRequest
+	if err := c.BodyParser(&req); err != nil {
+		return err
+	}
+	if derr := h.uc.RevokeToken(c.UserContext(), oauth.RevokeTokenInput{ClientID: req.ClientID, ClientSecret: req.ClientSecret, Token: req.Token}); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	c.Set(fiber.HeaderPragma, "no-cache")
+	return c.JSON(fiber.Map{})
 }
 
 type accountResponse struct {

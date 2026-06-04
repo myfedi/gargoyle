@@ -24,6 +24,27 @@ export async function createAuthorizationUrl(config: OAuthClientConfig) {
   return url;
 }
 
+export async function revokeAccessToken(config: OAuthClientConfig, token: string) {
+  const revokeUrl = new URL(config.revocationEndpoint, globalThis.location.origin);
+  const response = await fetch(revokeUrl, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      token,
+      client_id: config.clientId,
+    }),
+    credentials: "same-origin",
+  });
+
+  if (!response.ok) {
+    const payload = await readTokenResponse(response);
+    throw new Error(readOAuthError(payload, response.status));
+  }
+}
+
 export async function exchangeAuthorizationCode(config: OAuthClientConfig, code: string) {
   const verifier = readStoredVerifier();
   if (!verifier) {

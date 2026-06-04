@@ -92,6 +92,15 @@ func (r *OAuthRepo) GetAccessTokenByHash(ctx context.Context, tx *dbPorts.Tx, to
 	return &model, nil
 }
 
+func (r *OAuthRepo) DeleteAccessTokenByHash(ctx context.Context, tx *dbPorts.Tx, tokenHash string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewDelete().Model((*dbModels.OAuthAccessToken)(nil)).Where("token_hash = ?", tokenHash).Exec(ctx)
+	return err
+}
+
 func (r *OAuthRepo) CreateAuthorizationCode(ctx context.Context, tx *dbPorts.Tx, input repos.CreateOAuthAuthorizationCodeInput) (*models.OAuthAuthorizationCode, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {

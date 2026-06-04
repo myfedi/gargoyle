@@ -42,6 +42,7 @@ type OAuthRepository interface {
 	GetApplicationByClientID(ctx context.Context, tx *db.Tx, clientID string) (*models.OAuthApplication, error)
 	CreateAccessToken(ctx context.Context, tx *db.Tx, input CreateOAuthAccessTokenInput) (*models.OAuthAccessToken, error)
 	GetAccessTokenByHash(ctx context.Context, tx *db.Tx, tokenHash string) (*models.OAuthAccessToken, error)
+	DeleteAccessTokenByHash(ctx context.Context, tx *db.Tx, tokenHash string) error
 	CreateAuthorizationCode(ctx context.Context, tx *db.Tx, input CreateOAuthAuthorizationCodeInput) (*models.OAuthAuthorizationCode, error)
 	GetAuthorizationCodeByHash(ctx context.Context, tx *db.Tx, codeHash string) (*models.OAuthAuthorizationCode, error)
 	// MarkAuthorizationCodeUsed marks an unredeemed authorization code as used.

@@ -81,6 +81,7 @@ Example `frontend/.env.production` before building:
 VITE_GARGOYLE_API_BASE_URL=https://example.org
 VITE_GARGOYLE_OAUTH_AUTHORIZE_URL=https://example.org/oauth/authorize
 VITE_GARGOYLE_OAUTH_TOKEN_URL=https://example.org/oauth/token
+VITE_GARGOYLE_OAUTH_REVOKE_URL=https://example.org/oauth/revoke
 VITE_GARGOYLE_OAUTH_REDIRECT_URI=https://example.org/
 ```
 
