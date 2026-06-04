@@ -111,8 +111,16 @@ func ensureActorDocumentMetadata(data []byte, account models.Account) ([]byte, e
 		}
 		actor["featured"] = featured
 	}
+	actor["manuallyApprovesFollowers"] = json.RawMessage(boolJSON(account.Locked))
 
 	return json.Marshal(actor)
+}
+
+func boolJSON(value bool) []byte {
+	if value {
+		return []byte("true")
+	}
+	return []byte("false")
 }
 
 func stringValue(str *string) string {
@@ -151,7 +159,7 @@ func accountHeaderURL(account models.Account) string {
 	return accountMediaURL(account.URI, *account.HeaderMediaID)
 }
 
-func accountMediaURL(actorURI string, mediaID string) string {
+func accountMediaURL(actorURI, mediaID string) string {
 	parsed, err := url.Parse(actorURI)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return ""

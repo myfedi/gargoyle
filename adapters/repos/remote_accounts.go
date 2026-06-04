@@ -56,6 +56,7 @@ func (r *RemoteAccountsRepo) UpsertRemoteAccount(ctx context.Context, tx *dbPort
 		Set("featured_collection_uri = EXCLUDED.featured_collection_uri").
 		Set("public_key = EXCLUDED.public_key").
 		Set("actor_type = EXCLUDED.actor_type").
+		Set("locked = EXCLUDED.locked").
 		Exec(ctx)
 	if err != nil {
 		return nil, err

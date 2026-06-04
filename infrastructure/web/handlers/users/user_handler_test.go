@@ -91,7 +91,15 @@ func (f *fakeActivitiesRepo) CreateActivity(ctx context.Context, tx *db.Tx, inpu
 func (f *fakeActivitiesRepo) ListOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Activity, error) {
 	return f.activities, nil
 }
-func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
+func (f *fakeActivitiesRepo) GetActivityByID(ctx context.Context, tx *db.Tx, id string) (*models.Activity, error) {
+	for _, activity := range f.activities {
+		if activity.ID == id {
+			return &activity, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit, offset int) ([]models.Activity, error) {
 	if limit <= 0 {
 		return f.activities, nil
 	}
@@ -104,7 +112,7 @@ func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *
 	}
 	return f.activities[offset:end], nil
 }
-func (f *fakeActivitiesRepo) ListPublicOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
+func (f *fakeActivitiesRepo) ListPublicOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit, offset int) ([]models.Activity, error) {
 	return f.ListOutboxActivitiesPaged(ctx, tx, localAccountID, limit, offset)
 }
 func (f *fakeActivitiesRepo) CountOutboxActivities(ctx context.Context, tx *db.Tx, localAccountID string) (int, error) {
@@ -156,7 +164,7 @@ func (f *fakeNotesRepo) UpdateNoteByID(ctx context.Context, tx *db.Tx, id string
 	return nil, sql.ErrNoRows
 }
 
-func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri string, content string, plainText string) error {
+func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri, content, plainText string) error {
 	for i := range f.notes {
 		if f.notes[i].URI == uri {
 			f.notes[i].Content = content
@@ -204,16 +212,16 @@ func (f *fakeNotesRepo) ListDirectNotesPaged(ctx context.Context, tx *db.Tx, loc
 func (f *fakeNotesRepo) ListKnownPublicTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error) {
 	return f.notes, nil
 }
-func (f *fakeNotesRepo) ListKnownLocalTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
+func (f *fakeNotesRepo) ListKnownLocalTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
 	return f.notes, nil
 }
-func (f *fakeNotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
+func (f *fakeNotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, tx *db.Tx, localAccountID, localActorPrefix string, limit int, maxID string) ([]models.Note, error) {
 	return f.notes, nil
 }
-func (f *fakeNotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
+func (f *fakeNotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *db.Tx, localAccountID, attributedTo string, limit int, maxID string) ([]models.Note, error) {
 	return f.notes, nil
 }
-func (f *fakeNotesRepo) ListReplies(ctx context.Context, tx *db.Tx, localAccountID string, parentID string, parentURI string) ([]models.Note, error) {
+func (f *fakeNotesRepo) ListReplies(ctx context.Context, tx *db.Tx, localAccountID, parentID, parentURI string) ([]models.Note, error) {
 	return f.notes, nil
 }
 
@@ -231,20 +239,31 @@ func (f *fakeFollowsRepo) CreateFollow(ctx context.Context, tx *db.Tx, input rep
 func (f *fakeFollowsRepo) AcceptFollow(ctx context.Context, tx *db.Tx, followID string) error {
 	return nil
 }
+func (f *fakeFollowsRepo) AcceptFollowByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor string) (*models.Follow, error) {
+	return f.GetFollowByActor(ctx, tx, localAccountID, remoteActor, "follower")
+}
+func (f *fakeFollowsRepo) GetFollowByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor, direction string) (*models.Follow, error) {
+	for _, follow := range f.followers {
+		if follow.LocalAccountID == localAccountID && follow.RemoteActor == remoteActor && follow.Direction == direction {
+			return &follow, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
 func (f *fakeFollowsRepo) CreateFollowing(ctx context.Context, tx *db.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
 	input.Direction = "following"
 	return f.CreateFollow(ctx, tx, input)
 }
-func (f *fakeFollowsRepo) AcceptFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
+func (f *fakeFollowsRepo) AcceptFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor string) error {
 	return nil
 }
-func (f *fakeFollowsRepo) RejectFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
+func (f *fakeFollowsRepo) RejectFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor string) error {
 	return nil
 }
-func (f *fakeFollowsRepo) DeleteFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
+func (f *fakeFollowsRepo) DeleteFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor string) error {
 	return nil
 }
-func (f *fakeFollowsRepo) DeleteFollowByActor(ctx context.Context, tx *db.Tx, localAccountID string, remoteActor string) error {
+func (f *fakeFollowsRepo) DeleteFollowByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor string) error {
 	for i, follower := range f.followers {
 		if follower.LocalAccountID == localAccountID && follower.RemoteActor == remoteActor {
 			f.followers = append(f.followers[:i], f.followers[i+1:]...)
@@ -256,8 +275,17 @@ func (f *fakeFollowsRepo) DeleteFollowByActor(ctx context.Context, tx *db.Tx, lo
 func (f *fakeFollowsRepo) ListFollowers(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error) {
 	return f.followers, nil
 }
-func (f *fakeFollowsRepo) ListFollowersPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit int, offset int) ([]models.Follow, error) {
+func (f *fakeFollowsRepo) ListFollowersPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit, offset int) ([]models.Follow, error) {
 	return f.followers, nil
+}
+func (f *fakeFollowsRepo) ListPendingFollowers(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error) {
+	res := []models.Follow{}
+	for _, follow := range f.followers {
+		if follow.Direction == "follower" && follow.AcceptedAt == nil {
+			res = append(res, follow)
+		}
+	}
+	return res, nil
 }
 func (f *fakeFollowsRepo) CountFollowers(ctx context.Context, tx *db.Tx, localAccountID string) (int, error) {
 	return len(f.followers), nil
@@ -277,25 +305,28 @@ func (f *fakeFollowsRepo) ListFollowingIncludingPending(ctx context.Context, tx 
 
 type fakeSocialRepo struct{}
 
-func (fakeSocialRepo) CreateInteraction(ctx context.Context, tx *db.Tx, localAccountID string, noteID string, typ string) (*models.StatusInteraction, error) {
+func (fakeSocialRepo) CreateInteraction(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) (*models.StatusInteraction, error) {
 	return &models.StatusInteraction{LocalAccountID: localAccountID, NoteID: noteID, Type: typ}, nil
 }
-func (fakeSocialRepo) DeleteInteraction(ctx context.Context, tx *db.Tx, localAccountID string, noteID string, typ string) error {
+func (fakeSocialRepo) DeleteInteraction(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) error {
 	return nil
 }
-func (fakeSocialRepo) InteractionExists(ctx context.Context, tx *db.Tx, localAccountID string, noteID string, typ string) (bool, error) {
+func (fakeSocialRepo) InteractionExists(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) (bool, error) {
 	return false, nil
 }
-func (fakeSocialRepo) ListInteractions(ctx context.Context, tx *db.Tx, localAccountID string, typ string, limit int) ([]models.StatusInteraction, error) {
+func (fakeSocialRepo) ListInteractions(ctx context.Context, tx *db.Tx, localAccountID, typ string, limit int) ([]models.StatusInteraction, error) {
 	return nil, nil
 }
-func (fakeSocialRepo) CreateNotification(ctx context.Context, tx *db.Tx, localAccountID string, actorAccountID string, typ string, statusID *string) (*models.Notification, error) {
+func (fakeSocialRepo) CreateNotification(ctx context.Context, tx *db.Tx, localAccountID, actorAccountID, typ string, statusID *string) (*models.Notification, error) {
 	return &models.Notification{}, nil
 }
 func (fakeSocialRepo) ListNotifications(ctx context.Context, tx *db.Tx, localAccountID string, limit int) ([]models.Notification, error) {
 	return nil, nil
 }
-func (fakeSocialRepo) DeleteNotification(ctx context.Context, tx *db.Tx, localAccountID string, notificationID string) error {
+func (fakeSocialRepo) DeleteNotification(ctx context.Context, tx *db.Tx, localAccountID, notificationID string) error {
+	return nil
+}
+func (fakeSocialRepo) DeleteNotificationsByActorAndType(ctx context.Context, tx *db.Tx, localAccountID, actorAccountID, typ string) error {
 	return nil
 }
 func (fakeSocialRepo) ClearNotifications(ctx context.Context, tx *db.Tx, localAccountID string) error {

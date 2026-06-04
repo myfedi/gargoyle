@@ -61,7 +61,7 @@ func (u UseCase) UpdateCredentials(ctx context.Context, account *models.Account,
 	var raw []byte
 	err := u.cfg.TxProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
 		var err error
-		updated, err = u.cfg.AccountsRepo.UpdateLocalAccountProfile(ctx, &tx, account.ID, repos.UpdateAccountProfileInput{DisplayName: stringPtrOrNil(displayName), Summary: stringPtrOrNil(sanitizedNote), AvatarMediaID: avatarMediaID, HeaderMediaID: headerMediaID, AvatarURL: nil, HeaderURL: nil})
+		updated, err = u.cfg.AccountsRepo.UpdateLocalAccountProfile(ctx, &tx, account.ID, repos.UpdateAccountProfileInput{DisplayName: stringPtrOrNil(displayName), Summary: stringPtrOrNil(sanitizedNote), AvatarMediaID: avatarMediaID, HeaderMediaID: headerMediaID, AvatarURL: nil, HeaderURL: nil, Locked: &input.Locked})
 		if err != nil {
 			return err
 		}

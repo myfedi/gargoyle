@@ -30,7 +30,7 @@ func (r *SocialRepo) resolveDB(tx *dbPorts.Tx) (bun.IDB, error) {
 	return adapted.Unwrap(), nil
 }
 
-func (r *SocialRepo) CreateInteraction(ctx context.Context, tx *dbPorts.Tx, localAccountID string, noteID string, typ string) (*models.StatusInteraction, error) {
+func (r *SocialRepo) CreateInteraction(ctx context.Context, tx *dbPorts.Tx, localAccountID, noteID, typ string) (*models.StatusInteraction, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (r *SocialRepo) CreateInteraction(ctx context.Context, tx *dbPorts.Tx, loca
 	model := row.ToModel()
 	return &model, nil
 }
-func (r *SocialRepo) DeleteInteraction(ctx context.Context, tx *dbPorts.Tx, localAccountID string, noteID string, typ string) error {
+func (r *SocialRepo) DeleteInteraction(ctx context.Context, tx *dbPorts.Tx, localAccountID, noteID, typ string) error {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return err
@@ -55,14 +55,14 @@ func (r *SocialRepo) DeleteInteraction(ctx context.Context, tx *dbPorts.Tx, loca
 	_, err = db.NewDelete().Model((*dbModels.StatusInteraction)(nil)).Where("local_account_id = ?", localAccountID).Where("note_id = ?", noteID).Where("type = ?", typ).Exec(ctx)
 	return err
 }
-func (r *SocialRepo) InteractionExists(ctx context.Context, tx *dbPorts.Tx, localAccountID string, noteID string, typ string) (bool, error) {
+func (r *SocialRepo) InteractionExists(ctx context.Context, tx *dbPorts.Tx, localAccountID, noteID, typ string) (bool, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return false, err
 	}
 	return db.NewSelect().Model((*dbModels.StatusInteraction)(nil)).Where("local_account_id = ?", localAccountID).Where("note_id = ?", noteID).Where("type = ?", typ).Exists(ctx)
 }
-func (r *SocialRepo) ListInteractions(ctx context.Context, tx *dbPorts.Tx, localAccountID string, typ string, limit int) ([]models.StatusInteraction, error) {
+func (r *SocialRepo) ListInteractions(ctx context.Context, tx *dbPorts.Tx, localAccountID, typ string, limit int) ([]models.StatusInteraction, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (r *SocialRepo) ListInteractions(ctx context.Context, tx *dbPorts.Tx, local
 	return res, nil
 }
 
-func (r *SocialRepo) CreateNotification(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actorAccountID string, typ string, statusID *string) (*models.Notification, error) {
+func (r *SocialRepo) CreateNotification(ctx context.Context, tx *dbPorts.Tx, localAccountID, actorAccountID, typ string, statusID *string) (*models.Notification, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return nil, err
@@ -116,12 +116,21 @@ func (r *SocialRepo) ListNotifications(ctx context.Context, tx *dbPorts.Tx, loca
 	}
 	return res, nil
 }
-func (r *SocialRepo) DeleteNotification(ctx context.Context, tx *dbPorts.Tx, localAccountID string, notificationID string) error {
+func (r *SocialRepo) DeleteNotification(ctx context.Context, tx *dbPorts.Tx, localAccountID, notificationID string) error {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return err
 	}
 	_, err = db.NewDelete().Model((*dbModels.Notification)(nil)).Where("local_account_id = ?", localAccountID).Where("id = ?", notificationID).Exec(ctx)
+	return err
+}
+
+func (r *SocialRepo) DeleteNotificationsByActorAndType(ctx context.Context, tx *dbPorts.Tx, localAccountID, actorAccountID, typ string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewDelete().Model((*dbModels.Notification)(nil)).Where("local_account_id = ?", localAccountID).Where("actor_account_id = ?", actorAccountID).Where("type = ?", typ).Exec(ctx)
 	return err
 }
 

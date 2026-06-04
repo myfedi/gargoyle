@@ -17,6 +17,7 @@ export type UpdateCredentialsInput = {
   note: string;
   avatar?: File | null;
   header?: File | null;
+  locked: boolean;
 };
 
 export function createMastodonApi(accessToken: string) {
@@ -30,6 +31,7 @@ export function createMastodonApi(accessToken: string) {
       const body = new FormData();
       body.set("display_name", input.display_name);
       body.set("note", input.note);
+      body.set("locked", String(input.locked));
       if (input.avatar) body.set("avatar", input.avatar);
       if (input.header) body.set("header", input.header);
       return client.request<MastodonAccount>("/api/v1/accounts/update_credentials", {
@@ -175,6 +177,15 @@ export function createMastodonApi(accessToken: string) {
     searchAccounts(query: string) {
       const params = new URLSearchParams({ q: query, type: "accounts", resolve: "true" });
       return client.request<MastodonSearchResults>(`/api/v2/search?${params.toString()}`);
+    },
+    followRequests() {
+      return client.request<MastodonAccount[]>("/api/v1/follow_requests");
+    },
+    authorizeFollowRequest(id: string) {
+      return client.request<MastodonRelationship>(`/api/v1/follow_requests/${encodeURIComponent(id)}/authorize`, { method: "POST" });
+    },
+    rejectFollowRequest(id: string) {
+      return client.request<MastodonRelationship>(`/api/v1/follow_requests/${encodeURIComponent(id)}/reject`, { method: "POST" });
     },
     relationships(ids: string[]) {
       const params = new URLSearchParams();

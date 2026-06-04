@@ -16,7 +16,7 @@ import { accountHref } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
 import type { MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
 
-type ProfileTab = "posts" | "following" | "followers" | "bookmarks";
+type ProfileTab = "posts" | "following" | "followers" | "requests" | "bookmarks";
 
 type AccountSearchResult = {
   account: MastodonAccount;
@@ -27,6 +27,7 @@ const profileTabs = [
   { value: "posts", label: "Posts" },
   { value: "following", label: "Following" },
   { value: "followers", label: "Followers" },
+  { value: "requests", label: "Follow requests" },
 ] as const;
 
 export function MyProfilePage() {
@@ -37,6 +38,7 @@ export function MyProfilePage() {
   const [pinnedStatuses, setPinnedStatuses] = useState<MastodonStatus[]>([]);
   const [following, setFollowing] = useState<AccountSearchResult[]>([]);
   const [followers, setFollowers] = useState<AccountSearchResult[]>([]);
+  const [followRequests, setFollowRequests] = useState<MastodonAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export function MyProfilePage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isAvatarPreviewOpen, setIsAvatarPreviewOpen] = useState(false);
-  const [profileForm, setProfileForm] = useState<{ displayName: string; note: string; avatar: File | null; header: File | null }>({ displayName: "", note: "", avatar: null, header: null });
+  const [profileForm, setProfileForm] = useState<{ displayName: string; note: string; avatar: File | null; header: File | null; locked: boolean }>({ displayName: "", note: "", avatar: null, header: null, locked: false });
   const [error, setError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
@@ -60,7 +62,7 @@ export function MyProfilePage() {
     try {
       const nextAccount = await api.verifyCredentials();
       setAccount(nextAccount);
-      setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null });
+      setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null, locked: Boolean(nextAccount.locked) });
 
       if (activeTab === "posts") {
         const [nextStatuses, nextPinnedStatuses] = await Promise.all([
@@ -71,6 +73,8 @@ export function MyProfilePage() {
         setPinnedStatuses(nextPinnedStatuses);
       } else if (activeTab === "bookmarks") {
         setStatuses(await api.bookmarks());
+      } else if (activeTab === "requests") {
+        setFollowRequests(await api.followRequests());
       } else if (activeTab === "following" || activeTab === "followers") {
         const accounts = activeTab === "following" ? await api.following(nextAccount.id) : await api.followers(nextAccount.id);
         const ids = accounts.map((item) => item.id);
@@ -202,11 +206,11 @@ export function MyProfilePage() {
     setError(null);
 
     try {
-      const nextAccount = await api.updateCredentials({ display_name: profileForm.displayName, note: profileForm.note, avatar: profileForm.avatar, header: profileForm.header });
+      const nextAccount = await api.updateCredentials({ display_name: profileForm.displayName, note: profileForm.note, avatar: profileForm.avatar, header: profileForm.header, locked: profileForm.locked });
       setAccount(nextAccount);
       setStatuses((current) => replaceAccountInStatuses(current, nextAccount));
       setPinnedStatuses((current) => replaceAccountInStatuses(current, nextAccount));
-      setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null });
+      setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null, locked: Boolean(nextAccount.locked) });
       setIsEditingProfile(false);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not update profile.");
@@ -217,8 +221,30 @@ export function MyProfilePage() {
 
   function cancelProfileEdit() {
     if (!account) return;
-    setProfileForm({ displayName: account.display_name || "", note: account.note ? htmlToPlainText(account.note) : "", avatar: null, header: null });
+    setProfileForm({ displayName: account.display_name || "", note: account.note ? htmlToPlainText(account.note) : "", avatar: null, header: null, locked: Boolean(account.locked) });
     setIsEditingProfile(false);
+  }
+
+  async function decideFollowRequest(account: MastodonAccount, decision: "approve" | "reject") {
+    if (!api) return;
+    setBusyAccountId(account.id);
+    setError(null);
+
+    try {
+      if (decision === "approve") {
+        await api.authorizeFollowRequest(account.id);
+      } else {
+        await api.rejectFollowRequest(account.id);
+      }
+      setFollowRequests((current) => current.filter((item) => item.id !== account.id));
+      if (decision === "approve") {
+        setFollowers((current) => [{ account }, ...current.filter((item) => item.account.id !== account.id)]);
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not update follow request.");
+    } finally {
+      setBusyAccountId(null);
+    }
   }
 
   function updateRelationship(accountId: string, relationship: MastodonRelationship) {
@@ -246,7 +272,7 @@ export function MyProfilePage() {
         </DialogContent>
       </Dialog>
 
-      <Panel title={activeTab === "bookmarks" ? "Bookmarks" : "Activity"} className="mx-auto max-w-2xl">
+      <Panel title={activeTab === "bookmarks" ? "Bookmarks" : activeTab === "requests" ? "Follow requests" : "Activity"} className="mx-auto max-w-2xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} items={[...profileTabs]} />
 
         {error ? <p className="mt-5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}
@@ -293,6 +319,19 @@ export function MyProfilePage() {
             />
             <p className="text-xs text-muted-foreground">Your updated profile is federated to followers after it is saved.</p>
           </div>
+          <label className="flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm">
+            <input
+              className="mt-1 size-4 accent-primary"
+              type="checkbox"
+              checked={profileForm.locked}
+              disabled={isSavingProfile}
+              onChange={(event) => setProfileForm((current) => ({ ...current, locked: event.target.checked }))}
+            />
+            <span>
+              <span className="block font-medium">Require follow requests</span>
+              <span className="block text-muted-foreground">New followers stay pending until you approve them.</span>
+            </span>
+          </label>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={isSavingProfile}>{isSavingProfile ? "Saving..." : "Save profile"}</Button>
             <Button type="button" variant="outline" disabled={isSavingProfile} onClick={cancelProfileEdit}>Cancel</Button>
@@ -397,6 +436,10 @@ export function MyProfilePage() {
       );
     }
 
+    if (activeTab === "requests") {
+      return <FollowRequestList accounts={followRequests} busyAccountId={busyAccountId} onDecision={decideFollowRequest} />;
+    }
+
     const accounts = activeTab === "following" ? following : followers;
     return <AccountList accounts={accounts} busyAccountId={busyAccountId} onFollow={followAccount} onUnfollow={unfollowAccount} emptyTitle={activeTab === "following" ? "Not following anyone" : "No followers"} />;
   }
@@ -438,6 +481,43 @@ function AccountList({ accounts, busyAccountId, emptyTitle, onFollow, onUnfollow
             ) : (
               <Button disabled={isBusy} onClick={() => onFollow(account)}>{isBusy ? "Following..." : "Follow"}</Button>
             )}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+type FollowRequestListProps = {
+  accounts: MastodonAccount[];
+  busyAccountId: string | null;
+  onDecision: (account: MastodonAccount, decision: "approve" | "reject") => void;
+};
+
+function FollowRequestList({ accounts, busyAccountId, onDecision }: FollowRequestListProps) {
+  if (accounts.length === 0) return <EmptyState title="No follow requests" description="Pending follow requests will appear here." />;
+
+  return (
+    <div className="divide-y divide-border">
+      {accounts.map((account) => {
+        const isBusy = busyAccountId === account.id;
+        return (
+          <article key={account.id} className="flex flex-col gap-4 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 gap-3">
+              {account.avatar ? <img className="size-10 rounded-full border border-border object-cover" src={account.avatar} alt="" aria-hidden="true" /> : null}
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <a className="text-sm font-semibold hover:underline" href={accountHref(account.id)}>{account.display_name || account.username}</a>
+                  <p className="text-sm text-muted-foreground">@{account.acct}</p>
+                  <Badge variant="secondary">Pending</Badge>
+                </div>
+                {account.note ? <p className="max-w-2xl text-sm leading-6 text-muted-foreground">{htmlToPlainText(account.note)}</p> : null}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={isBusy} onClick={() => onDecision(account, "approve")}>{isBusy ? "Updating..." : "Approve"}</Button>
+              <Button variant="outline" disabled={isBusy} onClick={() => onDecision(account, "reject")}>Reject</Button>
+            </div>
           </article>
         );
       })}

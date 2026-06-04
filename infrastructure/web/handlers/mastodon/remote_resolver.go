@@ -54,7 +54,7 @@ func publicOnlyHTTPClient(client *http.Client, exceptions []RemoteURLException) 
 	if client.Transport == nil {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-		transport.DialContext = func(ctx context.Context, network string, address string) (net.Conn, error) {
+		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 			host, _, err := net.SplitHostPort(address)
 			if err != nil {
 				return nil, err
@@ -176,6 +176,7 @@ func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string, 
 		Outbox            string `json:"outbox"`
 		Followers         string `json:"followers"`
 		Following         string `json:"following"`
+		Locked            bool   `json:"manuallyApprovesFollowers"`
 		PublicKey         struct {
 			PublicKeyPem string `json:"publicKeyPem"`
 		} `json:"publicKey"`
@@ -191,7 +192,7 @@ func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string, 
 		domain = parsed.Host
 	}
 	actorURLValue := stringURL(doc.URL)
-	return &models.Account{ID: mastodonAccountID(doc.ID), Username: doc.PreferredUsername, Domain: stringPtr(domain), DisplayName: stringPtr(firstNonEmpty(doc.Name, doc.PreferredUsername)), Summary: stringPtr(doc.Summary), URI: doc.ID, URL: stringPtr(firstNonEmpty(actorURLValue, doc.ID)), AvatarURL: stringPtr(stringURL(doc.Icon)), HeaderURL: stringPtr(stringURL(doc.Image)), InboxURI: doc.Inbox, OutboxURI: stringPtr(doc.Outbox), FollowingURI: doc.Following, FollowersURI: doc.Followers, PublicKey: doc.PublicKey.PublicKeyPem, ActorType: models.ActorTypePerson}, nil
+	return &models.Account{ID: mastodonAccountID(doc.ID), Username: doc.PreferredUsername, Domain: stringPtr(domain), DisplayName: stringPtr(firstNonEmpty(doc.Name, doc.PreferredUsername)), Summary: stringPtr(doc.Summary), URI: doc.ID, URL: stringPtr(firstNonEmpty(actorURLValue, doc.ID)), AvatarURL: stringPtr(stringURL(doc.Icon)), HeaderURL: stringPtr(stringURL(doc.Image)), InboxURI: doc.Inbox, OutboxURI: stringPtr(doc.Outbox), FollowingURI: doc.Following, FollowersURI: doc.Followers, PublicKey: doc.PublicKey.PublicKeyPem, ActorType: models.ActorTypePerson, Locked: doc.Locked}, nil
 }
 
 func mastodonAccountID(actor string) string {

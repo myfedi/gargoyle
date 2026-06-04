@@ -87,6 +87,13 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 			if err != nil {
 				return err
 			}
+			if account.Locked {
+				if u.cfg.SocialRepo != nil {
+					_, err := u.cfg.SocialRepo.CreateNotification(ctx, &tx, account.ID, activity.Actor, "follow_request", nil)
+					return err
+				}
+				return nil
+			}
 			if err := u.cfg.FollowsRepo.AcceptFollow(ctx, &tx, follow.ID); err != nil {
 				return err
 			}
@@ -250,7 +257,7 @@ func (u *HandleInboxActivityUseCase) createInboundBoost(ctx context.Context, tx 
 	return err
 }
 
-func enqueueMissingAnnounceFetch(ctx context.Context, repo repos.FetchJobsRepository, tx *db.Tx, accountID string, object string) error {
+func enqueueMissingAnnounceFetch(ctx context.Context, repo repos.FetchJobsRepository, tx *db.Tx, accountID, object string) error {
 	_, err := repo.CreateFetchJob(ctx, tx, repos.CreateFetchJobInput{URL: object, Kind: "activitypub_object", AccountID: accountID, NextAttemptAt: time.Now().UTC()})
 	return err
 }
@@ -267,7 +274,7 @@ func (u *HandleInboxActivityUseCase) createInteractionNotification(ctx context.C
 	return err
 }
 
-func (u *HandleInboxActivityUseCase) ensureRemoteNoteOwner(ctx context.Context, tx *db.Tx, uri string, actor string) error {
+func (u *HandleInboxActivityUseCase) ensureRemoteNoteOwner(ctx context.Context, tx *db.Tx, uri, actor string) error {
 	note, err := u.cfg.NotesRepo.GetNoteByURI(ctx, tx, uri)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -281,7 +288,7 @@ func (u *HandleInboxActivityUseCase) ensureRemoteNoteOwner(ctx context.Context, 
 	return nil
 }
 
-func validateFollowResponseObject(raw []byte, localActor string, remoteActor string) error {
+func validateFollowResponseObject(raw []byte, localActor, remoteActor string) error {
 	follow, ok, err := ExtractFollowObject(raw)
 	if err != nil {
 		return domainerrors.NewErr(domainerrors.ErrBadRequest, err)
@@ -313,6 +320,7 @@ func accountFromExtractedActor(actor ExtractedActor) models.Account {
 		FollowersURI: actor.Followers,
 		PublicKey:    actor.PublicKey,
 		ActorType:    actorTypeFromString(actor.Type),
+		Locked:       actor.Locked,
 	}
 }
 

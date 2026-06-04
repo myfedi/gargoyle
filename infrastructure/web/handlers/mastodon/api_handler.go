@@ -70,6 +70,9 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/media/:id/:filename", h.media)
 	app.Head("/media/:id", h.media)
 	app.Head("/media/:id/:filename", h.media)
+	app.Get("/api/v1/follow_requests", h.followRequests)
+	app.Post("/api/v1/follow_requests/:id/authorize", h.authorizeFollowRequest)
+	app.Post("/api/v1/follow_requests/:id/reject", h.rejectFollowRequest)
 	app.Get("/api/v1/accounts/:id/followers", h.followers)
 	app.Get("/api/v1/accounts/:id/following", h.following)
 	app.Get("/api/v1/accounts/:id/statuses", h.accountStatuses)
@@ -287,6 +290,7 @@ type updateStatusRequest struct {
 type updateCredentialsRequest struct {
 	DisplayName string `json:"display_name" form:"display_name"`
 	Note        string `json:"note" form:"note"`
+	Locked      bool   `json:"locked" form:"locked"`
 }
 
 func (h APIHandler) updateCredentials(c *fiber.Ctx) error {
@@ -298,7 +302,7 @@ func (h APIHandler) updateCredentials(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
-	input := mastodonUC.UpdateCredentialsInput{DisplayName: req.DisplayName, Note: req.Note}
+	input := mastodonUC.UpdateCredentialsInput{DisplayName: req.DisplayName, Note: req.Note, Locked: req.Locked}
 	if avatar, derr := profileUploadFromForm(c, "avatar"); derr != nil {
 		return web.HandleDomainError(c, derr)
 	} else {
@@ -539,6 +543,52 @@ func (h APIHandler) following(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	return h.accountList(c, accounts)
+}
+
+func (h APIHandler) followRequests(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c, "follow")
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	accounts, derr := h.api.FollowRequests(c.UserContext(), principal.Account)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return h.accountList(c, accounts)
+}
+
+func (h APIHandler) authorizeFollowRequest(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c, "follow")
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	res, derr := h.api.AuthorizeFollowRequest(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if res.Inbox != "" {
+		if err := h.queueDelivery(res.RawJSON, res.Inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	return c.JSON(relationshipResponse{ID: c.Params("id"), FollowedBy: true})
+}
+
+func (h APIHandler) rejectFollowRequest(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c, "follow")
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	res, derr := h.api.RejectFollowRequest(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if res.Inbox != "" {
+		if err := h.queueDelivery(res.RawJSON, res.Inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	return c.JSON(relationshipResponse{ID: c.Params("id")})
 }
 
 func (h APIHandler) followAccount(c *fiber.Ctx) error {
@@ -890,7 +940,7 @@ func (h APIHandler) authenticate(c *fiber.Ctx, requiredScopes ...string) (*oauth
 	return principal, nil
 }
 
-func scopeIncludes(scopes string, required string) bool {
+func scopeIncludes(scopes, required string) bool {
 	for _, scope := range strings.Fields(scopes) {
 		if scope == required {
 			return true

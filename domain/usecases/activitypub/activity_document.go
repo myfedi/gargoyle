@@ -49,7 +49,7 @@ func ParseActivity(raw []byte) (ParsedActivity, *domainerrors.DomainError) {
 // NormalizeOutboxActivity turns a local outbox submission into a Create activity
 // when needed, assigns local IDs, enforces local actor ownership, and sanitizes
 // Note content before persistence and delivery.
-func NormalizeOutboxActivity(raw []byte, account models.Account, activityID string, objectID string, sanitizer ports.ContentSanitizer) ([]byte, *domainerrors.DomainError) {
+func NormalizeOutboxActivity(raw []byte, account models.Account, activityID, objectID string, sanitizer ports.ContentSanitizer) ([]byte, *domainerrors.DomainError) {
 	if activityID == "" || objectID == "" {
 		return nil, domainerrors.New(domainerrors.ErrInternal, "activity and object ids are required")
 	}
@@ -351,6 +351,12 @@ func MarshalAccept(account models.Account, follow models.Follow, followRaw []byt
 	return json.Marshal(accept)
 }
 
+// MarshalReject creates the Reject activity sent when an inbound Follow is denied.
+func MarshalReject(account models.Account, follow models.Follow, followRaw []byte) ([]byte, error) {
+	reject := map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": account.URI + "/rejects/" + follow.ID, "type": "Reject", "actor": account.URI, "object": json.RawMessage(followRaw)}
+	return json.Marshal(reject)
+}
+
 // ExtractedActor is the cacheable subset of an ActivityPub actor document embedded in an Update.
 type ExtractedActor struct {
 	URI       string
@@ -366,6 +372,7 @@ type ExtractedActor struct {
 	Followers string
 	Following string
 	PublicKey string
+	Locked    bool
 }
 
 // ExtractActorObject returns an actor from an activity object, used for profile Updates.
@@ -389,6 +396,7 @@ func ExtractActorObject(raw []byte) (ExtractedActor, bool) {
 		Outbox            string          `json:"outbox"`
 		Followers         string          `json:"followers"`
 		Following         string          `json:"following"`
+		Locked            bool            `json:"manuallyApprovesFollowers"`
 		PublicKey         struct {
 			PublicKeyPem string `json:"publicKeyPem"`
 		} `json:"publicKey"`
@@ -396,7 +404,7 @@ func ExtractActorObject(raw []byte) (ExtractedActor, bool) {
 	if err := json.Unmarshal(activity.Object, &actor); err != nil || actor.ID == "" || actor.PreferredUsername == "" || !isActorType(actor.Type) {
 		return ExtractedActor{}, false
 	}
-	return ExtractedActor{URI: actor.ID, Type: actor.Type, Username: actor.PreferredUsername, Name: actor.Name, Summary: actor.Summary, URL: extractURLValue(actor.URL), AvatarURL: extractURLValue(actor.Icon), HeaderURL: extractURLValue(actor.Image), Inbox: actor.Inbox, Outbox: actor.Outbox, Followers: actor.Followers, Following: actor.Following, PublicKey: actor.PublicKey.PublicKeyPem}, true
+	return ExtractedActor{URI: actor.ID, Type: actor.Type, Username: actor.PreferredUsername, Name: actor.Name, Summary: actor.Summary, URL: extractURLValue(actor.URL), AvatarURL: extractURLValue(actor.Icon), HeaderURL: extractURLValue(actor.Image), Inbox: actor.Inbox, Outbox: actor.Outbox, Followers: actor.Followers, Following: actor.Following, PublicKey: actor.PublicKey.PublicKeyPem, Locked: actor.Locked}, true
 }
 
 func isActorType(value string) bool {

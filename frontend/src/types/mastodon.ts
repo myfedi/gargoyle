@@ -9,6 +9,7 @@ export type MastodonAccount = {
   header?: string;
   header_static?: string;
   bot?: boolean;
+  locked?: boolean;
   note?: string;
   followers_count?: number;
   following_count?: number;

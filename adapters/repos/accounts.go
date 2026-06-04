@@ -61,6 +61,7 @@ func (r *AccountsRepo) CreateAccount(ctx context.Context, tx *dbPorts.Tx, input 
 		PrivateKey:            input.PrivateKey,
 		PublicKey:             input.PublicKey,
 		ActorType:             int(input.ActorType),
+		Locked:                input.Locked,
 	}
 
 	_, err = db.NewInsert().Model(account).Exec(ctx)
@@ -104,7 +105,7 @@ func (r *AccountsRepo) UpdateLocalAccountProfile(ctx context.Context, tx *dbPort
 	if updatedAt.IsZero() {
 		updatedAt = time.Now().UTC()
 	}
-	_, err := db.NewUpdate().
+	query := db.NewUpdate().
 		Model((*dbModels.Account)(nil)).
 		Set("display_name = ?", input.DisplayName).
 		Set("summary = ?", input.Summary).
@@ -114,8 +115,11 @@ func (r *AccountsRepo) UpdateLocalAccountProfile(ctx context.Context, tx *dbPort
 		Set("header_url = ?", input.HeaderURL).
 		Set("updated_at = ?", updatedAt).
 		Where("id = ?", id).
-		Where("user_id IS NOT NULL").
-		Exec(ctx)
+		Where("user_id IS NOT NULL")
+	if input.Locked != nil {
+		query = query.Set("locked = ?", *input.Locked)
+	}
+	_, err := query.Exec(ctx)
 	if err != nil {
 		return nil, err
 	}

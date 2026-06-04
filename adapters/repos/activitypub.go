@@ -52,6 +52,19 @@ func (r *ActivitiesRepo) ListOutboxActivities(ctx context.Context, tx *dbPorts.T
 	return r.ListOutboxActivitiesPaged(ctx, tx, localAccountID, 0, 0)
 }
 
+func (r *ActivitiesRepo) GetActivityByID(ctx context.Context, tx *dbPorts.Tx, id string) (*models.Activity, error) {
+	db, err := unwrapDB(r.db, tx)
+	if err != nil {
+		return nil, err
+	}
+	var activity dbModels.Activity
+	if err := db.NewSelect().Model(&activity).Where("id = ?", id).Scan(ctx); err != nil {
+		return nil, err
+	}
+	model := activity.ToModel()
+	return &model, nil
+}
+
 func (r *ActivitiesRepo) CountOutboxActivities(ctx context.Context, tx *dbPorts.Tx, localAccountID string) (int, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
@@ -78,7 +91,7 @@ func (r *ActivitiesRepo) CountPublicOutboxActivities(ctx context.Context, tx *db
 		Count(ctx)
 }
 
-func (r *ActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
+func (r *ActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit, offset int) ([]models.Activity, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return nil, err
@@ -86,7 +99,7 @@ func (r *ActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *dbPo
 	return r.listOutboxActivities(ctx, db, localAccountID, limit, offset, false)
 }
 
-func (r *ActivitiesRepo) ListPublicOutboxActivitiesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, offset int) ([]models.Activity, error) {
+func (r *ActivitiesRepo) ListPublicOutboxActivitiesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit, offset int) ([]models.Activity, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return nil, err
@@ -94,7 +107,7 @@ func (r *ActivitiesRepo) ListPublicOutboxActivitiesPaged(ctx context.Context, tx
 	return r.listOutboxActivities(ctx, db, localAccountID, limit, offset, true)
 }
 
-func (r *ActivitiesRepo) listOutboxActivities(ctx context.Context, db bun.IDB, localAccountID string, limit int, offset int, publicOnly bool) ([]models.Activity, error) {
+func (r *ActivitiesRepo) listOutboxActivities(ctx context.Context, db bun.IDB, localAccountID string, limit, offset int, publicOnly bool) ([]models.Activity, error) {
 	var activities []dbModels.Activity
 	query := db.NewSelect().
 		Model(&activities).
@@ -169,12 +182,41 @@ func (r *FollowsRepo) AcceptFollow(ctx context.Context, tx *dbPorts.Tx, followID
 	return err
 }
 
+func (r *FollowsRepo) AcceptFollowByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID, remoteActor string) (*models.Follow, error) {
+	follow, err := r.GetFollowByActor(ctx, tx, localAccountID, remoteActor, "follower")
+	if err != nil {
+		return nil, err
+	}
+	if err := r.AcceptFollow(ctx, tx, follow.ID); err != nil {
+		return nil, err
+	}
+	return r.GetFollowByActor(ctx, tx, localAccountID, remoteActor, "follower")
+}
+
+func (r *FollowsRepo) GetFollowByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID, remoteActor, direction string) (*models.Follow, error) {
+	db, err := unwrapDB(r.db, tx)
+	if err != nil {
+		return nil, err
+	}
+	var follow dbModels.Follow
+	if err := db.NewSelect().Model(&follow).
+		Where("local_account_id = ?", localAccountID).
+		Where("remote_actor = ?", remoteActor).
+		Where("direction = ?", direction).
+		Limit(1).
+		Scan(ctx); err != nil {
+		return nil, err
+	}
+	model := follow.ToModel()
+	return &model, nil
+}
+
 func (r *FollowsRepo) CreateFollowing(ctx context.Context, tx *dbPorts.Tx, input repos.CreateFollowInput) (*models.Follow, error) {
 	input.Direction = "following"
 	return r.CreateFollow(ctx, tx, input)
 }
 
-func (r *FollowsRepo) AcceptFollowingByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID string, remoteActor string) error {
+func (r *FollowsRepo) AcceptFollowingByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID, remoteActor string) error {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return err
@@ -189,7 +231,7 @@ func (r *FollowsRepo) AcceptFollowingByActor(ctx context.Context, tx *dbPorts.Tx
 	return err
 }
 
-func (r *FollowsRepo) RejectFollowingByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID string, remoteActor string) error {
+func (r *FollowsRepo) RejectFollowingByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID, remoteActor string) error {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return err
@@ -202,7 +244,7 @@ func (r *FollowsRepo) RejectFollowingByActor(ctx context.Context, tx *dbPorts.Tx
 	return err
 }
 
-func (r *FollowsRepo) DeleteFollowingByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID string, remoteActor string) error {
+func (r *FollowsRepo) DeleteFollowingByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID, remoteActor string) error {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return err
@@ -216,7 +258,7 @@ func (r *FollowsRepo) DeleteFollowingByActor(ctx context.Context, tx *dbPorts.Tx
 	return err
 }
 
-func (r *FollowsRepo) DeleteFollowByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID string, remoteActor string) error {
+func (r *FollowsRepo) DeleteFollowByActor(ctx context.Context, tx *dbPorts.Tx, localAccountID, remoteActor string) error {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return err
@@ -248,7 +290,28 @@ func (r *FollowsRepo) CountFollowers(ctx context.Context, tx *dbPorts.Tx, localA
 		Count(ctx)
 }
 
-func (r *FollowsRepo) ListFollowersPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, offset int) ([]models.Follow, error) {
+func (r *FollowsRepo) ListPendingFollowers(ctx context.Context, tx *dbPorts.Tx, localAccountID string) ([]models.Follow, error) {
+	db, err := unwrapDB(r.db, tx)
+	if err != nil {
+		return nil, err
+	}
+	var follows []dbModels.Follow
+	if err := db.NewSelect().Model(&follows).
+		Where("local_account_id = ?", localAccountID).
+		Where("direction = ?", "follower").
+		Where("accepted_at IS NULL").
+		Order("created_at DESC").
+		Scan(ctx); err != nil {
+		return nil, err
+	}
+	res := make([]models.Follow, 0, len(follows))
+	for _, follow := range follows {
+		res = append(res, follow.ToModel())
+	}
+	return res, nil
+}
+
+func (r *FollowsRepo) ListFollowersPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit, offset int) ([]models.Follow, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
 		return nil, err

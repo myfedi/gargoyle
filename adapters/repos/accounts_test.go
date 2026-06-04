@@ -86,6 +86,7 @@ CREATE TABLE accounts (
     private_key TEXT,
     public_key TEXT NOT NULL UNIQUE,
     actor_type INTEGER NOT NULL DEFAULT 0,
+    locked BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(username, domain)
 );`)
 	if err != nil {

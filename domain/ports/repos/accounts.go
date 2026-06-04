@@ -33,6 +33,7 @@ type CreateAccountInput struct {
 	PrivateKey            *string // nullable
 	PublicKey             string
 	ActorType             models.ActorType // maps to enum
+	Locked                bool
 }
 
 type UpdateAccountProfileInput struct {
@@ -42,6 +43,7 @@ type UpdateAccountProfileInput struct {
 	HeaderMediaID *string
 	AvatarURL     *string
 	HeaderURL     *string
+	Locked        *bool
 	UpdatedAt     time.Time // optional override
 }
 

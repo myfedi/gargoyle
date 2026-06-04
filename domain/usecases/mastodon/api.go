@@ -140,6 +140,7 @@ type UpdateCredentialsInput struct {
 	Note        string
 	Avatar      *UploadMediaInput
 	Header      *UploadMediaInput
+	Locked      bool
 }
 
 type UpdateCredentialsResult struct {

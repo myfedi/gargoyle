@@ -18,6 +18,7 @@ export function NotificationsPage() {
   const [isClearing, setIsClearing] = useState(false);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
+  const [actingFollowRequestId, setActingFollowRequestId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
@@ -72,6 +73,25 @@ export function NotificationsPage() {
     }
   }
 
+  async function decideFollowRequest(notification: MastodonNotification, decision: "approve" | "reject") {
+    if (!api) return;
+    setActingFollowRequestId(notification.id);
+    setError(null);
+
+    try {
+      if (decision === "approve") {
+        await api.authorizeFollowRequest(notification.account.id);
+      } else {
+        await api.rejectFollowRequest(notification.account.id);
+      }
+      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not update follow request.");
+    } finally {
+      setActingFollowRequestId(null);
+    }
+  }
+
   async function runAction(action: StatusAction, status: MastodonStatus) {
     if (!api) return;
     setActingStatusId(status.id);
@@ -88,7 +108,7 @@ export function NotificationsPage() {
   }
 
   return (
-    <FeaturePage eyebrow="Notifications" title="Notifications" description="Mentions, follows, favourites, boosts, and replies.">
+    <FeaturePage eyebrow="Notifications" title="Notifications" description="Mentions, follows, follow requests, favourites, boosts, and replies.">
       <Panel title="Notifications">
         <div className="mb-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={() => void loadNotifications()} disabled={isLoading}>Refresh</Button>
@@ -117,6 +137,16 @@ export function NotificationsPage() {
                     {dismissingId === notification.id ? "Dismissing..." : "Dismiss"}
                   </Button>
                 </div>
+                {notification.type === "follow_request" ? (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <Button size="sm" disabled={actingFollowRequestId === notification.id} onClick={() => void decideFollowRequest(notification, "approve")}>
+                      {actingFollowRequestId === notification.id ? "Updating..." : "Approve"}
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={actingFollowRequestId === notification.id} onClick={() => void decideFollowRequest(notification, "reject")}>
+                      Reject
+                    </Button>
+                  </div>
+                ) : null}
                 {notification.status ? (
                   <StatusList
                     statuses={[notification.status]}
@@ -139,6 +169,7 @@ export function NotificationsPage() {
 function notificationLabel(type: string) {
   switch (type) {
     case "follow": return "followed you";
+    case "follow_request": return "requested to follow you";
     case "mention": return "mentioned you";
     case "favourite": return "favourited your post";
     case "reblog": return "boosted your post";

@@ -33,6 +33,7 @@ type Account struct {
 	PrivateKey            *string `bun:",nullzero"`
 	PublicKey             string  `bun:",nullzero,notnull,unique"`
 	ActorType             int     `bun:",nullzero,notnull"`
+	Locked                bool    `bun:",notnull,default:false"`
 }
 
 func (a *Account) ToModel() models.Account {
@@ -62,5 +63,6 @@ func (a *Account) ToModel() models.Account {
 		PrivateKey:            a.PrivateKey,
 		PublicKey:             a.PublicKey,
 		ActorType:             actorType,
+		Locked:                a.Locked,
 	}
 }

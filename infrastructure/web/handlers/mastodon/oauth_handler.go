@@ -166,7 +166,7 @@ func accountToResponseWithStats(account *models.Account, stats oauth.AccountStat
 	}
 	avatar := accountAvatarURL(account)
 	header := accountHeaderURL(account)
-	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: false, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header, FollowersCount: stats.FollowersCount, FollowingCount: stats.FollowingCount, StatusesCount: stats.StatusesCount}
+	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: account.Locked, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header, FollowersCount: stats.FollowersCount, FollowingCount: stats.FollowingCount, StatusesCount: stats.StatusesCount}
 }
 
 func accountAvatarURL(account *models.Account) string {
@@ -189,7 +189,7 @@ func accountHeaderURL(account *models.Account) string {
 	return accountMediaURL(account.URI, *account.HeaderMediaID)
 }
 
-func accountMediaURL(actorURI string, mediaID string) string {
+func accountMediaURL(actorURI, mediaID string) string {
 	parsed, err := url.Parse(actorURI)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return ""

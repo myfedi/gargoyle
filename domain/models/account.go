@@ -26,4 +26,5 @@ type Account struct {
 	PrivateKey            *string // non-nil for local users only
 	PublicKey             string
 	ActorType             ActorType
+	Locked                bool
 }
