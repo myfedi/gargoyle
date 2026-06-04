@@ -14,6 +14,7 @@ import (
 )
 
 type statusEdit struct {
+	Original   models.Note
 	Note       models.Note
 	Visibility string
 	Media      []models.MediaAttachment
@@ -88,7 +89,7 @@ func (u UseCase) prepareStatusEdit(ctx context.Context, account *models.Account,
 		return nil, derr
 	}
 
-	return &statusEdit{Note: editedNote, Visibility: visibility, Media: media, Mentions: mentions, RawJSON: raw}, nil
+	return &statusEdit{Original: *note, Note: editedNote, Visibility: visibility, Media: media, Mentions: mentions, RawJSON: raw}, nil
 }
 
 func (u UseCase) editableStatus(ctx context.Context, account *models.Account, statusID string) (*models.Note, *domainerrors.DomainError) {
@@ -111,6 +112,9 @@ func statusWithEdits(note models.Note, input UpdateStatusInput, visibility strin
 func (u UseCase) persistStatusEdit(ctx context.Context, account *models.Account, edit *statusEdit) (*models.Note, *domainerrors.DomainError) {
 	var updated *models.Note
 	err := u.cfg.TxProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
+		if err := u.storeCurrentStatusRevision(ctx, &tx, edit.Original.ID); err != nil {
+			return err
+		}
 		stored, err := u.updateStatusNote(ctx, &tx, edit)
 		if err != nil {
 			return err
@@ -128,6 +132,27 @@ func (u UseCase) persistStatusEdit(ctx context.Context, account *models.Account,
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return updated, nil
+}
+
+func (u UseCase) storeCurrentStatusRevision(ctx context.Context, tx *db.Tx, noteID string) error {
+	note, err := u.cfg.NotesRepo.GetNoteByID(ctx, tx, noteID)
+	if err != nil {
+		return err
+	}
+	media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, tx, noteID)
+	if err != nil {
+		return err
+	}
+	mediaIDs := make([]string, 0, len(media))
+	for _, item := range media {
+		mediaIDs = append(mediaIDs, item.ID)
+	}
+	createdAt := note.PublishedAt
+	if note.EditedAt != nil {
+		createdAt = *note.EditedAt
+	}
+	_, err = u.cfg.NotesRepo.CreateNoteEdit(ctx, tx, repos.CreateNoteEditInput{Note: *note, CreatedAt: createdAt, MediaIDs: mediaIDs})
+	return err
 }
 
 func (u UseCase) updateStatusNote(ctx context.Context, tx *db.Tx, edit *statusEdit) (*models.Note, error) {

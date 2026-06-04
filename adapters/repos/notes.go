@@ -3,6 +3,7 @@ package repos
 import (
 	"context"
 	"errors"
+	"time"
 
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/domain/models"
@@ -120,6 +121,7 @@ func (r *NotesRepo) UpdateNoteByID(ctx context.Context, tx *dbPorts.Tx, id strin
 		db = adapted.Unwrap()
 	}
 
+	now := time.Now().UTC()
 	_, err := db.NewUpdate().
 		Model((*dbModels.Note)(nil)).
 		Set("content = ?", input.Content).
@@ -127,6 +129,7 @@ func (r *NotesRepo) UpdateNoteByID(ctx context.Context, tx *dbPorts.Tx, id strin
 		Set("visibility = ?", noteVisibility(input.Visibility)).
 		Set("sensitive = ?", input.Sensitive).
 		Set("spoiler_text = ?", input.SpoilerText).
+		Set("edited_at = ?", now).
 		Where("id = ?", id).
 		Exec(ctx)
 	if err != nil {
@@ -145,13 +148,93 @@ func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri str
 		db = adapted.Unwrap()
 	}
 
-	_, err := db.NewUpdate().
+	var existing dbModels.Note
+	if err := db.NewSelect().Model(&existing).Where("uri = ?", uri).Limit(1).Scan(ctx); err != nil {
+		return err
+	}
+	createdAt := existing.PublishedAt
+	if existing.EditedAt != nil {
+		createdAt = *existing.EditedAt
+	}
+	ulid, err := dbUtils.NewULID()
+	if err != nil {
+		return err
+	}
+	if _, err := db.NewInsert().Model(&dbModels.StatusEditHistory{ID: ulid, NoteID: existing.ID, Content: existing.Content, PlainText: existing.PlainText, Visibility: noteVisibility(existing.Visibility), Sensitive: existing.Sensitive, SpoilerText: existing.SpoilerText, CreatedAt: createdAt}).Exec(ctx); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	_, err = db.NewUpdate().
 		Model((*dbModels.Note)(nil)).
 		Set("content = ?", content).
 		Set("plain_text = ?", plainText).
+		Set("edited_at = ?", now).
 		Where("uri = ?", uri).
 		Exec(ctx)
 	return err
+}
+
+func (r *NotesRepo) CreateNoteEdit(ctx context.Context, tx *dbPorts.Tx, input repos.CreateNoteEditInput) (*models.NoteEdit, error) {
+	db := r.db
+	if tx != nil {
+		adapted, ok := (*tx).(dbAdapters.BunTx)
+		if !ok {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+		db = adapted.Unwrap()
+	}
+
+	ulid, err := dbUtils.NewULID()
+	if err != nil {
+		return nil, err
+	}
+	createdAt := input.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = input.Note.PublishedAt
+	}
+	if createdAt.IsZero() {
+		createdAt = input.Note.CreatedAt
+	}
+	edit := &dbModels.StatusEditHistory{ID: ulid, NoteID: input.Note.ID, Content: input.Note.Content, PlainText: input.Note.PlainText, Visibility: noteVisibility(input.Note.Visibility), Sensitive: input.Note.Sensitive, SpoilerText: input.Note.SpoilerText, CreatedAt: createdAt}
+	if _, err := db.NewInsert().Model(edit).Exec(ctx); err != nil {
+		return nil, err
+	}
+	for i, mediaID := range input.MediaIDs {
+		if _, err := db.NewInsert().Model(&dbModels.StatusEditHistoryMedia{EditID: ulid, MediaID: mediaID, Position: i}).Exec(ctx); err != nil {
+			return nil, err
+		}
+	}
+	model := edit.ToModel(input.MediaIDs)
+	return &model, nil
+}
+
+func (r *NotesRepo) ListNoteEdits(ctx context.Context, tx *dbPorts.Tx, noteID string) ([]models.NoteEdit, error) {
+	db := r.db
+	if tx != nil {
+		adapted, ok := (*tx).(dbAdapters.BunTx)
+		if !ok {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+		db = adapted.Unwrap()
+	}
+
+	var rows []dbModels.StatusEditHistory
+	if err := db.NewSelect().Model(&rows).Where("note_id = ?", noteID).Order("created_at ASC", "id ASC").Scan(ctx); err != nil {
+		return nil, err
+	}
+	res := make([]models.NoteEdit, 0, len(rows))
+	for _, row := range rows {
+		var mediaRows []dbModels.StatusEditHistoryMedia
+		if err := db.NewSelect().Model(&mediaRows).Where("edit_id = ?", row.ID).Order("position ASC").Scan(ctx); err != nil {
+			return nil, err
+		}
+		mediaIDs := make([]string, 0, len(mediaRows))
+		for _, media := range mediaRows {
+			mediaIDs = append(mediaIDs, media.MediaID)
+		}
+		res = append(res, row.ToModel(mediaIDs))
+	}
+	return res, nil
 }
 
 func (r *NotesRepo) DeleteNoteByID(ctx context.Context, tx *dbPorts.Tx, id string) error {

@@ -165,6 +165,12 @@ func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri stri
 	}
 	return nil
 }
+func (f *fakeNotesRepo) CreateNoteEdit(ctx context.Context, tx *db.Tx, input repos.CreateNoteEditInput) (*models.NoteEdit, error) {
+	return &models.NoteEdit{ID: "edit-1", NoteID: input.Note.ID, Content: input.Note.Content, PlainText: input.Note.PlainText, Visibility: input.Note.Visibility, Sensitive: input.Note.Sensitive, SpoilerText: input.Note.SpoilerText, CreatedAt: input.CreatedAt, MediaIDs: input.MediaIDs}, nil
+}
+func (f *fakeNotesRepo) ListNoteEdits(ctx context.Context, tx *db.Tx, noteID string) ([]models.NoteEdit, error) {
+	return nil, nil
+}
 func (f *fakeNotesRepo) DeleteNoteByID(ctx context.Context, tx *db.Tx, id string) error {
 	for i, note := range f.notes {
 		if note.ID == id {

@@ -753,15 +753,15 @@ func (h APIHandler) statusHistory(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	item, derr := h.api.GetStatus(c.UserContext(), principal.Account, c.Params("id"))
+	history, derr := h.api.StatusHistory(c.UserContext(), principal.Account, c.Params("id"))
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	created := item.Note.PublishedAt
-	if created.IsZero() {
-		created = item.Note.CreatedAt
+	resp := make([]statusHistoryResponse, 0, len(history))
+	for _, item := range history {
+		resp = append(resp, statusHistoryResponse{Content: item.Content, SpoilerText: item.SpoilerText, Sensitive: item.Sensitive, CreatedAt: item.CreatedAt.UTC().Format(time.RFC3339), Account: accountToResponse(&item.Account), MediaAttachments: mediaResponses(item.Media), Emojis: []any{}})
 	}
-	return c.JSON([]statusHistoryResponse{{Content: item.Note.Content, SpoilerText: item.Note.SpoilerText, Sensitive: item.Note.Sensitive, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(&item.Account), MediaAttachments: mediaResponses(item.Media), Emojis: []any{}}})
+	return c.JSON(resp)
 }
 
 func (h APIHandler) favouriteStatus(c *fiber.Ctx) error {
@@ -916,6 +916,7 @@ type statusResponse struct {
 	URI                string                    `json:"uri"`
 	URL                string                    `json:"url"`
 	CreatedAt          string                    `json:"created_at"`
+	EditedAt           *string                   `json:"edited_at"`
 	Account            accountResponse           `json:"account"`
 	Content            string                    `json:"content"`
 	Visibility         string                    `json:"visibility"`
@@ -995,5 +996,10 @@ func noteToStatus(note models.Note, account *models.Account) statusResponse {
 	if visibility == "" {
 		visibility = "public"
 	}
-	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(account), Content: note.Content, Visibility: visibility, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []mentionResponse{}, Tags: []any{}, Emojis: []any{}}
+	var editedAt *string
+	if note.EditedAt != nil {
+		formatted := note.EditedAt.UTC().Format(time.RFC3339)
+		editedAt = &formatted
+	}
+	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), EditedAt: editedAt, Account: accountToResponse(account), Content: note.Content, Visibility: visibility, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []mentionResponse{}, Tags: []any{}, Emojis: []any{}}
 }
