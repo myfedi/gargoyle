@@ -170,11 +170,7 @@ func (u UseCase) accountForActor(ctx context.Context, localAccount *models.Accou
 	if err == nil {
 		return remote, nil
 	}
-	remote, err = u.resolveAndCacheRemoteAccount(ctx, actor, localAccount)
-	if err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrNotFound, err)
-	}
-	return remote, nil
+	return fallbackRemoteAccount(actor), nil
 }
 
 func filterTimelineItemsByActor(items []TimelineItem, actors map[string]bool) []TimelineItem {
@@ -229,9 +225,25 @@ func (u UseCase) noteAuthor(ctx context.Context, localAccount *models.Account, n
 	if err == nil {
 		return remote, nil
 	}
-	remote, err = u.resolveAndCacheRemoteAccount(ctx, note.AttributedTo, localAccount)
-	if err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	return fallbackRemoteAccount(note.AttributedTo), nil
+}
+
+func fallbackRemoteAccount(actor string) *models.Account {
+	trimmed := strings.TrimRight(actor, "/")
+	username := trimmed
+	domain := ""
+	if parts := strings.Split(trimmed, "/"); len(parts) > 0 {
+		username = parts[len(parts)-1]
 	}
-	return remote, nil
+	if strings.HasPrefix(actor, "http://") || strings.HasPrefix(actor, "https://") {
+		withoutScheme := strings.TrimPrefix(strings.TrimPrefix(actor, "https://"), "http://")
+		if host, _, ok := strings.Cut(withoutScheme, "/"); ok {
+			domain = host
+		}
+	}
+	return &models.Account{ID: AccountIDForRemoteActor(actor), Username: username, Domain: stringPtrValue(domain), DisplayName: stringPtrValue(username), URI: actor, URL: stringPtrValue(actor), ActorType: models.ActorTypePerson}
+}
+
+func stringPtrValue(value string) *string {
+	return &value
 }
