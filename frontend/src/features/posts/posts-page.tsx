@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
@@ -23,11 +23,27 @@ const timelineLimit = 20;
 
 type TimelineTab = (typeof timelineTabs)[number]["value"];
 
-export function PostsPage() {
+type TimelineCacheEntry = {
+  statuses: MastodonStatus[];
+  currentAccount: MastodonAccount | null;
+  hasMore: boolean;
+  scrollY: number;
+};
+
+type PostsPageProps = {
+  route?: string;
+};
+
+const timelineCache: Partial<Record<TimelineTab, TimelineCacheEntry>> = {};
+
+export function PostsPage({ route = "/" }: PostsPageProps) {
   const { session } = useAuth();
-  const [activeTimeline, setActiveTimeline] = useState<TimelineTab>("home");
-  const [statuses, setStatuses] = useState<MastodonStatus[]>([]);
-  const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(null);
+  const timelineFromRoute = routeToTimeline(route);
+  const initialCache = timelineCache[timelineFromRoute];
+  const [activeTimeline, setActiveTimeline] = useState<TimelineTab>(timelineFromRoute);
+  const [statuses, setStatuses] = useState<MastodonStatus[]>(initialCache?.statuses ?? []);
+  const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(initialCache?.currentAccount ?? null);
+  const [hasMore, setHasMore] = useState(initialCache?.hasMore ?? true);
   const [isLoading, setIsLoading] = useState(true);
   const [isPosting, setIsPosting] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -39,6 +55,8 @@ export function PostsPage() {
   const [isReplying, setIsReplying] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
 
+  const restoredTimelineRef = useRef<TimelineTab | null>(null);
+  const pendingScrollYRef = useRef<number | null>(initialCache?.scrollY ?? null);
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
 
   const searchKnownAccounts = useCallback(async (query: string) => {
@@ -64,6 +82,7 @@ export function PostsPage() {
         ]);
         setCurrentAccount(nextCurrentAccount);
         setStatuses(nextStatuses);
+        setHasMore(nextStatuses.length >= timelineLimit);
       } catch (caughtError) {
         setTimelineError(caughtError instanceof Error ? caughtError.message : "Could not load timeline.");
       } finally {
@@ -74,8 +93,49 @@ export function PostsPage() {
   );
 
   useEffect(() => {
+    if (activeTimeline !== timelineFromRoute) {
+      setActiveTimeline(timelineFromRoute);
+    }
+  }, [activeTimeline, timelineFromRoute]);
+
+  useEffect(() => {
+    return () => {
+      timelineCache[activeTimeline] = { statuses, currentAccount, hasMore, scrollY: window.scrollY };
+    };
+  }, [activeTimeline, currentAccount, hasMore, statuses]);
+
+  useEffect(() => {
+    const cached = timelineCache[activeTimeline];
+    if (cached?.statuses.length) {
+      setStatuses(cached.statuses);
+      setCurrentAccount(cached.currentAccount);
+      setHasMore(cached.hasMore);
+      setIsLoading(false);
+      setTimelineError(null);
+      if (restoredTimelineRef.current !== activeTimeline) {
+        restoredTimelineRef.current = activeTimeline;
+        pendingScrollYRef.current = cached.scrollY;
+      }
+      return;
+    }
+
     void loadTimeline(activeTimeline);
   }, [activeTimeline, loadTimeline]);
+
+  useEffect(() => {
+    if (isLoading || statuses.length === 0 || pendingScrollYRef.current === null) {
+      return;
+    }
+
+    const top = pendingScrollYRef.current;
+    pendingScrollYRef.current = null;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => window.scrollTo({ top, behavior: "auto" }));
+    });
+    const timeout = window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), 100);
+    return () => window.clearTimeout(timeout);
+  }, [isLoading, statuses.length]);
 
   async function loadMore() {
     if (!api || statuses.length === 0) {
@@ -87,12 +147,28 @@ export function PostsPage() {
 
     try {
       const nextStatuses = await loadTimelinePage(activeTimeline, statuses.at(-1)?.id);
-      setStatuses((current) => [...current, ...nextStatuses]);
+      setHasMore(nextStatuses.length >= timelineLimit);
+      if (nextStatuses.length === 0) {
+        setTimelineError("No more posts to load.");
+        return;
+      }
+      setStatuses((current) => {
+        const seen = new Set(current.map((status) => status.id));
+        const merged = [...current, ...nextStatuses.filter((status) => !seen.has(status.id))];
+        timelineCache[activeTimeline] = { statuses: merged, currentAccount, hasMore: nextStatuses.length >= timelineLimit, scrollY: window.scrollY };
+        return merged;
+      });
     } catch (caughtError) {
       setTimelineError(caughtError instanceof Error ? caughtError.message : "Could not load more posts.");
     } finally {
       setIsLoadingMore(false);
     }
+  }
+
+  function navigateTimeline(timeline: TimelineTab) {
+    timelineCache[activeTimeline] = { statuses, currentAccount, hasMore, scrollY: window.scrollY };
+    setActiveTimeline(timeline);
+    window.location.hash = timeline;
   }
 
   function loadTimelinePage(timeline: TimelineTab, maxId?: string) {
@@ -107,7 +183,7 @@ export function PostsPage() {
     if (timeline === "local") {
       return api.publicTimeline({ ...options, local: true });
     }
-    return api.publicTimeline({ ...options, remote: true });
+    return api.publicTimeline(options);
   }
 
   async function runAction(action: StatusAction, status: MastodonStatus) {
@@ -225,7 +301,7 @@ export function PostsPage() {
   return (
     <section className="mx-auto max-w-2xl space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Tabs value={activeTimeline} onValueChange={setActiveTimeline} items={[...timelineTabs]} />
+        <Tabs value={activeTimeline} onValueChange={navigateTimeline} items={[...timelineTabs]} />
         <Button variant="outline" size="sm" onClick={() => void loadTimeline(activeTimeline)} disabled={isLoading}>
           {isLoading ? "Refreshing..." : "Refresh"}
         </Button>
@@ -291,8 +367,8 @@ export function PostsPage() {
               }}
             />
             <div className="mt-5 flex justify-center">
-              <Button variant="outline" onClick={() => void loadMore()} disabled={isLoadingMore}>
-                {isLoadingMore ? "Loading..." : "Load more"}
+              <Button variant="outline" onClick={() => void loadMore()} disabled={isLoadingMore || !hasMore}>
+                {isLoadingMore ? "Loading..." : hasMore ? "Load more" : "No more posts"}
               </Button>
             </div>
           </>
@@ -309,4 +385,14 @@ export function PostsPage() {
       </Dialog>
     </section>
   );
+}
+
+function routeToTimeline(route: string): TimelineTab {
+  if (route === "/local") {
+    return "local";
+  }
+  if (route === "/global") {
+    return "global";
+  }
+  return "home";
 }

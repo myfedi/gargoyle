@@ -20,7 +20,6 @@ import type { MastodonAccount } from "@/types/mastodon";
 import { navItems } from "./navigation";
 
 const routes = {
-  "/": PostsPage,
   "/profile": MyProfilePage,
   "/notifications": NotificationsPage,
   "/direct": DirectMessagesPage,
@@ -44,6 +43,17 @@ function AuthenticatedApp() {
   const route = useHashRoute();
   const RoutePage = routes[route as keyof typeof routes];
   const page = renderRoute(route, RoutePage);
+  useEffect(() => {
+    if (!("scrollRestoration" in window.history)) {
+      return;
+    }
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    return () => {
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
+
   useEffect(() => {
     if (status !== "authenticated" || !session?.accessToken) {
       setAccount(null);
@@ -112,7 +122,7 @@ function AuthenticatedApp() {
           <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = item.href === `#${route}`;
+              const isActive = item.href === `#${route}` || (item.href === "#/" && isTimelineRoute(route));
               return (
                 <a
                   key={item.href}
@@ -171,7 +181,7 @@ function AuthenticatedApp() {
             <div className="grid gap-1 sm:grid-cols-2">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = item.href === `#${route}`;
+                const isActive = item.href === `#${route}` || (item.href === "#/" && isTimelineRoute(route));
                 return (
                   <a
                     key={item.href}
@@ -201,6 +211,10 @@ function AuthenticatedApp() {
 }
 
 function renderRoute(route: string, RoutePage: React.ComponentType | undefined) {
+  if (isTimelineRoute(route)) {
+    return <PostsPage route={route} />;
+  }
+
   if (route.startsWith("/accounts/")) {
     return <AccountPage route={route} />;
   }
@@ -236,5 +250,12 @@ function subscribeToHashChange(callback: () => void) {
 
 function getHashRoute() {
   const route = window.location.hash.replace(/^#/, "") || "/";
-  return route.startsWith("/") ? route : "/";
+  if (route.startsWith("/")) {
+    return route;
+  }
+  return isTimelineRoute(`/${route}`) ? `/${route}` : "/";
+}
+
+function isTimelineRoute(route: string) {
+  return route === "/" || route === "/home" || route === "/local" || route === "/global";
 }
