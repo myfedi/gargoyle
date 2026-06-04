@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { FeaturePage, FieldRow, Panel } from "@/features/shared";
 import { getApiBaseUrl, getOAuthConfig } from "@/lib/config";
 
@@ -24,6 +25,12 @@ export function SettingsPage() {
           ) : (
             <p className="text-sm text-muted-foreground">Sign-in is not configured.</p>
           )}
+        </Panel>
+
+        <Panel title="Admin" description="Moderation tools are available to instance admins.">
+          <Button asChild variant="outline">
+            <a href="/#/admin/moderation/domains">Domain moderation</a>
+          </Button>
         </Panel>
       </div>
     </FeaturePage>

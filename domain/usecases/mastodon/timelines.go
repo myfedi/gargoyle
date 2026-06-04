@@ -82,6 +82,15 @@ func (u UseCase) timelineItems(ctx context.Context, localAccount *models.Account
 		if derr != nil {
 			return nil, derr
 		}
+		if author.Domain != nil && *author.Domain != "" {
+			blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *author.Domain)
+			if err != nil {
+				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+			}
+			if blocked {
+				continue
+			}
+		}
 		replyAccountID := u.replyAccountID(ctx, localAccount, note)
 		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
 		if err != nil {
@@ -138,6 +147,15 @@ func (u UseCase) boostTimelineItems(ctx context.Context, localAccount *models.Ac
 		if derr != nil {
 			return nil, derr
 		}
+		if originalAuthor.Domain != nil && *originalAuthor.Domain != "" {
+			blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *originalAuthor.Domain)
+			if err != nil {
+				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+			}
+			if blocked {
+				continue
+			}
+		}
 		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
 		if err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -149,6 +167,15 @@ func (u UseCase) boostTimelineItems(ctx context.Context, localAccount *models.Ac
 		booster, derr := u.accountForActor(ctx, localAccount, boost.Actor)
 		if derr != nil {
 			return nil, derr
+		}
+		if booster.Domain != nil && *booster.Domain != "" {
+			blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *booster.Domain)
+			if err != nil {
+				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+			}
+			if blocked {
+				continue
+			}
 		}
 		items = append(items, TimelineItem{ID: boost.ID, URI: boost.URI, CreatedAt: boost.PublishedAt, Note: *note, Account: *booster, Reblog: inner})
 	}

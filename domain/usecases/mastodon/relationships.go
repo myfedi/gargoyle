@@ -79,6 +79,9 @@ func (u UseCase) resolveFollowActors(ctx context.Context, localAccount *models.A
 				continue
 			}
 		}
+		if derr := u.ensureRemoteDomainAllowed(ctx, remote.URI); derr != nil {
+			continue
+		}
 		accounts = append(accounts, *remote)
 	}
 	return accounts, nil

@@ -30,6 +30,7 @@ type UsersWebHandlerConfig struct {
 	NotesRepo           repos.NotesRepository
 	SocialRepo          repos.SocialRepository
 	RemoteAccountsRepo  repos.RemoteAccountsRepository
+	DomainBlocksRepo    repos.DomainBlocksRepository
 	DeliveryJobsRepo    repos.DeliveryJobsRepository
 	Serializer          activitypub.ActorSerializer
 	ActorFetcher        activitypub.ActorFetcher
@@ -74,6 +75,9 @@ func validateUsersWebHandlerConfig(cfg UsersWebHandlerConfig) {
 	}
 	if cfg.SocialRepo == nil {
 		panic("users web handler requires SocialRepo")
+	}
+	if cfg.DomainBlocksRepo == nil {
+		panic("users web handler requires DomainBlocksRepo")
 	}
 	if cfg.DeliveryJobsRepo == nil {
 		panic("users web handler requires DeliveryJobsRepo")
@@ -144,6 +148,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		NotesRepo:          cfg.NotesRepo,
 		SocialRepo:         cfg.SocialRepo,
 		RemoteAccountsRepo: cfg.RemoteAccountsRepo,
+		DomainBlocksRepo:   cfg.DomainBlocksRepo,
 		ActorFetcher:       cfg.ActorFetcher,
 		ContentSanitizer:   cfg.ContentSanitizer,
 	}

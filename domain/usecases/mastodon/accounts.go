@@ -35,7 +35,7 @@ func (u UseCase) SearchAccounts(ctx context.Context, account *models.Account, qu
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	return append(locals, remote...), nil
+	return append(locals, u.filterBlockedAccounts(ctx, remote)...), nil
 }
 
 // ResolveAccountSearch performs the explicit remote resolution path used by
@@ -51,6 +51,9 @@ func (u UseCase) ResolveAccountSearch(ctx context.Context, account *models.Accou
 	remote, err := u.resolveAndCacheRemoteAccount(ctx, query, account)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
+	}
+	if derr := u.ensureRemoteDomainAllowed(ctx, remote.URI); derr != nil {
+		return nil, derr
 	}
 	return []models.Account{*remote}, nil
 }
@@ -102,7 +105,7 @@ func (u UseCase) UnfollowAccount(ctx context.Context, localAccount *models.Accou
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	raw, err := json.Marshal(map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": localAccount.URI + "/undos/" + undoID, "type": "Undo", "actor": localAccount.URI, "object": map[string]any{"type": "Follow", "actor": localAccount.URI, "object": remote.URI}})
+	raw, err := json.Marshal(map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": localAccount.URI + "/undos/" + undoID, "type": "Undo", "actor": localAccount.URI, "object": map[string]any{"type": "Follow", "actor": localAccount.URI, "object": remote.URI}})
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
@@ -110,9 +113,30 @@ func (u UseCase) UnfollowAccount(ctx context.Context, localAccount *models.Accou
 }
 
 func (u UseCase) resolveAndCacheRemoteAccount(ctx context.Context, query string, signer *models.Account) (*models.Account, error) {
+	if derr := u.ensureRemoteDomainAllowed(ctx, query); derr != nil {
+		return nil, derr
+	}
 	remote, err := u.cfg.RemoteResolver.ResolveAccount(ctx, query, signer)
 	if err != nil {
 		return nil, err
 	}
+	if derr := u.ensureRemoteDomainAllowed(ctx, remote.URI); derr != nil {
+		return nil, derr
+	}
 	return u.cfg.RemoteAccountsRepo.UpsertRemoteAccount(ctx, nil, *remote)
+}
+
+func (u UseCase) filterBlockedAccounts(ctx context.Context, accounts []models.Account) []models.Account {
+	res := make([]models.Account, 0, len(accounts))
+	for _, account := range accounts {
+		if account.Domain == nil || *account.Domain == "" {
+			res = append(res, account)
+			continue
+		}
+		blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *account.Domain)
+		if err == nil && !blocked {
+			res = append(res, account)
+		}
+	}
+	return res
 }

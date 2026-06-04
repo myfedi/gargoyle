@@ -37,6 +37,15 @@ func (u UseCase) GetStatus(ctx context.Context, localAccount *models.Account, st
 	if derr != nil {
 		return nil, derr
 	}
+	if author.Domain != nil && *author.Domain != "" {
+		blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *author.Domain)
+		if err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		if blocked {
+			return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
+		}
+	}
 	media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -66,7 +75,7 @@ func (u UseCase) DeleteStatus(ctx context.Context, localAccount *models.Account,
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	raw, err := json.Marshal(map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": localAccount.URI + "/deletes/" + deleteID, "type": "Delete", "actor": localAccount.URI, "object": note.URI})
+	raw, err := json.Marshal(map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": localAccount.URI + "/deletes/" + deleteID, "type": "Delete", "actor": localAccount.URI, "object": note.URI})
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}

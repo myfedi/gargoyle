@@ -20,11 +20,17 @@ func (u UseCase) GetAccount(ctx context.Context, localAccount *models.Account, a
 	}
 	remote, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, actor)
 	if err == nil {
+		if derr := u.ensureRemoteDomainAllowed(ctx, remote.URI); derr != nil {
+			return nil, derr
+		}
 		return remote, nil
 	}
 	remote, err = u.resolveAndCacheRemoteAccount(ctx, actor, localAccount)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrNotFound, err)
+	}
+	if derr := u.ensureRemoteDomainAllowed(ctx, remote.URI); derr != nil {
+		return nil, derr
 	}
 	return remote, nil
 }

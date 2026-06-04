@@ -43,6 +43,10 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v2/search", h.search)
 	app.Get("/api/v1/accounts/search", h.accountsSearch)
 	app.Get("/api/v1/accounts/relationships", h.relationships)
+	app.Get("/api/v1/admin/domain_blocks", h.adminDomainBlocks)
+	app.Post("/api/v1/admin/domain_blocks", h.adminCreateDomainBlock)
+	app.Delete("/api/v1/admin/domain_blocks/:domain", h.adminDeleteDomainBlock)
+	app.Post("/api/v1/admin/domain_blocks/:domain/purge", h.adminPurgeDomain)
 	app.Get("/api/v1/notifications", h.notifications)
 	app.Post("/api/v1/notifications/clear", h.clearNotifications)
 	app.Post("/api/v1/notifications/:id/dismiss", h.dismissNotification)
@@ -268,6 +272,91 @@ func uniqueInboxes(inboxes []string) []string {
 		res = append(res, inbox)
 	}
 	return res
+}
+
+type adminDomainBlockRequest struct {
+	Domain         string `json:"domain"`
+	PublicComment  string `json:"public_comment"`
+	PrivateComment string `json:"private_comment"`
+	RejectMedia    bool   `json:"reject_media"`
+}
+
+type domainBlockResponse struct {
+	ID              string  `json:"id"`
+	Domain          string  `json:"domain"`
+	Severity        string  `json:"severity"`
+	RejectMedia     bool    `json:"reject_media"`
+	PublicComment   *string `json:"public_comment"`
+	PrivateComment  *string `json:"private_comment"`
+	CreatedByUserID string  `json:"created_by_user_id"`
+	CreatedAt       string  `json:"created_at"`
+	UpdatedAt       string  `json:"updated_at"`
+}
+
+type moderationJobResponse struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Status string `json:"status"`
+}
+
+func (h APIHandler) adminDomainBlocks(c *fiber.Ctx) error {
+	principal, derr := h.authenticateAdmin(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	_ = principal
+	blocks, derr := h.api.ListDomainBlocks(c.UserContext())
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	resp := make([]domainBlockResponse, 0, len(blocks))
+	for _, block := range blocks {
+		resp = append(resp, domainBlockToResponse(block))
+	}
+	return c.JSON(resp)
+}
+
+func (h APIHandler) adminCreateDomainBlock(c *fiber.Ctx) error {
+	principal, derr := h.authenticateAdmin(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	var req adminDomainBlockRequest
+	if err := c.BodyParser(&req); err != nil {
+		return err
+	}
+	block, derr := h.api.CreateDomainBlock(c.UserContext(), principal.User, mastodonUC.CreateDomainBlockInput{Domain: req.Domain, PublicComment: req.PublicComment, PrivateComment: req.PrivateComment, RejectMedia: req.RejectMedia})
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(domainBlockToResponse(*block))
+}
+
+func (h APIHandler) adminDeleteDomainBlock(c *fiber.Ctx) error {
+	principal, derr := h.authenticateAdmin(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	if derr := h.api.DeleteDomainBlock(c.UserContext(), principal.User, c.Params("domain")); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (h APIHandler) adminPurgeDomain(c *fiber.Ctx) error {
+	principal, derr := h.authenticateAdmin(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	res, derr := h.api.EnqueuePurgeDomain(c.UserContext(), principal.User, c.Params("domain"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(moderationJobResponse{ID: res.Job.ID, Kind: res.Job.Kind, Status: string(res.Job.Status)})
+}
+
+func domainBlockToResponse(block models.DomainBlock) domainBlockResponse {
+	return domainBlockResponse{ID: block.ID, Domain: block.Domain, Severity: block.Severity, RejectMedia: block.RejectMedia, PublicComment: block.PublicComment, PrivateComment: block.PrivateComment, CreatedByUserID: block.CreatedByUserID, CreatedAt: block.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: block.UpdatedAt.UTC().Format(time.RFC3339)}
 }
 
 type createStatusRequest struct {
@@ -923,6 +1012,17 @@ func (h APIHandler) publicTimeline(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	return c.JSON(timelineItemsToStatuses(items))
+}
+
+func (h APIHandler) authenticateAdmin(c *fiber.Ctx) (*oauth.AuthenticatedUser, *domainerrors.DomainError) {
+	principal, derr := h.authenticate(c, "write")
+	if derr != nil {
+		return nil, derr
+	}
+	if principal.User == nil || !principal.User.Admin {
+		return nil, domainerrors.New(domainerrors.ErrUnauthorized, "admin access required")
+	}
+	return principal, nil
 }
 
 func (h APIHandler) authenticate(c *fiber.Ctx, requiredScopes ...string) (*oauth.AuthenticatedUser, *domainerrors.DomainError) {

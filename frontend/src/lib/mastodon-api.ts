@@ -1,5 +1,5 @@
 import { ApiClient } from "@/lib/api";
-import type { MastodonAccount, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonRelationship, MastodonSearchResults, MastodonStatus } from "@/types/mastodon";
+import type { DomainBlock, MastodonAccount, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
@@ -26,6 +26,18 @@ export function createMastodonApi(accessToken: string) {
   return {
     verifyCredentials() {
       return client.request<MastodonAccount>("/api/v1/accounts/verify_credentials");
+    },
+    domainBlocks() {
+      return client.request<DomainBlock[]>("/api/v1/admin/domain_blocks");
+    },
+    createDomainBlock(input: { domain: string; public_comment?: string; private_comment?: string; reject_media: boolean }) {
+      return client.request<DomainBlock>("/api/v1/admin/domain_blocks", { method: "POST", body: JSON.stringify(input) });
+    },
+    deleteDomainBlock(domain: string) {
+      return client.request<void>(`/api/v1/admin/domain_blocks/${encodeURIComponent(domain)}`, { method: "DELETE" });
+    },
+    purgeDomain(domain: string) {
+      return client.request<ModerationJob>(`/api/v1/admin/domain_blocks/${encodeURIComponent(domain)}/purge`, { method: "POST" });
     },
     updateCredentials(input: UpdateCredentialsInput) {
       const body = new FormData();

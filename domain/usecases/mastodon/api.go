@@ -41,6 +41,9 @@ type Config struct {
 	ConversationsRepo   repos.ConversationsRepository
 	MentionsRepo        repos.MentionsRepository
 	RemoteAccountsRepo  repos.RemoteAccountsRepository
+	DomainBlocksRepo    repos.DomainBlocksRepository
+	ModerationJobsRepo  repos.ModerationJobsRepository
+	DomainPurgeRepo     repos.DomainPurgeRepository
 	IDGenerator         ports.IDGenerator
 	RemoteResolver      RemoteAccountResolver
 	RemoteObjectFetcher ports.RemoteObjectFetcher
@@ -191,6 +194,15 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.RemoteAccountsRepo == nil {
 		panic("mastodon API use case requires RemoteAccountsRepo")
+	}
+	if cfg.DomainBlocksRepo == nil {
+		panic("mastodon API use case requires DomainBlocksRepo")
+	}
+	if cfg.ModerationJobsRepo == nil {
+		panic("mastodon API use case requires ModerationJobsRepo")
+	}
+	if cfg.DomainPurgeRepo == nil {
+		panic("mastodon API use case requires DomainPurgeRepo")
 	}
 	if cfg.IDGenerator == nil {
 		panic("mastodon API use case requires IDGenerator")

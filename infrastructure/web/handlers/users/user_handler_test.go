@@ -303,6 +303,24 @@ func (f *fakeFollowsRepo) ListFollowingIncludingPending(ctx context.Context, tx 
 	return res, nil
 }
 
+type fakeDomainBlocksRepo struct{}
+
+func (fakeDomainBlocksRepo) CreateDomainBlock(ctx context.Context, tx *db.Tx, input repos.CreateDomainBlockInput) (*models.DomainBlock, error) {
+	return &models.DomainBlock{Domain: input.Domain, Severity: models.DomainBlockSeveritySuspend}, nil
+}
+func (fakeDomainBlocksRepo) DeleteDomainBlock(ctx context.Context, tx *db.Tx, domain string) error {
+	return nil
+}
+func (fakeDomainBlocksRepo) ListDomainBlocks(ctx context.Context, tx *db.Tx) ([]models.DomainBlock, error) {
+	return nil, nil
+}
+func (fakeDomainBlocksRepo) GetDomainBlock(ctx context.Context, tx *db.Tx, domain string) (*models.DomainBlock, error) {
+	return &models.DomainBlock{Domain: domain}, nil
+}
+func (fakeDomainBlocksRepo) DomainIsSuspended(ctx context.Context, tx *db.Tx, domain string) (bool, error) {
+	return false, nil
+}
+
 type fakeSocialRepo struct{}
 
 func (fakeSocialRepo) CreateInteraction(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) (*models.StatusInteraction, error) {
@@ -358,6 +376,7 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		FollowsRepo:      follows,
 		NotesRepo:        &fakeNotesRepo{},
 		SocialRepo:       fakeSocialRepo{},
+		DomainBlocksRepo: fakeDomainBlocksRepo{},
 		DeliveryJobsRepo: fakeDeliveryJobsRepo{},
 		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer: adapters.NewContentSanitizer(),
@@ -443,6 +462,7 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 		FollowsRepo:        &fakeFollowsRepo{},
 		NotesRepo:          notes,
 		SocialRepo:         fakeSocialRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
 		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
@@ -476,6 +496,7 @@ func TestUserProfileHandlerRejectsForgedInboundCreateAuthor(t *testing.T) {
 		FollowsRepo:        &fakeFollowsRepo{},
 		NotesRepo:          notes,
 		SocialRepo:         fakeSocialRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
 		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),

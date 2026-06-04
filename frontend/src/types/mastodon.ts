@@ -16,6 +16,24 @@ export type MastodonAccount = {
   statuses_count?: number;
 };
 
+export type DomainBlock = {
+  id: string;
+  domain: string;
+  severity: string;
+  reject_media: boolean;
+  public_comment?: string | null;
+  private_comment?: string | null;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ModerationJob = {
+  id: string;
+  kind: string;
+  status: string;
+};
+
 export type MastodonRelationship = {
   id: string;
   following: boolean;

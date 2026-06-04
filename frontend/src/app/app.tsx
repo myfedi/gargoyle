@@ -4,6 +4,7 @@ import { Bell, LogOut, Menu, Search, Settings } from "lucide-react";
 
 import { AuthProvider, useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
+import { DomainModerationPage } from "@/features/admin/domain-moderation-page";
 import { LoginPage } from "@/features/auth/login-page";
 import { AccountPage } from "@/features/accounts/account-page";
 import { DirectMessagesPage } from "@/features/direct/direct-messages-page";
@@ -24,6 +25,7 @@ const routes = {
   "/notifications": NotificationsPage,
   "/direct": DirectMessagesPage,
   "/settings": SettingsPage,
+  "/admin/moderation/domains": DomainModerationPage,
 } satisfies Record<string, React.ComponentType>;
 
 export function App() {
@@ -44,13 +46,13 @@ function AuthenticatedApp() {
   const RoutePage = routes[route as keyof typeof routes];
   const page = renderRoute(route, RoutePage);
   useEffect(() => {
-    if (!("scrollRestoration" in window.history)) {
+    if (!("scrollRestoration" in globalThis.history)) {
       return;
     }
-    const previous = window.history.scrollRestoration;
-    window.history.scrollRestoration = "manual";
+    const previous = globalThis.history.scrollRestoration;
+    globalThis.history.scrollRestoration = "manual";
     return () => {
-      window.history.scrollRestoration = previous;
+      globalThis.history.scrollRestoration = previous;
     };
   }, []);
 
@@ -244,12 +246,12 @@ function useHashRoute() {
 }
 
 function subscribeToHashChange(callback: () => void) {
-  window.addEventListener("hashchange", callback);
-  return () => window.removeEventListener("hashchange", callback);
+  globalThis.addEventListener("hashchange", callback);
+  return () => globalThis.removeEventListener("hashchange", callback);
 }
 
 function getHashRoute() {
-  const route = window.location.hash.replace(/^#/, "") || "/";
+  const route = globalThis.location.hash.replace(/^#/, "") || "/";
   if (route.startsWith("/")) {
     return route;
   }

@@ -84,6 +84,7 @@ func main() {
 	conversationsRepo := repos.NewConversationsRepo(sqlite.Bun)
 	mentionsRepo := repos.NewMentionsRepo(sqlite.Bun)
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
+	moderationRepo := repos.NewModerationRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
 	jobsRepo := repos.NewJobsRepo(sqlite.Bun)
 	txProvider := dbAdapters.NewBunTxProvider(sqlite.Bun)
@@ -151,6 +152,7 @@ func main() {
 		NotesRepo:           notesRepo,
 		SocialRepo:          socialRepo,
 		RemoteAccountsRepo:  remoteAccountsRepo,
+		DomainBlocksRepo:    moderationRepo,
 		DeliveryJobsRepo:    jobsRepo,
 		Serializer:          actorSerializer,
 		ContentSanitizer:    contentSanitizer,
@@ -180,6 +182,7 @@ func main() {
 		FollowsRepo:        followsRepo,
 		NotesRepo:          notesRepo,
 		RemoteAccountsRepo: remoteAccountsRepo,
+		DomainBlocksRepo:   moderationRepo,
 		FetchJobsRepo:      jobsRepo,
 		SocialRepo:         socialRepo,
 		BoostsRepo:         boostsRepo,
@@ -202,6 +205,9 @@ func main() {
 		ConversationsRepo:   conversationsRepo,
 		MentionsRepo:        mentionsRepo,
 		RemoteAccountsRepo:  remoteAccountsRepo,
+		DomainBlocksRepo:    moderationRepo,
+		ModerationJobsRepo:  moderationRepo,
+		DomainPurgeRepo:     moderationRepo,
 		IDGenerator:         adapters.NewULIDGenerator(),
 		RemoteResolver:      mastodon.NewRemoteAccountResolver(nil, mastodonRemoteURLExceptions),
 		RemoteObjectFetcher: mastodon.NewRemoteObjectFetcher(nil, mastodonRemoteURLExceptions),
@@ -213,10 +219,11 @@ func main() {
 
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
-	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Deliverer: userProfileHandler.ActivityDeliverer()}).Start(workerCtx)
+	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Deliverer: userProfileHandler.ActivityDeliverer(), Blocks: moderationRepo}).Start(workerCtx)
 	hydrateRemoteObjectUC := apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{Fetcher: mastodon.NewRemoteObjectFetcher(nil, mastodonRemoteURLExceptions), ActivitiesRepo: activitiesRepo, NotesRepo: notesRepo, Sanitizer: contentSanitizer})
-	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Hydrater: hydrateRemoteObjectUC}).Start(workerCtx)
+	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: jobsRepo, Accounts: accountsRepo, Hydrater: hydrateRemoteObjectUC, Blocks: moderationRepo}).Start(workerCtx)
 	jobs.NewMediaCleanupWorker(jobs.MediaCleanupWorkerConfig{MediaRepo: mediaRepo, Storage: mediaStorage, Interval: config.Media.CleanupInterval, UnattachedTTL: config.Media.UnattachedTTL}).Start(workerCtx)
+	jobs.NewModerationWorker(jobs.ModerationWorkerConfig{JobsRepo: moderationRepo, API: mastodonAPIUC, MediaStorage: mediaStorage}).Start(workerCtx)
 
 	/// run server
 

@@ -30,6 +30,7 @@ type ActivityPubFlowConfig struct {
 	FollowsRepo        repos.FollowsRepository
 	NotesRepo          repos.NotesRepository
 	RemoteAccountsRepo repos.RemoteAccountsRepository
+	DomainBlocksRepo   repos.DomainBlocksRepository
 	FetchJobsRepo      repos.FetchJobsRepository
 	SocialRepo         repos.SocialRepository
 	BoostsRepo         repos.BoostsRepository

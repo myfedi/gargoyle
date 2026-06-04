@@ -3,6 +3,8 @@ package jobs
 import (
 	"context"
 	"log"
+	"net/url"
+	"strings"
 	"time"
 
 	apPorts "github.com/myfedi/gargoyle/domain/ports/activitypub"
@@ -16,6 +18,7 @@ type DeliveryWorker struct {
 	jobs      repos.DeliveryJobsRepository
 	accounts  repos.AccountsRepo
 	deliverer apPorts.ActivityDeliverer
+	blocks    repos.DomainBlocksRepository
 	logger    *log.Logger
 	interval  time.Duration
 	batchSize int
@@ -25,6 +28,7 @@ type DeliveryWorkerConfig struct {
 	JobsRepo  repos.DeliveryJobsRepository
 	Accounts  repos.AccountsRepo
 	Deliverer apPorts.ActivityDeliverer
+	Blocks    repos.DomainBlocksRepository
 	Logger    *log.Logger
 	Interval  time.Duration
 	BatchSize int
@@ -49,7 +53,7 @@ func NewDeliveryWorker(cfg DeliveryWorkerConfig) *DeliveryWorker {
 	if cfg.BatchSize <= 0 {
 		cfg.BatchSize = 25
 	}
-	return &DeliveryWorker{jobs: cfg.JobsRepo, accounts: cfg.Accounts, deliverer: cfg.Deliverer, logger: cfg.Logger, interval: cfg.Interval, batchSize: cfg.BatchSize}
+	return &DeliveryWorker{jobs: cfg.JobsRepo, accounts: cfg.Accounts, deliverer: cfg.Deliverer, blocks: cfg.Blocks, logger: cfg.Logger, interval: cfg.Interval, batchSize: cfg.BatchSize}
 }
 
 func (w *DeliveryWorker) Start(ctx context.Context) {
@@ -77,6 +81,13 @@ func (w *DeliveryWorker) ProcessOnce(ctx context.Context) {
 		return
 	}
 	for _, job := range due {
+		if w.deliveryBlocked(ctx, job.InboxURL) {
+			w.logger.Printf("delivery job %s skipped blocked inbox=%s", job.ID, job.InboxURL)
+			if err := w.jobs.MarkDeliveryJobDelivered(ctx, nil, job.ID, time.Now().UTC()); err != nil {
+				w.logger.Printf("delivery job %s mark skipped delivered failed: %v", job.ID, err)
+			}
+			continue
+		}
 		account, err := w.accounts.GetAccountByID(ctx, nil, job.AccountID)
 		if err != nil {
 			w.logger.Printf("delivery job %s account lookup failed account_id=%s: %v", job.ID, job.AccountID, err)
@@ -96,6 +107,18 @@ func (w *DeliveryWorker) ProcessOnce(ctx context.Context) {
 			w.logger.Printf("delivery job %s mark delivered failed: %v", job.ID, err)
 		}
 	}
+}
+
+func (w *DeliveryWorker) deliveryBlocked(ctx context.Context, inbox string) bool {
+	if w.blocks == nil {
+		return false
+	}
+	parsed, err := url.Parse(inbox)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	blocked, err := w.blocks.DomainIsSuspended(ctx, nil, strings.ToLower(parsed.Hostname()))
+	return err == nil && blocked
 }
 
 func nextAttempt(attempts int) time.Time {

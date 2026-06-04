@@ -25,6 +25,12 @@ func (u UseCase) Notifications(ctx context.Context, account *models.Account, lim
 	items := make([]NotificationItem, 0, len(notifications))
 	for _, notification := range notifications {
 		actor := u.notificationActor(ctx, account, notification.ActorAccountID)
+		if actor.Domain != nil && *actor.Domain != "" {
+			blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *actor.Domain)
+			if err == nil && blocked {
+				continue
+			}
+		}
 		var status *TimelineItem
 		if notification.StatusID != nil {
 			status, _ = u.GetStatus(ctx, account, *notification.StatusID)

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -55,6 +56,17 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 	// Validate before writing when possible.
 	if activity.Actor == "" {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "activity actor is required")
+	}
+	if u.cfg.DomainBlocksRepo != nil {
+		if domain := actorDomain(activity.Actor); domain != "" {
+			blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, domain)
+			if err != nil {
+				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+			}
+			if blocked {
+				return nil, domainerrors.New(domainerrors.ErrUnauthorized, "remote domain is suspended")
+			}
+		}
 	}
 	if activity.Type == "Follow" && activity.Object != account.URI {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "follow object does not match local actor")
@@ -299,6 +311,14 @@ func validateFollowResponseObject(raw []byte, localActor, remoteActor string) er
 	return nil
 }
 
+func actorDomain(actor string) string {
+	parsed, err := url.Parse(strings.TrimSpace(actor))
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	return strings.ToLower(parsed.Hostname())
+}
+
 func accountFromExtractedActor(actor ExtractedActor) models.Account {
 	domain := ""
 	if parsed, err := url.Parse(actor.URI); err == nil {
@@ -325,7 +345,7 @@ func accountFromExtractedActor(actor ExtractedActor) models.Account {
 }
 
 func remoteAccountID(actor string) string {
-	return "remote:" + base64.RawURLEncoding.EncodeToString([]byte(actor))
+	return remoteAccountIDPrefix + base64.RawURLEncoding.EncodeToString([]byte(actor))
 }
 
 func actorTypeFromString(value string) models.ActorType {
