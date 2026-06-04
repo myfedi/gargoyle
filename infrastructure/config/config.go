@@ -176,7 +176,36 @@ func verifyCORSConfig(cfg CORSConfig) error {
 	return nil
 }
 
+// verifyConfig validates cross-cutting infrastructure settings before wiring
+// adapters. Keep it as orchestration; detailed rules live in focused helpers.
 func verifyConfig(cfg *Config) error {
+	if err := verifyDomainConfig(cfg); err != nil {
+		return err
+	}
+
+	if cfg.Port <= 0 || cfg.Port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535")
+	}
+	if cfg.ActivityPub.BodyLimitBytes <= 0 {
+		return fmt.Errorf("activitypub.body_limit_bytes must be greater than 0")
+	}
+
+	if err := verifyRemoteURLExceptions(cfg.ActivityPub.RemoteURLExceptions); err != nil {
+		return err
+	}
+	if err := verifyCORSConfig(cfg.Web.CORS); err != nil {
+		return err
+	}
+
+	if err := verifyMediaConfig(cfg.Media); err != nil {
+		return err
+	}
+	return verifyDatabaseConfig(cfg)
+}
+
+// verifyDomainConfig normalizes host-facing values used to construct actor IDs,
+// WebFinger URLs, OAuth redirects, and media URLs.
+func verifyDomainConfig(cfg *Config) error {
 	if cfg.Domain == "" {
 		return fmt.Errorf("domain cannot be empty")
 	}
@@ -189,43 +218,43 @@ func verifyConfig(cfg *Config) error {
 	if strings.HasSuffix(cfg.Domain, "/") {
 		cfg.Domain = strings.TrimRight(cfg.Domain, "/")
 	}
-	if cfg.PublicHost != "" {
-		if !strings.HasPrefix(cfg.PublicHost, "http://") && !strings.HasPrefix(cfg.PublicHost, "https://") {
-			return fmt.Errorf("public_host must include http:// or https://")
-		}
-		cfg.PublicHost = strings.TrimRight(cfg.PublicHost, "/")
+
+	if cfg.PublicHost == "" {
+		return nil
 	}
-	if cfg.Port <= 0 || cfg.Port > 65535 {
-		return fmt.Errorf("port must be between 1 and 65535")
-	}
-	if cfg.ActivityPub.BodyLimitBytes <= 0 {
-		return fmt.Errorf("activitypub.body_limit_bytes must be greater than 0")
-	}
-	if err := verifyRemoteURLExceptions(cfg.ActivityPub.RemoteURLExceptions); err != nil {
-		return err
-	}
-	if err := verifyCORSConfig(cfg.Web.CORS); err != nil {
-		return err
-	}
-	if strings.TrimSpace(cfg.Media.StorageDir) == "" {
-		return fmt.Errorf("media.storage_dir cannot be empty")
-	}
-	if cfg.Media.CleanupInterval <= 0 {
-		return fmt.Errorf("media.cleanup_interval must be greater than 0")
-	}
-	if cfg.Media.UnattachedTTL <= 0 {
-		return fmt.Errorf("media.unattached_ttl must be greater than 0")
+	if !strings.HasPrefix(cfg.PublicHost, "http://") && !strings.HasPrefix(cfg.PublicHost, "https://") {
+		return fmt.Errorf("public_host must include http:// or https://")
 	}
 
-	// verify database config
-	if cfg.Sqlite != nil {
-		if cfg.Sqlite.Uri == "" {
-			return fmt.Errorf("missing sqlite uri")
-		}
-	} else {
+	cfg.PublicHost = strings.TrimRight(cfg.PublicHost, "/")
+	return nil
+}
+
+// verifyMediaConfig guards filesystem-backed media storage settings. The media
+// adapter assumes these values are usable once composition completes.
+func verifyMediaConfig(cfg MediaConfig) error {
+	if strings.TrimSpace(cfg.StorageDir) == "" {
+		return fmt.Errorf("media.storage_dir cannot be empty")
+	}
+	if cfg.CleanupInterval <= 0 {
+		return fmt.Errorf("media.cleanup_interval must be greater than 0")
+	}
+	if cfg.UnattachedTTL <= 0 {
+		return fmt.Errorf("media.unattached_ttl must be greater than 0")
+	}
+	return nil
+}
+
+// verifyDatabaseConfig keeps the current composition root explicit: SQLite is
+// the only supported production database adapter today.
+func verifyDatabaseConfig(cfg *Config) error {
+	if cfg.Sqlite == nil {
 		// we don't support any other databases just yet
 		return fmt.Errorf("no database configured")
 	}
 
+	if cfg.Sqlite.Uri == "" {
+		return fmt.Errorf("missing sqlite uri")
+	}
 	return nil
 }

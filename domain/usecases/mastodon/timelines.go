@@ -103,6 +103,8 @@ func (u UseCase) timelineItems(ctx context.Context, localAccount *models.Account
 	return items, nil
 }
 
+// accountDomainAllowed centralizes domain-block enforcement for timeline
+// assembly. The use case asks the moderation port instead of inspecting storage.
 func (u UseCase) accountDomainAllowed(ctx context.Context, account *models.Account) (bool, *domainerrors.DomainError) {
 	if account.Domain == nil || *account.Domain == "" {
 		return true, nil
@@ -111,14 +113,26 @@ func (u UseCase) accountDomainAllowed(ctx context.Context, account *models.Accou
 	if err != nil {
 		return false, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+
 	return !blocked, nil
 }
 
-func (u UseCase) timelineItem(ctx context.Context, localAccount *models.Account, note models.Note, author models.Account, replyAccountID *string, media []models.MediaAttachment) (*TimelineItem, *domainerrors.DomainError) {
+// timelineItem enriches a stored Note with client API state such as boosts,
+// favourites, bookmarks, pins, mentions, and media. It composes domain models
+// through repository ports without leaking HTTP or database concerns.
+func (u UseCase) timelineItem(
+	ctx context.Context,
+	localAccount *models.Account,
+	note models.Note,
+	author models.Account,
+	replyAccountID *string,
+	media []models.MediaAttachment,
+) (*TimelineItem, *domainerrors.DomainError) {
 	reblogsCount, err := u.cfg.BoostsRepo.CountBoostsForNote(ctx, nil, note.ID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+
 	reblogged, err := u.cfg.BoostsRepo.BoostExists(ctx, nil, localAccount.ID, localAccount.URI, note.ID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -127,6 +141,7 @@ func (u UseCase) timelineItem(ctx context.Context, localAccount *models.Account,
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+
 	bookmarked, err := u.cfg.SocialRepo.InteractionExists(ctx, nil, localAccount.ID, note.ID, "bookmark")
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -138,57 +153,86 @@ func (u UseCase) timelineItem(ctx context.Context, localAccount *models.Account,
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
 	}
+
 	mentions, err := u.cfg.MentionsRepo.ListMentionsForNote(ctx, nil, note.ID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	return &TimelineItem{ID: note.ID, URI: note.URI, CreatedAt: note.PublishedAt, Note: note, Account: author, InReplyToAccountID: replyAccountID, Media: media, Mentions: mentions, ReblogsCount: reblogsCount, Reblogged: reblogged, Favourited: favourited, Bookmarked: bookmarked, Pinned: pinned}, nil
+	return &TimelineItem{
+		ID:                 note.ID,
+		URI:                note.URI,
+		CreatedAt:          note.PublishedAt,
+		Note:               note,
+		Account:            author,
+		InReplyToAccountID: replyAccountID,
+		Media:              media,
+		Mentions:           mentions,
+		ReblogsCount:       reblogsCount,
+		Reblogged:          reblogged,
+		Favourited:         favourited,
+		Bookmarked:         bookmarked,
+		Pinned:             pinned,
+	}, nil
 }
 
 func (u UseCase) boostTimelineItems(ctx context.Context, localAccount *models.Account, boosts []models.Boost) ([]TimelineItem, *domainerrors.DomainError) {
 	items := make([]TimelineItem, 0, len(boosts))
 	for _, boost := range boosts {
-		note, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, boost.NoteID)
-		if err != nil {
-			continue
-		}
-		originalAuthor, derr := u.noteAuthor(ctx, localAccount, *note)
+		item, ok, derr := u.boostTimelineItem(ctx, localAccount, boost)
 		if derr != nil {
 			return nil, derr
 		}
-		if originalAuthor.Domain != nil && *originalAuthor.Domain != "" {
-			blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *originalAuthor.Domain)
-			if err != nil {
-				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-			}
-			if blocked {
-				continue
-			}
+		if ok {
+			items = append(items, *item)
 		}
-		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
-		if err != nil {
-			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-		}
-		inner, derr := u.timelineItem(ctx, localAccount, *note, *originalAuthor, u.replyAccountID(ctx, localAccount, *note), media)
-		if derr != nil {
-			return nil, derr
-		}
-		booster, derr := u.accountForActor(ctx, localAccount, boost.Actor)
-		if derr != nil {
-			return nil, derr
-		}
-		if booster.Domain != nil && *booster.Domain != "" {
-			blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *booster.Domain)
-			if err != nil {
-				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-			}
-			if blocked {
-				continue
-			}
-		}
-		items = append(items, TimelineItem{ID: boost.ID, URI: boost.URI, CreatedAt: boost.PublishedAt, Note: *note, Account: *booster, Reblog: inner})
 	}
 	return items, nil
+}
+
+// boostTimelineItem returns ok=false for intentionally skipped boosts, such as
+// missing original notes or boosts involving suspended remote domains.
+func (u UseCase) boostTimelineItem(ctx context.Context, localAccount *models.Account, boost models.Boost) (*TimelineItem, bool, *domainerrors.DomainError) {
+	note, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, boost.NoteID)
+	if err != nil {
+		return nil, false, nil
+	}
+
+	originalAuthor, derr := u.noteAuthor(ctx, localAccount, *note)
+	if derr != nil {
+		return nil, false, derr
+	}
+	allowed, derr := u.accountDomainAllowed(ctx, originalAuthor)
+	if derr != nil || !allowed {
+		return nil, false, derr
+	}
+
+	media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
+	if err != nil {
+		return nil, false, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	inner, derr := u.timelineItem(ctx, localAccount, *note, *originalAuthor, u.replyAccountID(ctx, localAccount, *note), media)
+	if derr != nil {
+		return nil, false, derr
+	}
+
+	booster, derr := u.accountForActor(ctx, localAccount, boost.Actor)
+	if derr != nil {
+		return nil, false, derr
+	}
+	allowed, derr = u.accountDomainAllowed(ctx, booster)
+	if derr != nil || !allowed {
+		return nil, false, derr
+	}
+
+	item := &TimelineItem{
+		ID:        boost.ID,
+		URI:       boost.URI,
+		CreatedAt: boost.PublishedAt,
+		Note:      *note,
+		Account:   *booster,
+		Reblog:    inner,
+	}
+	return item, true, nil
 }
 
 func (u UseCase) accountForActor(ctx context.Context, localAccount *models.Account, actor string) (*models.Account, *domainerrors.DomainError) {

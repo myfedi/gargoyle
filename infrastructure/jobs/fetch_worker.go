@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 )
@@ -68,6 +69,8 @@ func (w *FetchWorker) Start(ctx context.Context) {
 	}()
 }
 
+// ProcessOnce claims remote-object hydration work. The worker is only the
+// scheduler; parsing and persistence stay in the ActivityPub use case.
 func (w *FetchWorker) ProcessOnce(ctx context.Context) {
 	due, err := w.jobs.ClaimDueFetchJobs(ctx, nil, time.Now().UTC(), w.batchSize)
 	if err != nil {
@@ -78,34 +81,50 @@ func (w *FetchWorker) ProcessOnce(ctx context.Context) {
 		return
 	}
 	for _, job := range due {
-		if w.fetchBlocked(ctx, job.URL) {
-			w.logger.Printf("fetch job %s skipped blocked url=%s", job.ID, job.URL)
-			if err := w.jobs.MarkFetchJobFetched(ctx, nil, job.ID, time.Now().UTC()); err != nil {
-				w.logger.Printf("fetch job %s mark skipped fetched failed: %v", job.ID, err)
-			}
-			continue
-		}
-		account, err := w.accounts.GetAccountByID(ctx, nil, job.AccountID)
-		if err != nil {
-			w.logger.Printf("fetch job %s account lookup failed account_id=%s: %v", job.ID, job.AccountID, err)
-			if markErr := w.jobs.MarkFetchJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), err.Error()); markErr != nil {
-				w.logger.Printf("fetch job %s mark failed error failed: %v", job.ID, markErr)
-			}
-			continue
-		}
-		if err := w.hydrater.HydrateRemoteObject(ctx, *account, job.URL); err != nil {
-			w.logger.Printf("fetch job %s hydrate failed url=%s attempts=%d: %v", job.ID, job.URL, job.Attempts+1, err)
-			if markErr := w.jobs.MarkFetchJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), err.Error()); markErr != nil {
-				w.logger.Printf("fetch job %s mark failed error failed: %v", job.ID, markErr)
-			}
-			continue
-		}
-		if err := w.jobs.MarkFetchJobFetched(ctx, nil, job.ID, time.Now().UTC()); err != nil {
-			w.logger.Printf("fetch job %s mark fetched failed: %v", job.ID, err)
-		}
+		w.processJob(ctx, job)
 	}
 }
 
+// processJob keeps retry/final-state decisions close to the durable job while
+// delegating actual hydration to the domain use case.
+func (w *FetchWorker) processJob(ctx context.Context, job models.FetchJob) {
+	if w.fetchBlocked(ctx, job.URL) {
+		w.logger.Printf("fetch job %s skipped blocked url=%s", job.ID, job.URL)
+		w.markFetched(ctx, job.ID, "skipped fetched")
+		return
+	}
+
+	account, err := w.accounts.GetAccountByID(ctx, nil, job.AccountID)
+	if err != nil {
+		w.logger.Printf("fetch job %s account lookup failed account_id=%s: %v", job.ID, job.AccountID, err)
+		w.markFailed(ctx, job, err)
+		return
+	}
+
+	if err := w.hydrater.HydrateRemoteObject(ctx, *account, job.URL); err != nil {
+		w.logger.Printf("fetch job %s hydrate failed url=%s attempts=%d: %v", job.ID, job.URL, job.Attempts+1, err)
+		w.markFailed(ctx, job, err)
+		return
+	}
+	w.markFetched(ctx, job.ID, "fetched")
+}
+
+// markFailed centralizes retry bookkeeping for transient fetch failures.
+func (w *FetchWorker) markFailed(ctx context.Context, job models.FetchJob, cause error) {
+	attempts := job.Attempts + 1
+	if err := w.jobs.MarkFetchJobFailed(ctx, nil, job.ID, attempts, nextAttempt(attempts), cause.Error()); err != nil {
+		w.logger.Printf("fetch job %s mark failed error failed: %v", job.ID, err)
+	}
+}
+
+func (w *FetchWorker) markFetched(ctx context.Context, jobID, action string) {
+	if err := w.jobs.MarkFetchJobFetched(ctx, nil, jobID, time.Now().UTC()); err != nil {
+		w.logger.Printf("fetch job %s mark %s failed: %v", jobID, action, err)
+	}
+}
+
+// fetchBlocked applies moderation before invoking remote fetching. The worker
+// depends on the block port, not on moderation storage details.
 func (w *FetchWorker) fetchBlocked(ctx context.Context, raw string) bool {
 	if w.blocks == nil {
 		return false
@@ -114,6 +133,7 @@ func (w *FetchWorker) fetchBlocked(ctx context.Context, raw string) bool {
 	if err != nil || parsed.Host == "" {
 		return false
 	}
+
 	blocked, err := w.blocks.DomainIsSuspended(ctx, nil, strings.ToLower(parsed.Hostname()))
 	return err == nil && blocked
 }

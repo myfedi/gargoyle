@@ -57,72 +57,96 @@ func NormalizeOutboxActivity(raw []byte, account models.Account, activityID, obj
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	typeValue, _ := doc["type"].(string)
-	if typeValue == "" {
-		if _, ok := doc["content"]; ok {
-			typeValue = "Note"
-			doc["type"] = typeValue
-		} else {
-			return nil, domainerrors.New(domainerrors.ErrBadRequest, "activity type is required")
-		}
+
+	typeValue, derr := normalizeOutboxType(doc)
+	if derr != nil {
+		return nil, derr
 	}
-	if typeValue != "Create" {
-		object := doc
-		SanitizeObjectContent(object, sanitizer)
-		if _, ok := object[activityStreamsContextKey]; !ok {
-			object[activityStreamsContextKey] = activityStreamsContextURI
-		}
-		if _, ok := object["id"]; !ok {
-			object["id"] = account.URI + "/objects/" + objectID
-		}
-		if _, ok := object["attributedTo"]; !ok {
-			object["attributedTo"] = account.URI
-		}
-		if _, ok := object["published"]; !ok {
-			object["published"] = now
-		}
-		if _, ok := object["to"]; !ok {
-			object["to"] = []string{activityStreamsPublicURI}
-		}
-		if _, ok := object["cc"]; !ok {
-			object["cc"] = []string{account.FollowersURI}
-		}
-		doc = map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": account.URI + activityPathSegment + activityID, "type": "Create", "actor": account.URI, "published": now, "to": object["to"], "cc": object["cc"], "object": object}
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	// Local outbox clients may submit either a bare object or a full Create.
+	// Normalize both into a Create while preserving caller-provided addressing.
+	if typeValue == "Create" {
+		normalizeCreateActivity(doc, account, activityID, now, sanitizer)
 	} else {
-		if object, ok := doc["object"].(map[string]any); ok {
-			SanitizeObjectContent(object, sanitizer)
-		}
-		if _, ok := doc[activityStreamsContextKey]; !ok {
-			doc[activityStreamsContextKey] = activityStreamsContextURI
-		}
-		if _, ok := doc["id"]; !ok {
-			doc["id"] = account.URI + activityPathSegment + activityID
-		}
-		doc["actor"] = account.URI
-		if _, ok := doc["published"]; !ok {
-			doc["published"] = now
-		}
-		if _, ok := doc["to"]; !ok {
-			doc["to"] = []string{activityStreamsPublicURI}
-		}
-		if _, ok := doc["cc"]; !ok {
-			doc["cc"] = []string{account.FollowersURI}
-		}
-		if object, ok := doc["object"].(map[string]any); ok {
-			if _, ok := object["to"]; !ok {
-				object["to"] = doc["to"]
-			}
-			if _, ok := object["cc"]; !ok {
-				object["cc"] = doc["cc"]
-			}
-		}
+		doc = wrapObjectInCreateActivity(doc, account, activityID, objectID, now, sanitizer)
 	}
 	res, err := json.Marshal(doc)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return res, nil
+}
+
+// normalizeOutboxType accepts the Mastodon-style shorthand where a bare object
+// with content but no explicit type is treated as a Note.
+func normalizeOutboxType(doc map[string]any) (string, *domainerrors.DomainError) {
+	typeValue, _ := doc["type"].(string)
+	if typeValue != "" {
+		return typeValue, nil
+	}
+	if _, ok := doc["content"]; !ok {
+		return "", domainerrors.New(domainerrors.ErrBadRequest, "activity type is required")
+	}
+
+	doc["type"] = "Note"
+	return "Note", nil
+}
+
+// wrapObjectInCreateActivity converts a local bare object submission into the
+// server-owned Create activity we persist and deliver.
+func wrapObjectInCreateActivity(doc map[string]any, account models.Account, activityID, objectID, published string, sanitizer ports.ContentSanitizer) map[string]any {
+	object := doc
+	SanitizeObjectContent(object, sanitizer)
+	ensureObjectDefaults(object, account, objectID, published)
+
+	return map[string]any{
+		activityStreamsContextKey: activityStreamsContextURI,
+		"id":                      account.URI + activityPathSegment + activityID,
+		"type":                    "Create",
+		"actor":                   account.URI,
+		"published":               published,
+		"to":                      object["to"],
+		"cc":                      object["cc"],
+		"object":                  object,
+	}
+}
+
+// normalizeCreateActivity enforces local actor ownership and fills defaults on
+// already-wrapped Create activities without overwriting explicit addressing.
+func normalizeCreateActivity(doc map[string]any, account models.Account, activityID, published string, sanitizer ports.ContentSanitizer) {
+	if object, ok := doc["object"].(map[string]any); ok {
+		SanitizeObjectContent(object, sanitizer)
+	}
+
+	ensureValue(doc, activityStreamsContextKey, activityStreamsContextURI)
+	ensureValue(doc, "id", account.URI+activityPathSegment+activityID)
+	doc["actor"] = account.URI
+	ensureValue(doc, "published", published)
+	ensureValue(doc, "to", []string{activityStreamsPublicURI})
+	ensureValue(doc, "cc", []string{account.FollowersURI})
+
+	if object, ok := doc["object"].(map[string]any); ok {
+		ensureValue(object, "to", doc["to"])
+		ensureValue(object, "cc", doc["cc"])
+	}
+}
+
+// ensureObjectDefaults applies safe local defaults for objects the server wraps.
+func ensureObjectDefaults(object map[string]any, account models.Account, objectID, published string) {
+	ensureValue(object, activityStreamsContextKey, activityStreamsContextURI)
+	ensureValue(object, "id", account.URI+"/objects/"+objectID)
+	ensureValue(object, "attributedTo", account.URI)
+	ensureValue(object, "published", published)
+	ensureValue(object, "to", []string{activityStreamsPublicURI})
+	ensureValue(object, "cc", []string{account.FollowersURI})
+}
+
+// ensureValue fills a missing ActivityPub field while preserving explicit input.
+func ensureValue(doc map[string]any, key string, value any) {
+	if _, ok := doc[key]; !ok {
+		doc[key] = value
+	}
 }
 
 // SanitizeObjectContent applies the configured sanitizer to Note-like objects.

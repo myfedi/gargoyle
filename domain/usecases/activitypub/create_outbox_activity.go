@@ -33,10 +33,13 @@ func (u *CreateOutboxActivityUseCase) CreateOutboxActivity(ctx context.Context, 
 	if derr != nil {
 		return nil, derr
 	}
+	// Normalize before persistence so all local outbox writes use one canonical
+	// ActivityPub representation, regardless of which adapter submitted them.
 	raw, derr := NormalizeOutboxActivity(input.RawJSON, *account, input.ActivityID, input.ObjectID, u.cfg.ContentSanitizer)
 	if derr != nil {
 		return nil, derr
 	}
+
 	activity, derr := ParseActivity(raw)
 	if derr != nil {
 		return nil, derr
@@ -45,40 +48,90 @@ func (u *CreateOutboxActivityUseCase) CreateOutboxActivity(ctx context.Context, 
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "activity actor does not match local actor")
 	}
 
+	// The use case owns the transaction boundary for local state. Network fan-out
+	// is returned to infrastructure after commit through FollowerInboxes.
 	err := u.cfg.TxProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
-		stored, err := u.cfg.ActivitiesRepo.CreateActivity(ctx, &tx, repos.CreateActivityInput{LocalAccountID: account.ID, Direction: models.ActivityDirectionOutbox, Type: activity.Type, Actor: account.URI, Object: activity.Object, RawJSON: string(raw)})
-		if err != nil {
-			return err
-		}
-		if u.cfg.NotesRepo != nil {
-			if note, ok := ExtractNote(raw); ok {
-				replyID, replyURI := replyIDs(ctx, u.cfg.NotesRepo, &tx, note)
-				if err := enqueueMissingReplyFetch(ctx, u.cfg.FetchJobsRepo, &tx, account.ID, note, replyID); err != nil {
-					return err
-				}
-				_, err := u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: stored.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
-				if err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+		return u.persistOutboxActivity(ctx, &tx, *account, activity, raw)
 	})
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 
-	var inboxes []string
-	if u.cfg.FollowsRepo != nil {
-		followers, err := u.cfg.FollowsRepo.ListFollowers(ctx, nil, account.ID)
-		if err != nil {
-			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-		}
-		for _, follower := range followers {
-			if follower.RemoteInbox != nil {
-				inboxes = append(inboxes, *follower.RemoteInbox)
-			}
-		}
+	inboxes, derr := u.followerInboxes(ctx, account.ID)
+	if derr != nil {
+		return nil, derr
 	}
 	return &CreateOutboxActivityResult{Account: *account, RawJSON: raw, FollowerInboxes: inboxes}, nil
+}
+
+// persistOutboxActivity writes the activity and any derived Note inside the
+// caller-owned transaction. It talks only through repository ports, preserving
+// the domain/usecase boundary from storage adapters.
+func (u *CreateOutboxActivityUseCase) persistOutboxActivity(
+	ctx context.Context,
+	tx *db.Tx,
+	account models.Account,
+	activity ParsedActivity,
+	raw []byte,
+) error {
+	stored, err := u.cfg.ActivitiesRepo.CreateActivity(ctx, tx, repos.CreateActivityInput{
+		LocalAccountID: account.ID,
+		Direction:      models.ActivityDirectionOutbox,
+		Type:           activity.Type,
+		Actor:          account.URI,
+		Object:         activity.Object,
+		RawJSON:        string(raw),
+	})
+	if err != nil {
+		return err
+	}
+	if u.cfg.NotesRepo == nil {
+		return nil
+	}
+
+	note, ok := ExtractNote(raw)
+	if !ok {
+		return nil
+	}
+	// Replies may point at remote objects we do not have yet. Enqueueing a fetch
+	// records that dependency without performing network I/O inside the transaction.
+	replyID, replyURI := replyIDs(ctx, u.cfg.NotesRepo, tx, note)
+	if err := enqueueMissingReplyFetch(ctx, u.cfg.FetchJobsRepo, tx, account.ID, note, replyID); err != nil {
+		return err
+	}
+	_, err = u.cfg.NotesRepo.CreateNote(ctx, tx, repos.CreateNoteInput{
+		LocalAccountID: account.ID,
+		ActivityID:     stored.ID,
+		URI:            note.URI,
+		Content:        u.cfg.ContentSanitizer.SanitizeHTML(note.Content),
+		PlainText:      u.cfg.ContentSanitizer.StripHTMLFromText(note.Content),
+		Visibility:     note.Visibility,
+		Sensitive:      note.Sensitive,
+		SpoilerText:    note.SpoilerText,
+		AttributedTo:   note.AttributedTo,
+		InReplyToID:    replyID,
+		InReplyToURI:   replyURI,
+		PublishedAt:    note.PublishedAt,
+	})
+	return err
+}
+
+// followerInboxes returns delivery targets after commit. Delivery itself stays
+// in infrastructure so domain code never performs network side effects.
+func (u *CreateOutboxActivityUseCase) followerInboxes(ctx context.Context, accountID string) ([]string, *domainerrors.DomainError) {
+	if u.cfg.FollowsRepo == nil {
+		return nil, nil
+	}
+	followers, err := u.cfg.FollowsRepo.ListFollowers(ctx, nil, accountID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+
+	inboxes := make([]string, 0, len(followers))
+	for _, follower := range followers {
+		if follower.RemoteInbox != nil {
+			inboxes = append(inboxes, *follower.RemoteInbox)
+		}
+	}
+	return inboxes, nil
 }

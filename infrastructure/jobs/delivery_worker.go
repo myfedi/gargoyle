@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/myfedi/gargoyle/domain/models"
 	apPorts "github.com/myfedi/gargoyle/domain/ports/activitypub"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 )
@@ -71,6 +72,9 @@ func (w *DeliveryWorker) Start(ctx context.Context) {
 	}()
 }
 
+// ProcessOnce claims durable delivery work and delegates each job to a small
+// handler. The worker is infrastructure: ActivityPub delivery is still behind a
+// port and job state is updated through repository ports.
 func (w *DeliveryWorker) ProcessOnce(ctx context.Context) {
 	due, err := w.jobs.ClaimDueDeliveryJobs(ctx, nil, time.Now().UTC(), w.batchSize)
 	if err != nil {
@@ -81,34 +85,51 @@ func (w *DeliveryWorker) ProcessOnce(ctx context.Context) {
 		return
 	}
 	for _, job := range due {
-		if w.deliveryBlocked(ctx, job.InboxURL) {
-			w.logger.Printf("delivery job %s skipped blocked inbox=%s", job.ID, job.InboxURL)
-			if err := w.jobs.MarkDeliveryJobDelivered(ctx, nil, job.ID, time.Now().UTC()); err != nil {
-				w.logger.Printf("delivery job %s mark skipped delivered failed: %v", job.ID, err)
-			}
-			continue
-		}
-		account, err := w.accounts.GetAccountByID(ctx, nil, job.AccountID)
-		if err != nil {
-			w.logger.Printf("delivery job %s account lookup failed account_id=%s: %v", job.ID, job.AccountID, err)
-			if markErr := w.jobs.MarkDeliveryJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), err.Error()); markErr != nil {
-				w.logger.Printf("delivery job %s mark failed error failed: %v", job.ID, markErr)
-			}
-			continue
-		}
-		if err := w.deliverer.Deliver(ctx, job.Payload, job.InboxURL, *account); err != nil {
-			w.logger.Printf("delivery job %s delivery failed inbox=%s attempts=%d: %v", job.ID, job.InboxURL, job.Attempts+1, err)
-			if markErr := w.jobs.MarkDeliveryJobFailed(ctx, nil, job.ID, job.Attempts+1, nextAttempt(job.Attempts+1), err.Error()); markErr != nil {
-				w.logger.Printf("delivery job %s mark failed error failed: %v", job.ID, markErr)
-			}
-			continue
-		}
-		if err := w.jobs.MarkDeliveryJobDelivered(ctx, nil, job.ID, time.Now().UTC()); err != nil {
-			w.logger.Printf("delivery job %s mark delivered failed: %v", job.ID, err)
-		}
+		w.processJob(ctx, job)
 	}
 }
 
+// processJob keeps the happy path linear: skip blocked inboxes, load signer,
+// deliver, then mark final state. Each branch records a durable outcome.
+func (w *DeliveryWorker) processJob(ctx context.Context, job models.DeliveryJob) {
+	if w.deliveryBlocked(ctx, job.InboxURL) {
+		w.logger.Printf("delivery job %s skipped blocked inbox=%s", job.ID, job.InboxURL)
+		w.markDelivered(ctx, job.ID, "skipped delivered")
+		return
+	}
+
+	account, err := w.accounts.GetAccountByID(ctx, nil, job.AccountID)
+	if err != nil {
+		w.logger.Printf("delivery job %s account lookup failed account_id=%s: %v", job.ID, job.AccountID, err)
+		w.markFailed(ctx, job, err)
+		return
+	}
+
+	if err := w.deliverer.Deliver(ctx, job.Payload, job.InboxURL, *account); err != nil {
+		w.logger.Printf("delivery job %s delivery failed inbox=%s attempts=%d: %v", job.ID, job.InboxURL, job.Attempts+1, err)
+		w.markFailed(ctx, job, err)
+		return
+	}
+	w.markDelivered(ctx, job.ID, "delivered")
+}
+
+// markFailed applies retry bookkeeping in one place so claim/deliver logic does
+// not need to know backoff details.
+func (w *DeliveryWorker) markFailed(ctx context.Context, job models.DeliveryJob, cause error) {
+	attempts := job.Attempts + 1
+	if err := w.jobs.MarkDeliveryJobFailed(ctx, nil, job.ID, attempts, nextAttempt(attempts), cause.Error()); err != nil {
+		w.logger.Printf("delivery job %s mark failed error failed: %v", job.ID, err)
+	}
+}
+
+func (w *DeliveryWorker) markDelivered(ctx context.Context, jobID, action string) {
+	if err := w.jobs.MarkDeliveryJobDelivered(ctx, nil, jobID, time.Now().UTC()); err != nil {
+		w.logger.Printf("delivery job %s mark %s failed: %v", jobID, action, err)
+	}
+}
+
+// deliveryBlocked enforces moderation blocks at the network boundary. Domain
+// decisions come from the block repository; the worker only interprets URLs.
 func (w *DeliveryWorker) deliveryBlocked(ctx context.Context, inbox string) bool {
 	if w.blocks == nil {
 		return false
@@ -117,6 +138,7 @@ func (w *DeliveryWorker) deliveryBlocked(ctx context.Context, inbox string) bool
 	if err != nil || parsed.Host == "" {
 		return false
 	}
+
 	blocked, err := w.blocks.DomainIsSuspended(ctx, nil, strings.ToLower(parsed.Hostname()))
 	return err == nil && blocked
 }
