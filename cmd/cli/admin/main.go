@@ -201,6 +201,7 @@ func main() {
 						Email:    email,
 						Username: validUsername,
 						Password: password,
+						Admin:    true,
 					})
 					if derr != nil {
 						return derr
