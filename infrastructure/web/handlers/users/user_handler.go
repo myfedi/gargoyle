@@ -126,7 +126,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		AccountsRepo: cfg.AccountsRepo,
 		Serializer:   cfg.Serializer,
 	})
-	transport := httpActivityPubTransport{client: cfg.HTTPClient, retries: cfg.DeliveryRetries, exceptions: cfg.RemoteURLExceptions}
+	transport := newHTTPActivityPubTransport(cfg.HTTPClient, cfg.DeliveryRetries, cfg.RemoteURLExceptions)
 	if cfg.ActorFetcher == nil {
 		cfg.ActorFetcher = transport
 	}

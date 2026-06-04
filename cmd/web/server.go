@@ -70,6 +70,7 @@ func main() {
 		Debug:      config.Debug,
 		SqlitePath: config.Sqlite.Uri,
 	})
+	defer sqlite.Bun.Close()
 
 	usersRepo := repos.NewUsersRepo(sqlite.Bun)
 	accountsRepo := repos.NewAccountsRepo(sqlite.Bun)
@@ -222,6 +223,7 @@ func main() {
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdown)
 	select {
 	case err := <-serverErr:
 		if err != nil {
@@ -234,6 +236,5 @@ func main() {
 		if err := app.ShutdownWithContext(ctx); err != nil {
 			panic(err)
 		}
-		_ = sqlite.Bun.Close()
 	}
 }

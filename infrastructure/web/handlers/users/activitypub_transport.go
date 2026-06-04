@@ -41,27 +41,28 @@ type httpActivityPubTransport struct {
 	exceptions []RemoteURLException
 }
 
-func (t httpActivityPubTransport) httpClient() *http.Client {
-	client := &http.Client{}
-	if t.client != nil {
-		copy := *t.client
+func newHTTPActivityPubTransport(client *http.Client, retries int, exceptions []RemoteURLException) httpActivityPubTransport {
+	if client == nil {
+		client = &http.Client{}
+	} else {
+		copy := *client
 		client = &copy
 	}
 	if client.Timeout == 0 {
 		client.Timeout = 10 * time.Second
 	}
 	if client.Transport == nil {
-		client.Transport = publicOnlyTransport(t.exceptions)
+		client.Transport = publicOnlyTransport(exceptions)
 	}
 	if client.CheckRedirect == nil {
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
 				return errors.New("too many redirects")
 			}
-			return validateRemoteURL(req.Context(), req.URL.String(), t.exceptions)
+			return validateRemoteURL(req.Context(), req.URL.String(), exceptions)
 		}
 	}
-	return client
+	return httpActivityPubTransport{client: client, retries: retries, exceptions: exceptions}
 }
 
 func publicOnlyTransport(exceptions []RemoteURLException) *http.Transport {
@@ -151,7 +152,7 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 	if err := validateRemoteURL(ctx, actor, t.exceptions); err != nil {
 		return nil, err
 	}
-	client := t.httpClient()
+	client := t.client
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, actor, nil)
 	if err != nil {
 		return nil, err
@@ -183,7 +184,7 @@ func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbo
 	if err := validateRemoteURL(ctx, inbox, t.exceptions); err != nil {
 		return err
 	}
-	client := t.httpClient()
+	client := t.client
 	retries := t.retries
 	if retries < 1 {
 		retries = 3
