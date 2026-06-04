@@ -87,9 +87,9 @@ async function createPkceChallenge(verifier: string) {
 function base64UrlEncode(bytes: Uint8Array) {
   let binary = "";
   bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
+    binary += String.fromCodePoint(byte);
   });
-  return trimBase64UrlPadding(btoa(binary).replace(/\+/g, "-").replace(/\//g, "_"));
+  return trimBase64UrlPadding(btoa(binary).replaceAll("+", "-").replaceAll("/", "_"));
 }
 
 function trimBase64UrlPadding(value: string) {
