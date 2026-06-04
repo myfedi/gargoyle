@@ -50,7 +50,7 @@ func (u UseCase) ResolveAccountSearch(ctx context.Context, account *models.Accou
 	}
 	remote, err := u.resolveAndCacheRemoteAccount(ctx, query, account)
 	if err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
+		return nil, remoteResolveError(err)
 	}
 	if derr := u.ensureRemoteDomainAllowed(ctx, remote.URI); derr != nil {
 		return nil, derr
@@ -110,6 +110,17 @@ func (u UseCase) UnfollowAccount(ctx context.Context, localAccount *models.Accou
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return &FollowAccountResult{Account: *localAccount, RawJSON: raw, Inbox: remote.InboxURI}, nil
+}
+
+func remoteResolveError(err error) *domainerrors.DomainError {
+	message := err.Error()
+	if strings.Contains(message, "actor fetch failed with status 401") || strings.Contains(message, "actor fetch failed with status 403") {
+		return domainerrors.New(domainerrors.ErrBadRequest, "Remote server rejected the lookup. It may require signed requests and could not verify this server's public ActivityPub identity.")
+	}
+	if strings.Contains(message, "webfinger failed with status 404") {
+		return domainerrors.New(domainerrors.ErrNotFound, "No remote account found.")
+	}
+	return domainerrors.New(domainerrors.ErrBadRequest, "Could not look up that remote account.")
 }
 
 func (u UseCase) resolveAndCacheRemoteAccount(ctx context.Context, query string, signer *models.Account) (*models.Account, error) {

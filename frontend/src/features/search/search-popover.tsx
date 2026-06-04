@@ -29,7 +29,7 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
     onClose();
   }
 
-  async function resolveAccount(searchQuery: string) {
+  const resolveAccount = useCallback(async (searchQuery: string) => {
     if (!api || !searchQuery.trim()) return;
     setIsResolving(true);
 
@@ -42,7 +42,7 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
     } finally {
       setIsResolving(false);
     }
-  }
+  }, [api]);
 
   return (
     <>

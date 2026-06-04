@@ -31,7 +31,7 @@ export function DirectMessageForm({ forwardedStatus, onSent, onCancel }: DirectM
     return api.searchKnownAccounts(searchQuery);
   }, [api]);
 
-  async function resolveAccount(searchQuery: string) {
+  const resolveAccount = useCallback(async (searchQuery: string) => {
     if (!api || !searchQuery.trim()) return;
     setIsResolving(true);
     setError(null);
@@ -42,7 +42,7 @@ export function DirectMessageForm({ forwardedStatus, onSent, onCancel }: DirectM
     } finally {
       setIsResolving(false);
     }
-  }
+  }, [api]);
 
   function chooseRecipient(account: MastodonAccount) {
     setRecipient(account);

@@ -536,7 +536,12 @@ func (h APIHandler) accountsSearch(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	accounts, derr := h.api.SearchAccounts(c.UserContext(), principal.Account, c.Query("q"), c.QueryInt("limit"))
+	var accounts []models.Account
+	if c.QueryBool("resolve") {
+		accounts, derr = h.api.ResolveAccountSearch(c.UserContext(), principal.Account, c.Query("q"))
+	} else {
+		accounts, derr = h.api.SearchAccounts(c.UserContext(), principal.Account, c.Query("q"), c.QueryInt("limit"))
+	}
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}

@@ -52,7 +52,6 @@ export function AccountCombobox({
       setIsSearching(true);
       setIsOpen(true);
       setLocalError(null);
-      setRemoteError(null);
 
       searchKnownAccounts(knownAccountSearchQuery(trimmedValue))
         .then((accounts) => {
@@ -65,7 +64,7 @@ export function AccountCombobox({
             setIsRemoteLookupRunning(true);
             Promise.resolve(onResolve(normalizedQuery))
               .then((resolvedAccounts) => {
-                if (searchIdRef.current === searchId && Array.isArray(resolvedAccounts)) {
+                if (isCurrentRemoteLookup(searchIdRef.current, searchId, resolvedQueryRef.current, normalizedQuery) && Array.isArray(resolvedAccounts)) {
                   setResults(resolvedAccounts);
                   if (resolvedAccounts.length === 0) {
                     setRemoteError("No remote account found.");
@@ -73,12 +72,12 @@ export function AccountCombobox({
                 }
               })
               .catch((caughtError: unknown) => {
-                if (searchIdRef.current === searchId) {
+                if (isCurrentRemoteLookup(searchIdRef.current, searchId, resolvedQueryRef.current, normalizedQuery)) {
                   setRemoteError(remoteLookupMessage(caughtError, trimmedValue));
                 }
               })
               .finally(() => {
-                if (searchIdRef.current === searchId) {
+                if (isCurrentRemoteLookup(searchIdRef.current, searchId, resolvedQueryRef.current, normalizedQuery)) {
                   setIsRemoteLookupRunning(false);
                 }
               });
@@ -162,20 +161,24 @@ export function AccountCombobox({
               {[0, 1].map((item) => <div key={item} className="h-12 animate-pulse rounded-md bg-secondary" />)}
             </div>
           ) : remoteError ? (
-            <p className="p-3 text-sm text-destructive">{remoteError}</p>
+            <p className="p-3 text-sm text-destructive" role="alert">{remoteError}</p>
           ) : localError ? (
-            <p className="p-3 text-sm text-destructive">{localError}</p>
+            <p className="p-3 text-sm text-destructive" role="alert">{localError}</p>
           ) : showRemoteHint ? (
             <p className="p-3 text-sm text-muted-foreground">Looking up remote account...</p>
           ) : canResolve && hasTriedRemote ? (
             <p className="p-3 text-sm text-muted-foreground">No remote account found.</p>
           ) : (
-            <p className="p-3 text-sm text-muted-foreground">No known accounts.</p>
+            <p className="p-3 text-sm text-muted-foreground">No known accounts found.</p>
           )}
         </div>
       ) : null}
     </div>
   );
+}
+
+function isCurrentRemoteLookup(currentSearchId: number, searchId: number, currentResolvedQuery: string | null, normalizedQuery: string) {
+  return currentSearchId === searchId || currentResolvedQuery === normalizedQuery;
 }
 
 function AccountResultAvatar({ account }: { account: MastodonAccount }) {
@@ -235,6 +238,9 @@ function remoteLookupMessage(error: unknown, query: string) {
   }
   if (error instanceof ApiError && error.status === 404) {
     return "No remote account found.";
+  }
+  if (error instanceof ApiError && (error.status === 400 || error.status === 401 || error.status === 403) && message) {
+    return message;
   }
   if (isProfileUrl(query)) {
     return "Could not look up that profile URL.";
