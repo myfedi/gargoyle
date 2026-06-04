@@ -28,7 +28,6 @@ type TimelineCacheEntry = {
   statuses: MastodonStatus[];
   currentAccount: MastodonAccount | null;
   hasMore: boolean;
-  scrollY: number;
 };
 
 type PostsPageProps = {
@@ -58,6 +57,11 @@ function writeTimelineCache() {
   }
 }
 
+function clearTimelineCache(timeline: TimelineTab) {
+  delete timelineCache[timeline];
+  writeTimelineCache();
+}
+
 function validTimelineCache(timeline: TimelineTab) {
   const cached = timelineCache[timeline];
   return cached?.timeline === timeline ? cached : undefined;
@@ -85,7 +89,6 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
 
   const restoredTimelineRef = useRef<TimelineTab | null>(null);
   const pendingAnchorRef = useRef<string | null>(anchorFromRoute);
-  const pendingScrollYRef = useRef<number | null>(anchorFromRoute ? null : initialCache?.scrollY ?? null);
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
 
   const searchKnownAccounts = useCallback(async (query: string) => {
@@ -93,8 +96,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     return api.searchKnownAccounts(query);
   }, [api]);
 
-  const saveCurrentTimeline = useCallback((scrollY = window.scrollY) => {
-    timelineCache[activeTimeline] = { timeline: activeTimeline, statuses, currentAccount, hasMore, scrollY };
+  const saveCurrentTimeline = useCallback(() => {
+    timelineCache[activeTimeline] = { timeline: activeTimeline, statuses, currentAccount, hasMore };
     writeTimelineCache();
   }, [activeTimeline, currentAccount, hasMore, statuses]);
 
@@ -144,7 +147,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   }, [saveCurrentTimeline]);
 
   useEffect(() => {
-    const cached = validTimelineCache(activeTimeline);
+    const cached = pendingAnchorRef.current ? validTimelineCache(activeTimeline) : undefined;
     if (cached?.statuses.length) {
       setStatuses(cached.statuses);
       setCurrentAccount(cached.currentAccount);
@@ -153,9 +156,6 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
       setTimelineError(null);
       if (restoredTimelineRef.current !== activeTimeline) {
         restoredTimelineRef.current = activeTimeline;
-        if (!pendingAnchorRef.current) {
-          pendingScrollYRef.current = cached.scrollY;
-        }
       }
       return;
     }
@@ -183,17 +183,6 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
       return () => timeouts.forEach((timeout) => window.clearTimeout(timeout));
     }
 
-    if (pendingScrollYRef.current === null) {
-      return;
-    }
-    const top = pendingScrollYRef.current;
-    pendingScrollYRef.current = null;
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => window.scrollTo({ top, behavior: "auto" }));
-    });
-    const timeouts = [50, 150, 350, 750].map((delay) => window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), delay));
-    return () => timeouts.forEach((timeout) => window.clearTimeout(timeout));
   }, [isLoading, statuses.length]);
 
   async function loadMore() {
@@ -214,7 +203,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
       setStatuses((current) => {
         const seen = new Set(current.map((status) => status.id));
         const merged = [...current, ...nextStatuses.filter((status) => !seen.has(status.id))];
-        timelineCache[activeTimeline] = { timeline: activeTimeline, statuses: merged, currentAccount, hasMore: nextStatuses.length >= timelineLimit, scrollY: window.scrollY };
+        timelineCache[activeTimeline] = { timeline: activeTimeline, statuses: merged, currentAccount, hasMore: nextStatuses.length >= timelineLimit };
         writeTimelineCache();
         return merged;
       });
@@ -226,7 +215,15 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   }
 
   function navigateTimeline(timeline: TimelineTab) {
-    saveCurrentTimeline();
+    if (timeline === activeTimeline) {
+      return;
+    }
+    clearTimelineCache(timeline);
+    restoredTimelineRef.current = null;
+    pendingAnchorRef.current = null;
+    setStatuses([]);
+    setHasMore(true);
+    setTimelineError(null);
     setActiveTimeline(timeline);
     window.location.hash = timeline;
   }
@@ -341,7 +338,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     const href = link?.getAttribute("href") ?? "";
     const statusId = statusIdFromHref(href);
     if (statusId) {
-      saveCurrentTimeline(window.scrollY);
+      saveCurrentTimeline();
       window.history.replaceState(null, "", timelineHash(activeTimeline, statusId));
     }
   }
