@@ -12,7 +12,7 @@ export async function createAuthorizationUrl(config: OAuthClientConfig) {
   sessionStorage.setItem(verifierStorageKey, verifier);
   sessionStorage.setItem(stateStorageKey, state);
 
-  const url = new URL(config.authorizationEndpoint, window.location.origin);
+  const url = new URL(config.authorizationEndpoint, globalThis.location.origin);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", config.clientId);
   url.searchParams.set("redirect_uri", config.redirectUri);
@@ -38,7 +38,7 @@ export async function exchangeAuthorizationCode(config: OAuthClientConfig, code:
     code_verifier: verifier,
   };
 
-  const tokenUrl = new URL(config.tokenEndpoint, window.location.origin);
+  const tokenUrl = new URL(config.tokenEndpoint, globalThis.location.origin);
 
   const response = await fetch(tokenUrl, {
     method: "POST",

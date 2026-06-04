@@ -24,7 +24,7 @@ export function getOAuthConfig(): OAuthClientConfig | null {
     clientId,
     authorizationEndpoint: import.meta.env.VITE_GARGOYLE_OAUTH_AUTHORIZE_URL ?? `${baseUrl}/oauth/authorize`,
     tokenEndpoint: import.meta.env.VITE_GARGOYLE_OAUTH_TOKEN_URL ?? `${baseUrl}/oauth/token`,
-    redirectUri: import.meta.env.VITE_GARGOYLE_OAUTH_REDIRECT_URI ?? `${window.location.origin}/oauth/callback`,
+    redirectUri: import.meta.env.VITE_GARGOYLE_OAUTH_REDIRECT_URI ?? `${globalThis.location.origin}/oauth/callback`,
     scopes: parseScopes(import.meta.env.VITE_GARGOYLE_OAUTH_SCOPES ?? "read write follow"),
   };
 }

@@ -48,7 +48,7 @@ export function AccountCombobox({
 
     const searchId = searchIdRef.current + 1;
     searchIdRef.current = searchId;
-    const timeout = window.setTimeout(() => {
+    const timeout = globalThis.setTimeout(() => {
       setIsSearching(true);
       setIsOpen(true);
       setLocalError(null);
@@ -97,7 +97,7 @@ export function AccountCombobox({
         });
     }, 250);
 
-    return () => window.clearTimeout(timeout);
+    return () => globalThis.clearTimeout(timeout);
   }, [onResolve, searchKnownAccounts, trimmedValue]);
 
   const normalizedValue = normalizeRemoteQuery(trimmedValue);

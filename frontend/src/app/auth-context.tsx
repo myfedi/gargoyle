@@ -28,7 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function completeOAuthIfPresent() {
-      const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(globalThis.location.search);
       const code = params.get("code");
       const state = params.get("state");
       const oauthError = params.get("error_description") ?? params.get("error");
@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(nextSession);
         setError(null);
         setStatus("authenticated");
-        window.history.replaceState({}, document.title, "/");
+        globalThis.history.replaceState({}, document.title, "/");
       } catch (caughtError) {
         if (cancelled) {
           return;
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const expiresAtMs = (session.createdAt + session.expiresIn) * 1000;
-    const timeout = window.setTimeout(() => {
+    const timeout = globalThis.setTimeout(() => {
       if (Date.now() < expiresAtMs) {
         return;
       }
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setError("Your session expired. Sign in again.");
     }, sessionExpiryCheckDelay(expiresAtMs));
 
-    return () => window.clearTimeout(timeout);
+    return () => globalThis.clearTimeout(timeout);
   }, [session]);
 
   const signIn = useCallback(async () => {
@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const url = await createAuthorizationUrl(config);
-    window.location.assign(url.toString());
+    globalThis.location.assign(url.toString());
   }, []);
 
   const signOut = useCallback(() => {

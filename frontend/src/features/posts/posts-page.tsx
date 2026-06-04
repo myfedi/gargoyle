@@ -38,11 +38,11 @@ const timelineCacheStorageKey = "gargoyle.timelineCache.v2";
 const timelineCache: Partial<Record<TimelineTab, TimelineCacheEntry>> = readTimelineCache();
 
 function readTimelineCache(): Partial<Record<TimelineTab, TimelineCacheEntry>> {
-  if (typeof window === "undefined") {
+  if (typeof globalThis.sessionStorage === "undefined") {
     return {};
   }
   try {
-    const raw = window.sessionStorage.getItem(timelineCacheStorageKey);
+    const raw = globalThis.sessionStorage.getItem(timelineCacheStorageKey);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -51,7 +51,7 @@ function readTimelineCache(): Partial<Record<TimelineTab, TimelineCacheEntry>> {
 
 function writeTimelineCache() {
   try {
-    window.sessionStorage.setItem(timelineCacheStorageKey, JSON.stringify(timelineCache));
+    globalThis.sessionStorage.setItem(timelineCacheStorageKey, JSON.stringify(timelineCache));
   } catch {
     // Ignore storage quota/private-mode failures. The in-memory cache still works.
   }
@@ -151,8 +151,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
 
   useEffect(() => {
     const save = () => saveCurrentTimeline();
-    window.addEventListener("pagehide", save);
-    return () => window.removeEventListener("pagehide", save);
+    globalThis.addEventListener("pagehide", save);
+    return () => globalThis.removeEventListener("pagehide", save);
   }, [saveCurrentTimeline]);
 
   useEffect(() => {
@@ -188,8 +188,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
         pendingAnchorRef.current = null;
       };
       requestAnimationFrame(() => requestAnimationFrame(scrollToAnchor));
-      const timeouts = [50, 150, 350, 750].map((delay) => window.setTimeout(scrollToAnchor, delay));
-      return () => timeouts.forEach((timeout) => window.clearTimeout(timeout));
+      const timeouts = [50, 150, 350, 750].map((delay) => globalThis.setTimeout(scrollToAnchor, delay));
+      return () => timeouts.forEach((timeout) => globalThis.clearTimeout(timeout));
     }
 
   }, [isLoading, statuses.length]);
@@ -235,7 +235,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     setHasMore(true);
     setTimelineError(null);
     setActiveTimeline(timeline);
-    window.location.hash = timeline;
+    globalThis.location.hash = timeline;
   }
 
   function loadTimelinePage(timeline: TimelineTab, maxId?: string) {
@@ -349,7 +349,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     const statusId = statusIdFromHref(href);
     if (statusId) {
       saveCurrentTimeline();
-      window.history.replaceState(null, "", timelineHash(activeTimeline, statusId));
+      globalThis.history.replaceState(null, "", timelineHash(activeTimeline, statusId));
     }
   }
 

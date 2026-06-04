@@ -95,7 +95,7 @@ export function ComposeForm({
     }
 
     let cancelled = false;
-    const timeout = window.setTimeout(() => {
+    const timeout = globalThis.setTimeout(() => {
       setIsSearchingMentions(true);
       setMentionError(null);
       searchKnownAccounts(mentionSearchQuery)
@@ -112,7 +112,7 @@ export function ComposeForm({
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timeout);
+      globalThis.clearTimeout(timeout);
     };
   }, [mentionSearchQuery, searchKnownAccounts]);
 
@@ -146,7 +146,7 @@ export function ComposeForm({
     setStatus(nextStatus);
     setCaretPosition(nextCaretPosition);
     setMentionResults([]);
-    window.setTimeout(() => {
+    globalThis.setTimeout(() => {
       textareaRef.current?.focus();
       textareaRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition);
     }, 0);

@@ -25,7 +25,7 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
   }, [api]);
 
   function openAccount(account: MastodonAccount) {
-    window.location.hash = accountHref(account.id).replace(/^\//, "");
+    globalThis.location.hash = accountHref(account.id).replace(/^\//, "");
     onClose();
   }
 
@@ -91,7 +91,7 @@ export function SearchPopover({ onClose }: SearchPopoverProps) {
 function isLocalUrl(value: string) {
   try {
     const url = new URL(value);
-    return url.hostname === window.location.hostname;
+    return url.hostname === globalThis.location.hostname;
   } catch {
     return false;
   }

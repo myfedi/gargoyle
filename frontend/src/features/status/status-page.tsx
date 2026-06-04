@@ -108,7 +108,7 @@ export function StatusPage({ route }: StatusPageProps) {
 
     try {
       await api.deleteStatus(statusToDelete.id);
-      window.location.hash = "#/";
+      globalThis.location.hash = "#/";
       return true;
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not delete post.");
@@ -226,7 +226,7 @@ export function StatusPage({ route }: StatusPageProps) {
         />
       ) : null}
 
-      <Button variant="outline" onClick={() => window.history.back()}>Back</Button>
+      <Button variant="outline" onClick={() => globalThis.history.back()}>Back</Button>
       <Dialog open={Boolean(forwardingStatus)} onOpenChange={(open) => !open && setForwardingStatus(null)}>
         <DialogContent>
           <DialogHeader>
