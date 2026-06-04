@@ -210,7 +210,7 @@ func (f *fakeNotesRepo) ListKnownRemoteTimelineNotesPaged(ctx context.Context, t
 func (f *fakeNotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *db.Tx, localAccountID string, attributedTo string, limit int, maxID string) ([]models.Note, error) {
 	return f.notes, nil
 }
-func (f *fakeNotesRepo) ListReplies(ctx context.Context, tx *db.Tx, localAccountID string, parentID string) ([]models.Note, error) {
+func (f *fakeNotesRepo) ListReplies(ctx context.Context, tx *db.Tx, localAccountID string, parentID string, parentURI string) ([]models.Note, error) {
 	return f.notes, nil
 }
 

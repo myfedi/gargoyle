@@ -90,22 +90,50 @@ func (u UseCase) StatusContext(ctx context.Context, localAccount *models.Account
 	if derr != nil {
 		return nil, derr
 	}
-	replies, err := u.cfg.NotesRepo.ListReplies(ctx, nil, localAccount.ID, statusID)
-	if err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	seen := map[string]bool{item.Note.ID: true}
+	for _, ancestor := range ancestors {
+		seen[ancestor.Note.ID] = true
 	}
-	descendants, derr := u.timelineItems(ctx, localAccount, replies)
+	descendants, derr := u.statusDescendants(ctx, localAccount, item.Note, 0, seen)
 	if derr != nil {
 		return nil, derr
 	}
-	return &StatusContext{Ancestors: ancestors, Descendants: descendants}, nil
+	return &StatusContext{Ancestors: uniqueTimelineItems(ancestors), Descendants: uniqueTimelineItems(descendants)}, nil
+}
+
+func (u UseCase) statusDescendants(ctx context.Context, localAccount *models.Account, note models.Note, depth int, seen map[string]bool) ([]TimelineItem, *domainerrors.DomainError) {
+	if depth >= 40 {
+		return []TimelineItem{}, nil
+	}
+	replies, err := u.cfg.NotesRepo.ListReplies(ctx, nil, localAccount.ID, note.ID, note.URI)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	descendants := make([]TimelineItem, 0, len(replies))
+	for _, reply := range replies {
+		if seen[reply.ID] {
+			continue
+		}
+		seen[reply.ID] = true
+		items, derr := u.timelineItems(ctx, localAccount, []models.Note{reply})
+		if derr != nil {
+			return nil, derr
+		}
+		descendants = append(descendants, items...)
+		childItems, derr := u.statusDescendants(ctx, localAccount, reply, depth+1, seen)
+		if derr != nil {
+			return nil, derr
+		}
+		descendants = append(descendants, childItems...)
+	}
+	return descendants, nil
 }
 
 func (u UseCase) statusAncestors(ctx context.Context, localAccount *models.Account, note models.Note) ([]TimelineItem, *domainerrors.DomainError) {
-	return u.statusAncestorsWithDepth(ctx, localAccount, note, 0)
+	return u.statusAncestorsWithDepth(ctx, localAccount, note, 0, map[string]bool{note.ID: true})
 }
 
-func (u UseCase) statusAncestorsWithDepth(ctx context.Context, localAccount *models.Account, note models.Note, depth int) ([]TimelineItem, *domainerrors.DomainError) {
+func (u UseCase) statusAncestorsWithDepth(ctx context.Context, localAccount *models.Account, note models.Note, depth int, seen map[string]bool) ([]TimelineItem, *domainerrors.DomainError) {
 	if depth >= 40 {
 		return []TimelineItem{}, nil
 	}
@@ -113,10 +141,11 @@ func (u UseCase) statusAncestorsWithDepth(ctx context.Context, localAccount *mod
 	if derr != nil {
 		return nil, derr
 	}
-	if parent == nil {
+	if parent == nil || seen[parent.ID] {
 		return []TimelineItem{}, nil
 	}
-	items, derr := u.statusAncestorsWithDepth(ctx, localAccount, *parent, depth+1)
+	seen[parent.ID] = true
+	items, derr := u.statusAncestorsWithDepth(ctx, localAccount, *parent, depth+1, seen)
 	if derr != nil {
 		return nil, derr
 	}
@@ -134,6 +163,23 @@ func (u UseCase) statusAncestorsWithDepth(ctx context.Context, localAccount *mod
 	}
 	items = append(items, *item)
 	return items, nil
+}
+
+func uniqueTimelineItems(items []TimelineItem) []TimelineItem {
+	seen := make(map[string]bool, len(items))
+	unique := make([]TimelineItem, 0, len(items))
+	for _, item := range items {
+		id := item.Note.ID
+		if id == "" {
+			id = item.ID
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		unique = append(unique, item)
+	}
+	return unique
 }
 
 func (u UseCase) parentNote(ctx context.Context, localAccount *models.Account, note models.Note) (*models.Note, *domainerrors.DomainError) {
@@ -176,6 +222,7 @@ func (u UseCase) cacheRemoteContextNote(ctx context.Context, localAccount *model
 	if !ok || note.URI == "" || note.Visibility == "direct" {
 		return nil
 	}
+	replyID, replyURI := u.remoteReplyIDs(ctx, localAccount, note)
 	return u.cfg.TxProvider.RunInTx(ctx, nil, func(ctx context.Context, tx db.Tx) error {
 		if _, err := u.cfg.NotesRepo.GetNoteByURI(ctx, &tx, note.URI); err == nil {
 			return nil
@@ -186,7 +233,6 @@ func (u UseCase) cacheRemoteContextNote(ctx context.Context, localAccount *model
 		if err != nil {
 			return err
 		}
-		replyID, replyURI := u.remoteReplyIDs(ctx, localAccount, note)
 		_, err = u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: localAccount.ID, ActivityID: activity.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
 		return err
 	})

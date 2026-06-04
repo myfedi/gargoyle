@@ -17,6 +17,17 @@ type StatusPageProps = {
   route: string;
 };
 
+function uniqueStatuses(statuses: MastodonStatus[]) {
+  const seen = new Set<string>();
+  return statuses.filter((status) => {
+    if (seen.has(status.id)) {
+      return false;
+    }
+    seen.add(status.id);
+    return true;
+  });
+}
+
 export function StatusPage({ route }: StatusPageProps) {
   const { session } = useAuth();
   const statusId = decodeRouteParam(route.split("/")[2]);
@@ -155,7 +166,10 @@ export function StatusPage({ route }: StatusPageProps) {
     }
   }
 
-  const fullThread = [...ancestors, ...(status ? [status] : []), ...descendants];
+  const fullThread = useMemo(
+    () => uniqueStatuses([...ancestors, ...(status ? [status] : []), ...descendants]),
+    [ancestors, descendants, status],
+  );
 
   return (
     <section className="mx-auto max-w-2xl space-y-5">

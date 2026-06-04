@@ -305,7 +305,7 @@ type noteListFilter struct {
 	maxID            string
 }
 
-func (r *NotesRepo) ListReplies(ctx context.Context, tx *dbPorts.Tx, localAccountID string, parentID string) ([]models.Note, error) {
+func (r *NotesRepo) ListReplies(ctx context.Context, tx *dbPorts.Tx, localAccountID string, parentID string, parentURI string) ([]models.Note, error) {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)
@@ -315,7 +315,15 @@ func (r *NotesRepo) ListReplies(ctx context.Context, tx *dbPorts.Tx, localAccoun
 		db = adapted.Unwrap()
 	}
 	var notes []dbModels.Note
-	err := db.NewSelect().Model(&notes).Where("local_account_id = ?", localAccountID).Where("in_reply_to_id = ?", parentID).Order("published_at ASC", "id ASC").Scan(ctx)
+	query := db.NewSelect().Model(&notes).Where("local_account_id = ?", localAccountID)
+	if parentURI != "" {
+		query = query.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("in_reply_to_id = ?", parentID).WhereOr("in_reply_to_uri = ?", parentURI)
+		})
+	} else {
+		query = query.Where("in_reply_to_id = ?", parentID)
+	}
+	err := query.Order("published_at ASC", "id ASC").Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
