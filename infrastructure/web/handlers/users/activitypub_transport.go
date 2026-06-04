@@ -304,7 +304,11 @@ func (t httpActivityPubTransport) VerifyInbound(ctx context.Context, input activ
 	}
 	signed := signatureString(input.Method, input.URL, headerValues, headers)
 	hash := sha256.Sum256([]byte(signed))
-	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, hash[:], sig); err != nil {
+	// ActivityPub HTTP Signatures commonly use "rsa-sha256", which maps to
+	// RSASSA-PKCS1-v1_5 with SHA-256. RSA-PSS would be preferable for new
+	// protocols, but would break compatibility with many federation peers.
+	// This is a signature operation, not RSA encryption.
+	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, hash[:], sig); err != nil { // NOSONAR
 		return domainerrors.NewErr(domainerrors.ErrUnauthorized, err)
 	}
 	return nil
