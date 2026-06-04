@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ const timelineLimit = 20;
 type TimelineTab = (typeof timelineTabs)[number]["value"];
 
 type TimelineCacheEntry = {
+  timeline: TimelineTab;
   statuses: MastodonStatus[];
   currentAccount: MastodonAccount | null;
   hasMore: boolean;
@@ -34,12 +35,38 @@ type PostsPageProps = {
   route?: string;
 };
 
-const timelineCache: Partial<Record<TimelineTab, TimelineCacheEntry>> = {};
+const timelineCacheStorageKey = "gargoyle.timelineCache.v2";
+const timelineCache: Partial<Record<TimelineTab, TimelineCacheEntry>> = readTimelineCache();
+
+function readTimelineCache(): Partial<Record<TimelineTab, TimelineCacheEntry>> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.sessionStorage.getItem(timelineCacheStorageKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeTimelineCache() {
+  try {
+    window.sessionStorage.setItem(timelineCacheStorageKey, JSON.stringify(timelineCache));
+  } catch {
+    // Ignore storage quota/private-mode failures. The in-memory cache still works.
+  }
+}
+
+function validTimelineCache(timeline: TimelineTab) {
+  const cached = timelineCache[timeline];
+  return cached?.timeline === timeline ? cached : undefined;
+}
 
 export function PostsPage({ route = "/" }: PostsPageProps) {
   const { session } = useAuth();
   const timelineFromRoute = routeToTimeline(route);
-  const initialCache = timelineCache[timelineFromRoute];
+  const initialCache = validTimelineCache(timelineFromRoute);
   const [activeTimeline, setActiveTimeline] = useState<TimelineTab>(timelineFromRoute);
   const [statuses, setStatuses] = useState<MastodonStatus[]>(initialCache?.statuses ?? []);
   const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(initialCache?.currentAccount ?? null);
@@ -63,6 +90,11 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     if (!api) return [];
     return api.searchKnownAccounts(query);
   }, [api]);
+
+  const saveCurrentTimeline = useCallback((scrollY = window.scrollY) => {
+    timelineCache[activeTimeline] = { timeline: activeTimeline, statuses, currentAccount, hasMore, scrollY };
+    writeTimelineCache();
+  }, [activeTimeline, currentAccount, hasMore, statuses]);
 
   const loadTimeline = useCallback(
     async (timeline: TimelineTab, options: { silent?: boolean } = {}) => {
@@ -99,13 +131,17 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   }, [activeTimeline, timelineFromRoute]);
 
   useEffect(() => {
-    return () => {
-      timelineCache[activeTimeline] = { statuses, currentAccount, hasMore, scrollY: window.scrollY };
-    };
-  }, [activeTimeline, currentAccount, hasMore, statuses]);
+    return () => saveCurrentTimeline();
+  }, [saveCurrentTimeline]);
 
   useEffect(() => {
-    const cached = timelineCache[activeTimeline];
+    const save = () => saveCurrentTimeline();
+    window.addEventListener("pagehide", save);
+    return () => window.removeEventListener("pagehide", save);
+  }, [saveCurrentTimeline]);
+
+  useEffect(() => {
+    const cached = validTimelineCache(activeTimeline);
     if (cached?.statuses.length) {
       setStatuses(cached.statuses);
       setCurrentAccount(cached.currentAccount);
@@ -133,8 +169,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => window.scrollTo({ top, behavior: "auto" }));
     });
-    const timeout = window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), 100);
-    return () => window.clearTimeout(timeout);
+    const timeouts = [50, 150, 350, 750].map((delay) => window.setTimeout(() => window.scrollTo({ top, behavior: "auto" }), delay));
+    return () => timeouts.forEach((timeout) => window.clearTimeout(timeout));
   }, [isLoading, statuses.length]);
 
   async function loadMore() {
@@ -155,7 +191,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
       setStatuses((current) => {
         const seen = new Set(current.map((status) => status.id));
         const merged = [...current, ...nextStatuses.filter((status) => !seen.has(status.id))];
-        timelineCache[activeTimeline] = { statuses: merged, currentAccount, hasMore: nextStatuses.length >= timelineLimit, scrollY: window.scrollY };
+        timelineCache[activeTimeline] = { timeline: activeTimeline, statuses: merged, currentAccount, hasMore: nextStatuses.length >= timelineLimit, scrollY: window.scrollY };
+        writeTimelineCache();
         return merged;
       });
     } catch (caughtError) {
@@ -166,7 +203,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   }
 
   function navigateTimeline(timeline: TimelineTab) {
-    timelineCache[activeTimeline] = { statuses, currentAccount, hasMore, scrollY: window.scrollY };
+    saveCurrentTimeline();
     setActiveTimeline(timeline);
     window.location.hash = timeline;
   }
@@ -272,6 +309,18 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     }
   }
 
+  function handleTimelineClick(event: MouseEvent<HTMLElement>) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const link = target.closest("a");
+    const href = link?.getAttribute("href") ?? "";
+    if (href.includes("#/statuses/")) {
+      saveCurrentTimeline(window.scrollY);
+    }
+  }
+
   async function submitPost(values: ComposeValues) {
     if (!api) {
       return;
@@ -299,7 +348,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   }
 
   return (
-    <section className="mx-auto max-w-2xl space-y-5">
+    <section className="mx-auto max-w-2xl space-y-5" onClickCapture={handleTimelineClick}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={activeTimeline} onValueChange={navigateTimeline} items={[...timelineTabs]} />
         <Button variant="outline" size="sm" onClick={() => void loadTimeline(activeTimeline)} disabled={isLoading}>
