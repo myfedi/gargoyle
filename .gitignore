@@ -6,3 +6,4 @@ config.yml
 compat/gts-data/
 media/
 .vscode/
+plan*
