@@ -89,6 +89,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
 
   const restoredTimelineRef = useRef<TimelineTab | null>(null);
   const pendingAnchorRef = useRef<string | null>(anchorFromRoute);
+  const loadRequestRef = useRef(0);
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
 
   const searchKnownAccounts = useCallback(async (query: string) => {
@@ -107,6 +108,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
         return;
       }
 
+      const requestID = ++loadRequestRef.current;
       if (!options.silent) {
         setIsLoading(true);
       }
@@ -117,13 +119,20 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
           api.verifyCredentials(),
           loadTimelinePage(timeline),
         ]);
+        if (loadRequestRef.current !== requestID) {
+          return;
+        }
         setCurrentAccount(nextCurrentAccount);
         setStatuses(nextStatuses);
         setHasMore(nextStatuses.length >= timelineLimit);
       } catch (caughtError) {
-        setTimelineError(caughtError instanceof Error ? caughtError.message : "Could not load timeline.");
+        if (loadRequestRef.current === requestID) {
+          setTimelineError(caughtError instanceof Error ? caughtError.message : "Could not load timeline.");
+        }
       } finally {
-        setIsLoading(false);
+        if (loadRequestRef.current === requestID) {
+          setIsLoading(false);
+        }
       }
     },
     [api],
@@ -218,6 +227,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     if (timeline === activeTimeline) {
       return;
     }
+    loadRequestRef.current += 1;
     clearTimelineCache(timeline);
     restoredTimelineRef.current = null;
     pendingAnchorRef.current = null;

@@ -27,6 +27,8 @@ export type ApiRequestOptions = RequestInit & {
   accessToken?: string;
 };
 
+const inFlightGetRequests = new Map<string, Promise<unknown>>();
+
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly accessToken?: string;
@@ -49,17 +51,32 @@ export class ApiClient {
       headers.set("Authorization", `Bearer ${token}`);
     }
 
-    const response = await fetch(`${this.baseUrl}${normalizePath(path)}`, {
-      ...options,
-      headers,
-      credentials: "same-origin",
-    });
+    const method = (options.method ?? "GET").toUpperCase();
+    const url = `${this.baseUrl}${normalizePath(path)}`;
+    if (method === "GET") {
+      const key = `${token ?? ""} ${url}`;
+      const existing = inFlightGetRequests.get(key);
+      if (existing) {
+        return existing as Promise<T>;
+      }
+      const request = this.fetchJSON<T>(url, { ...options, headers, credentials: "same-origin" });
+      inFlightGetRequests.set(key, request);
+      try {
+        return await request;
+      } finally {
+        inFlightGetRequests.delete(key);
+      }
+    }
 
+    return this.fetchJSON<T>(url, { ...options, headers, credentials: "same-origin" });
+  }
+
+  private async fetchJSON<T>(url: string, options: RequestInit): Promise<T> {
+    const response = await fetch(url, options);
     const body = await readResponseBody(response);
     if (!response.ok) {
       throw new ApiError(response.status, body);
     }
-
     return body as T;
   }
 }
