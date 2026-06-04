@@ -51,7 +51,11 @@ func (p PrivateRSAKey) ToPEM() []byte {
 
 func (p PrivateRSAKey) Sign(data []byte) ([]byte, error) {
 	hashed := sha256.Sum256(data)
-	return rsa.SignPKCS1v15(rand.Reader, p.privateKey, crypto.SHA256, hashed[:])
+	// ActivityPub HTTP Signatures commonly use "rsa-sha256", which maps to
+	// RSASSA-PKCS1-v1_5 with SHA-256. RSA-PSS would be preferable for new
+	// protocols, but would break compatibility with many federation peers.
+	// This is a signature operation, not RSA encryption.
+	return rsa.SignPKCS1v15(rand.Reader, p.privateKey, crypto.SHA256, hashed[:]) // NOSONAR
 }
 
 // type check private key

@@ -214,7 +214,11 @@ func signFederatedGet(req *http.Request, account models.Account) {
 	req.Header.Set("Date", date)
 	signed := signatureString(req.Method, req.URL, map[string]string{"host": req.URL.Host, "date": date}, []string{"(request-target)", "host", "date"})
 	hash := sha256.Sum256([]byte(signed))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
+	// ActivityPub HTTP Signatures commonly use "rsa-sha256", which maps to
+	// RSASSA-PKCS1-v1_5 with SHA-256. RSA-PSS would be preferable for new
+	// protocols, but would break compatibility with many federation peers.
+	// This is a signature operation, not RSA encryption.
+	sig, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:]) // NOSONAR
 	if err != nil {
 		return
 	}
