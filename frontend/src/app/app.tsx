@@ -257,5 +257,6 @@ function getHashRoute() {
 }
 
 function isTimelineRoute(route: string) {
-  return route === "/" || route === "/home" || route === "/local" || route === "/global";
+  const path = route.split("?")[0];
+  return path === "/" || path === "/home" || path === "/local" || path === "/global";
 }

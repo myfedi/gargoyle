@@ -66,6 +66,7 @@ function validTimelineCache(timeline: TimelineTab) {
 export function PostsPage({ route = "/" }: PostsPageProps) {
   const { session } = useAuth();
   const timelineFromRoute = routeToTimeline(route);
+  const anchorFromRoute = routeAnchor(route);
   const initialCache = validTimelineCache(timelineFromRoute);
   const [activeTimeline, setActiveTimeline] = useState<TimelineTab>(timelineFromRoute);
   const [statuses, setStatuses] = useState<MastodonStatus[]>(initialCache?.statuses ?? []);
@@ -83,7 +84,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   const [replyError, setReplyError] = useState<string | null>(null);
 
   const restoredTimelineRef = useRef<TimelineTab | null>(null);
-  const pendingScrollYRef = useRef<number | null>(initialCache?.scrollY ?? null);
+  const pendingAnchorRef = useRef<string | null>(anchorFromRoute);
+  const pendingScrollYRef = useRef<number | null>(anchorFromRoute ? null : initialCache?.scrollY ?? null);
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
 
   const searchKnownAccounts = useCallback(async (query: string) => {
@@ -125,10 +127,11 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   );
 
   useEffect(() => {
+    pendingAnchorRef.current = anchorFromRoute;
     if (activeTimeline !== timelineFromRoute) {
       setActiveTimeline(timelineFromRoute);
     }
-  }, [activeTimeline, timelineFromRoute]);
+  }, [activeTimeline, anchorFromRoute, timelineFromRoute]);
 
   useEffect(() => {
     return () => saveCurrentTimeline();
@@ -150,7 +153,9 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
       setTimelineError(null);
       if (restoredTimelineRef.current !== activeTimeline) {
         restoredTimelineRef.current = activeTimeline;
-        pendingScrollYRef.current = cached.scrollY;
+        if (!pendingAnchorRef.current) {
+          pendingScrollYRef.current = cached.scrollY;
+        }
       }
       return;
     }
@@ -159,10 +164,28 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   }, [activeTimeline, loadTimeline]);
 
   useEffect(() => {
-    if (isLoading || statuses.length === 0 || pendingScrollYRef.current === null) {
+    if (isLoading || statuses.length === 0) {
       return;
     }
 
+    const anchor = pendingAnchorRef.current;
+    if (anchor) {
+      const scrollToAnchor = () => {
+        const target = document.querySelector(`[data-status-id="${CSS.escape(anchor)}"]`);
+        if (!target) {
+          return;
+        }
+        target.scrollIntoView({ block: "center", behavior: "auto" });
+        pendingAnchorRef.current = null;
+      };
+      requestAnimationFrame(() => requestAnimationFrame(scrollToAnchor));
+      const timeouts = [50, 150, 350, 750].map((delay) => window.setTimeout(scrollToAnchor, delay));
+      return () => timeouts.forEach((timeout) => window.clearTimeout(timeout));
+    }
+
+    if (pendingScrollYRef.current === null) {
+      return;
+    }
     const top = pendingScrollYRef.current;
     pendingScrollYRef.current = null;
 
@@ -316,8 +339,10 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     }
     const link = target.closest("a");
     const href = link?.getAttribute("href") ?? "";
-    if (href.includes("#/statuses/")) {
+    const statusId = statusIdFromHref(href);
+    if (statusId) {
       saveCurrentTimeline(window.scrollY);
+      window.history.replaceState(null, "", timelineHash(activeTimeline, statusId));
     }
   }
 
@@ -437,11 +462,33 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
 }
 
 function routeToTimeline(route: string): TimelineTab {
-  if (route === "/local") {
+  const path = route.split("?")[0];
+  if (path === "/local") {
     return "local";
   }
-  if (route === "/global") {
+  if (path === "/global") {
     return "global";
   }
   return "home";
+}
+
+function routeAnchor(route: string) {
+  const query = route.split("?")[1];
+  if (!query) {
+    return null;
+  }
+  return new URLSearchParams(query).get("anchor");
+}
+
+function timelineHash(timeline: TimelineTab, anchor: string) {
+  return `#${timeline}?anchor=${encodeURIComponent(anchor)}`;
+}
+
+function statusIdFromHref(href: string) {
+  const marker = "#/statuses/";
+  const index = href.indexOf(marker);
+  if (index === -1) {
+    return null;
+  }
+  return decodeURIComponent(href.slice(index + marker.length).split(/[?#]/)[0]);
 }

@@ -78,7 +78,7 @@ export function StatusList({
           const canInteract = Boolean(onAction);
           const isActing = actingStatusId === displayedStatus.id;
           return (
-            <article key={status.id} className="py-4 first:pt-0 last:pb-0">
+            <article key={status.id} data-status-id={(status.reblog ?? status).id} className="py-4 first:pt-0 last:pb-0">
               {status.reblog ? (
                 <p className="mb-2 text-xs text-muted-foreground">
                   {status.account.display_name || status.account.username} boosted
