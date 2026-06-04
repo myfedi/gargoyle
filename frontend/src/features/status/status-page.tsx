@@ -4,7 +4,7 @@ import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DirectMessageForm } from "@/features/direct/direct-message-form";
-import { EmptyState, FeaturePage, Panel } from "@/features/shared";
+import { EmptyState, Panel } from "@/features/shared";
 import type { ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
 import { runStatusAction } from "@/features/status/status-actions";
@@ -158,7 +158,7 @@ export function StatusPage({ route }: StatusPageProps) {
   const fullThread = [...ancestors, ...(status ? [status] : []), ...descendants];
 
   return (
-    <FeaturePage eyebrow="Post" title="Post" description="Post details and replies.">
+    <section className="mx-auto max-w-2xl space-y-5">
       <Panel title="Thread">
         {error ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
@@ -201,7 +201,6 @@ export function StatusPage({ route }: StatusPageProps) {
       ) : null}
 
       <Button variant="outline" onClick={() => window.history.back()}>Back</Button>
-
       <Dialog open={Boolean(forwardingStatus)} onOpenChange={(open) => !open && setForwardingStatus(null)}>
         <DialogContent>
           <DialogHeader>
@@ -210,6 +209,6 @@ export function StatusPage({ route }: StatusPageProps) {
           {forwardingStatus ? <DirectMessageForm forwardedStatus={forwardingStatus} onSent={() => setForwardingStatus(null)} onCancel={() => setForwardingStatus(null)} /> : null}
         </DialogContent>
       </Dialog>
-    </FeaturePage>
+    </section>
   );
 }

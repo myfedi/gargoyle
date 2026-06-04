@@ -2,10 +2,14 @@ package mastodon
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
+	"github.com/myfedi/gargoyle/domain/ports/db"
+	"github.com/myfedi/gargoyle/domain/ports/repos"
+	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 )
 
 type DeleteStatusResult struct {
@@ -98,14 +102,21 @@ func (u UseCase) StatusContext(ctx context.Context, localAccount *models.Account
 }
 
 func (u UseCase) statusAncestors(ctx context.Context, localAccount *models.Account, note models.Note) ([]TimelineItem, *domainerrors.DomainError) {
-	if note.InReplyToID == nil || *note.InReplyToID == "" {
+	return u.statusAncestorsWithDepth(ctx, localAccount, note, 0)
+}
+
+func (u UseCase) statusAncestorsWithDepth(ctx context.Context, localAccount *models.Account, note models.Note, depth int) ([]TimelineItem, *domainerrors.DomainError) {
+	if depth >= 40 {
 		return []TimelineItem{}, nil
 	}
-	parent, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, *note.InReplyToID)
-	if err != nil {
+	parent, derr := u.parentNote(ctx, localAccount, note)
+	if derr != nil {
+		return nil, derr
+	}
+	if parent == nil {
 		return []TimelineItem{}, nil
 	}
-	items, derr := u.statusAncestors(ctx, localAccount, *parent)
+	items, derr := u.statusAncestorsWithDepth(ctx, localAccount, *parent, depth+1)
 	if derr != nil {
 		return nil, derr
 	}
@@ -123,4 +134,60 @@ func (u UseCase) statusAncestors(ctx context.Context, localAccount *models.Accou
 	}
 	items = append(items, *item)
 	return items, nil
+}
+
+func (u UseCase) parentNote(ctx context.Context, localAccount *models.Account, note models.Note) (*models.Note, *domainerrors.DomainError) {
+	if note.InReplyToID != nil && *note.InReplyToID != "" {
+		parent, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, *note.InReplyToID)
+		if err != nil {
+			return nil, nil
+		}
+		return parent, nil
+	}
+	if note.InReplyToURI == nil || *note.InReplyToURI == "" {
+		return nil, nil
+	}
+	parent, err := u.cfg.NotesRepo.GetNoteByURI(ctx, nil, *note.InReplyToURI)
+	if err == nil {
+		return parent, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	if err := u.cacheRemoteContextNote(ctx, localAccount, *note.InReplyToURI); err != nil {
+		return nil, nil
+	}
+	parent, err = u.cfg.NotesRepo.GetNoteByURI(ctx, nil, *note.InReplyToURI)
+	if err != nil {
+		return nil, nil
+	}
+	return parent, nil
+}
+
+func (u UseCase) cacheRemoteContextNote(ctx context.Context, localAccount *models.Account, objectURI string) error {
+	raw, err := u.cfg.RemoteObjectFetcher.FetchObject(ctx, objectURI, localAccount)
+	if err != nil {
+		return err
+	}
+	note, ok := apUsecases.ExtractNote(raw)
+	if !ok {
+		note, ok = apUsecases.ExtractStandaloneNote(raw)
+	}
+	if !ok || note.URI == "" || note.Visibility == "direct" {
+		return nil
+	}
+	return u.cfg.TxProvider.RunInTx(ctx, nil, func(ctx context.Context, tx db.Tx) error {
+		if _, err := u.cfg.NotesRepo.GetNoteByURI(ctx, &tx, note.URI); err == nil {
+			return nil
+		} else if err != sql.ErrNoRows {
+			return err
+		}
+		activity, err := u.cfg.ActivitiesRepo.CreateActivity(ctx, &tx, repos.CreateActivityInput{LocalAccountID: localAccount.ID, Direction: models.ActivityDirectionInbox, Type: "Create", Actor: note.AttributedTo, Object: note.URI, RawJSON: string(raw)})
+		if err != nil {
+			return err
+		}
+		replyID, replyURI := u.remoteReplyIDs(ctx, localAccount, note)
+		_, err = u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: localAccount.ID, ActivityID: activity.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
+		return err
+	})
 }
