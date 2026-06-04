@@ -84,6 +84,18 @@ export type MastodonPoll = {
   options: Array<{ title: string; votes_count: number }>;
 };
 
+export type MastodonTag = {
+  name: string;
+  url: string;
+};
+
+export type MastodonCustomEmoji = {
+  shortcode: string;
+  url: string;
+  static_url: string;
+  visible_in_picker?: boolean;
+};
+
 export type MastodonStatus = {
   id: string;
   uri: string;
@@ -108,6 +120,8 @@ export type MastodonStatus = {
   in_reply_to_account_id?: string | null;
   reblog?: MastodonStatus | null;
   poll?: MastodonPoll | null;
+  tags?: MastodonTag[];
+  emojis?: MastodonCustomEmoji[];
 };
 
 export type MastodonNotification = {

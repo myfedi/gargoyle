@@ -3,16 +3,18 @@ import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { StatusContent } from "@/features/status/status-content";
-import type { MastodonMention } from "@/types/mastodon";
+import type { MastodonCustomEmoji, MastodonMention, MastodonTag } from "@/types/mastodon";
 
 type StatusBodyProps = {
   html: string;
   mentions?: MastodonMention[];
+  tags?: MastodonTag[];
+  emojis?: MastodonCustomEmoji[];
   spoilerText?: string;
   children?: ReactNode;
 };
 
-export function StatusBody({ html, mentions, spoilerText = "", children }: StatusBodyProps) {
+export function StatusBody({ html, mentions, tags, emojis, spoilerText = "", children }: StatusBodyProps) {
   const hasSpoiler = spoilerText.trim().length > 0;
   const [expanded, setExpanded] = useState(!hasSpoiler);
   const contentId = useId();
@@ -21,7 +23,7 @@ export function StatusBody({ html, mentions, spoilerText = "", children }: Statu
     return (
       <>
         <div className="mt-2">
-          <StatusContent html={html} mentions={mentions} />
+          <StatusContent html={html} mentions={mentions} tags={tags} emojis={emojis} />
         </div>
         {children}
       </>
@@ -37,7 +39,7 @@ export function StatusBody({ html, mentions, spoilerText = "", children }: Statu
         </Button>
       </div>
       <div id={contentId} hidden={!expanded} className="mt-3">
-        <StatusContent html={html} mentions={mentions} />
+        <StatusContent html={html} mentions={mentions} tags={tags} emojis={emojis} />
         {children}
       </div>
     </div>

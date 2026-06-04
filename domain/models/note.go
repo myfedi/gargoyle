@@ -13,6 +13,8 @@ type Note struct {
 	Visibility     string
 	PollMultiple   bool
 	PollExpiresAt  *time.Time
+	Hashtags       []string
+	Emojis         []CustomEmoji
 	Sensitive      bool
 	SpoilerText    string
 	AttributedTo   string

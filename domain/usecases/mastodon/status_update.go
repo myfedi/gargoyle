@@ -131,6 +131,7 @@ func statusWithEdits(note models.Note, input UpdateStatusInput, visibility, cont
 	note.Sensitive = input.Sensitive
 	note.SpoilerText = input.SpoilerText
 	note.ObjectType = normalizedStatusObjectType(input.ObjectType)
+	note.Hashtags = contentHashtags(input.Content)
 	return note
 }
 
@@ -191,6 +192,8 @@ func (u UseCase) updateStatusNote(ctx context.Context, tx *db.Tx, edit *statusEd
 		Visibility:    edit.Visibility,
 		PollMultiple:  edit.Note.PollMultiple,
 		PollExpiresAt: edit.Note.PollExpiresAt,
+		Hashtags:      edit.Note.Hashtags,
+		Emojis:        edit.Note.Emojis,
 		Sensitive:     edit.Note.Sensitive,
 		SpoilerText:   edit.Note.SpoilerText,
 	})
@@ -245,6 +248,7 @@ func (u UseCase) statusUpdateActivity(account models.Account, note models.Note, 
 
 	noteDoc := statusUpdateNoteDocument(account, note)
 	applyVisibilityAddressing(noteDoc, note.Visibility, &account, mentions)
+	applyContentTags(noteDoc, note.PlainText)
 	applyPollOptions(noteDoc, note, pollOptions)
 	applyMediaAttachments(noteDoc, u.cfg.Host, media)
 

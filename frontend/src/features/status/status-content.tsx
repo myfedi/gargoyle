@@ -1,17 +1,20 @@
 import { accountHref } from "@/lib/routes";
-import type { MastodonMention } from "@/types/mastodon";
+import type { MastodonCustomEmoji, MastodonMention, MastodonTag } from "@/types/mastodon";
 
 type StatusContentProps = {
   html: string;
   mentions?: MastodonMention[];
+  tags?: MastodonTag[];
+  emojis?: MastodonCustomEmoji[];
 };
 
 type ContentPart =
   | { type: "text"; value: string }
-  | { type: "link"; value: string; href: string; internal: boolean };
+  | { type: "link"; value: string; href: string; internal: boolean }
+  | { type: "emoji"; shortcode: string; url: string };
 
-export function StatusContent({ html, mentions = [] }: StatusContentProps) {
-  const parts = parseStatusContent(html, mentions);
+export function StatusContent({ html, mentions = [], tags = [], emojis = [] }: StatusContentProps) {
+  const parts = parseStatusContent(html, mentions, tags, emojis);
 
   return (
     <p className="whitespace-pre-wrap text-sm leading-6">
@@ -29,13 +32,16 @@ export function StatusContent({ html, mentions = [] }: StatusContentProps) {
             </a>
           );
         }
+        if (part.type === "emoji") {
+          return <img key={`${part.shortcode}-${index}`} className="mx-0.5 inline-block size-5 align-[-0.2em]" src={part.url} alt={`:${part.shortcode}:`} title={`:${part.shortcode}:`} />;
+        }
         return <span key={`${part.value}-${index}`}>{part.value}</span>;
       })}
     </p>
   );
 }
 
-function parseStatusContent(html: string, mentions: MastodonMention[]): ContentPart[] {
+function parseStatusContent(html: string, mentions: MastodonMention[], tags: MastodonTag[], emojis: MastodonCustomEmoji[]): ContentPart[] {
   const document = new DOMParser().parseFromString(html, "text/html");
   const parts: ContentPart[] = [];
   const mentionLookup = createMentionLookup(mentions);
@@ -73,7 +79,7 @@ function parseStatusContent(html: string, mentions: MastodonMention[]): ContentP
   }
 
   document.body.childNodes.forEach(walk);
-  return linkifyMentions(parts, mentionLookup).filter((part) => part.value.length > 0);
+  return applyCustomEmojis(linkifyTags(linkifyMentions(parts, mentionLookup), tags), emojis).filter((part) => part.type !== "text" || part.value.length > 0);
 }
 
 type MentionLookup = {
@@ -155,6 +161,56 @@ function linkifyMentions(parts: ContentPart[], lookup: MentionLookup) {
       lastIndex = mentionStart + mentionText.length;
     }
 
+    pushText(result, part.value.slice(lastIndex));
+    return result;
+  });
+}
+
+function linkifyTags(parts: ContentPart[], tags: MastodonTag[]) {
+  const tagLookup = new Map(tags.map((tag) => [tag.name.toLowerCase(), tag]));
+  return parts.flatMap((part): ContentPart[] => {
+    if (part.type !== "text") return [part];
+    const result: ContentPart[] = [];
+    const pattern = /(^|\s)#([\p{L}\p{N}_]{1,64})/gu;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(part.value))) {
+      const prefix = match[1] ?? "";
+      const name = match[2] ?? "";
+      const start = match.index + prefix.length;
+      pushText(result, part.value.slice(lastIndex, start));
+      const tag = tagLookup.get(name.toLowerCase());
+      if (tag) {
+        result.push({ type: "link", value: `#${name}`, href: tag.url || `/tags/${name}`, internal: true });
+      } else {
+        pushText(result, `#${name}`);
+      }
+      lastIndex = start + name.length + 1;
+    }
+    pushText(result, part.value.slice(lastIndex));
+    return result;
+  });
+}
+
+function applyCustomEmojis(parts: ContentPart[], emojis: MastodonCustomEmoji[]) {
+  const lookup = new Map(emojis.map((emoji) => [emoji.shortcode, emoji]));
+  return parts.flatMap((part): ContentPart[] => {
+    if (part.type !== "text") return [part];
+    const result: ContentPart[] = [];
+    const pattern = /:([A-Za-z0-9_+-]{2,64}):/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(part.value))) {
+      const shortcode = match[1] ?? "";
+      pushText(result, part.value.slice(lastIndex, match.index));
+      const emoji = lookup.get(shortcode);
+      if (emoji) {
+        result.push({ type: "emoji", shortcode, url: emoji.static_url || emoji.url });
+      } else {
+        pushText(result, match[0] ?? "");
+      }
+      lastIndex = match.index + (match[0]?.length ?? 0);
+    }
     pushText(result, part.value.slice(lastIndex));
     return result;
   });

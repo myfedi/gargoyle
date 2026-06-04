@@ -178,6 +178,8 @@ type ExtractedNote struct {
 	PollOptions   []string
 	PollMultiple  bool
 	PollExpiresAt *time.Time
+	Hashtags      []string
+	Emojis        []models.CustomEmoji
 }
 
 type extractedNoteJSON struct {
@@ -278,7 +280,7 @@ func extractedNoteFromJSON(note extractedNoteJSON) ExtractedNote {
 		expiresAt = &parsed
 	}
 	pollOptions, multiple := extractPollOptions(note.OneOf, note.AnyOf)
-	return ExtractedNote{URI: note.ID, Type: normalizedObjectType(note.Type), Content: content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: extractStringList(note.To), CC: extractStringList(note.CC), PublishedAt: publishedAt, PollOptions: pollOptions, PollMultiple: multiple, PollExpiresAt: expiresAt}
+	return ExtractedNote{URI: note.ID, Type: normalizedObjectType(note.Type), Content: content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: extractStringList(note.To), CC: extractStringList(note.CC), PublishedAt: publishedAt, PollOptions: pollOptions, PollMultiple: multiple, PollExpiresAt: expiresAt, Hashtags: extractHashtags(note.Tag), Emojis: extractEmojis(note.Tag)}
 }
 
 // ExtractLocalRecipientUsernames returns local actor usernames referenced by an
@@ -373,6 +375,89 @@ func extractStringList(raw json.RawMessage) []string {
 		return list
 	}
 	return nil
+}
+
+func extractHashtags(raw json.RawMessage) []string {
+	return extractTagNames(raw, "Hashtag")
+}
+
+func extractTagNames(raw json.RawMessage, typ string) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var tags []struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &tags); err != nil {
+		var tag struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(raw, &tag); err != nil {
+			return nil
+		}
+		tags = []struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		}{tag}
+	}
+	seen := map[string]bool{}
+	res := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		name := strings.TrimPrefix(strings.TrimSpace(tag.Name), "#")
+		if tag.Type == typ && name != "" && !seen[strings.ToLower(name)] {
+			seen[strings.ToLower(name)] = true
+			res = append(res, name)
+		}
+	}
+	return res
+}
+
+func extractEmojis(raw json.RawMessage) []models.CustomEmoji {
+	if len(raw) == 0 {
+		return nil
+	}
+	var tags []struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+		Icon struct {
+			URL string `json:"url"`
+		} `json:"icon"`
+	}
+	if err := json.Unmarshal(raw, &tags); err != nil {
+		var tag struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+			Icon struct {
+				URL string `json:"url"`
+			} `json:"icon"`
+		}
+		if err := json.Unmarshal(raw, &tag); err != nil {
+			return nil
+		}
+		tags = []struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+			Icon struct {
+				URL string `json:"url"`
+			} `json:"icon"`
+		}{tag}
+	}
+	seen := map[string]bool{}
+	emojis := make([]models.CustomEmoji, 0, len(tags))
+	for _, tag := range tags {
+		if tag.Type != "Emoji" || tag.Name == "" || tag.Icon.URL == "" {
+			continue
+		}
+		shortcode := strings.Trim(tag.Name, ":")
+		if shortcode == "" || seen[shortcode] {
+			continue
+		}
+		seen[shortcode] = true
+		emojis = append(emojis, models.CustomEmoji{Shortcode: shortcode, URL: tag.Icon.URL, StaticURL: tag.Icon.URL})
+	}
+	return emojis
 }
 
 func extractMentionURIs(raw json.RawMessage) []string {

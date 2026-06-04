@@ -125,6 +125,7 @@ func (u UseCase) statusNoteJSON(
 		"sensitive":  input.Sensitive,
 	}
 	applyVisibilityAddressing(noteDoc, visibility, account, mentions)
+	applyContentTags(noteDoc, input.Content)
 	applyPollQuestion(noteDoc, input, pollOptions, pollExpiresAt)
 	applyMediaAttachments(noteDoc, u.cfg.Host, media)
 
@@ -188,6 +189,20 @@ func (u UseCase) statusMedia(ctx context.Context, account *models.Account, media
 		media = append(media, *item)
 	}
 	return media, nil
+}
+
+func contentHashtags(content string) []string {
+	seen := map[string]bool{}
+	res := []string{}
+	for _, match := range hashtagPattern.FindAllStringSubmatch(content, -1) {
+		name := match[2]
+		key := strings.ToLower(name)
+		if name != "" && !seen[key] {
+			seen[key] = true
+			res = append(res, name)
+		}
+	}
+	return res
 }
 
 func pollInput(objectType string, rawOptions []string, expiresIn int) ([]string, *time.Time, *domainerrors.DomainError) {
@@ -308,6 +323,34 @@ func (u UseCase) resolveMentions(ctx context.Context, account *models.Account, c
 		}
 	}
 	return mentions, nil
+}
+
+var hashtagPattern = regexp.MustCompile(`(^|\s)#([\p{L}\p{N}_]{1,64})`)
+var customEmojiPattern = regexp.MustCompile(`:([A-Za-z0-9_+-]{2,64}):`)
+
+func applyContentTags(noteDoc map[string]any, content string) {
+	existing, _ := noteDoc["tag"].([]map[string]string)
+	tags := append([]map[string]string{}, existing...)
+	seen := map[string]bool{}
+	for _, tag := range tags {
+		seen[tag["type"]+":"+strings.ToLower(tag["name"])] = true
+	}
+	for _, match := range hashtagPattern.FindAllStringSubmatch(content, -1) {
+		name := match[2]
+		key := "Hashtag:" + strings.ToLower(name)
+		if name == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		tags = append(tags, map[string]string{"type": "Hashtag", "name": "#" + name})
+	}
+	// Local custom emoji assets are not managed yet. Emitting Emoji tags without
+	// URLs would be invalid, so shortcode insertion remains textual until a local
+	// emoji catalog exists. Remote Emoji tags are preserved on inbound statuses.
+	_ = customEmojiPattern
+	if len(tags) > 0 {
+		noteDoc["tag"] = tags
+	}
 }
 
 func applyVisibilityAddressing(noteDoc map[string]any, visibility string, account *models.Account, mentions []models.Account) {

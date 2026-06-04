@@ -103,7 +103,7 @@ export function StatusList({
                       <time dateTime={displayedStatus.created_at}>{formatDateTime(displayedStatus.created_at)}</time>
                     </a>
                   </div>
-                  <StatusBody html={displayedStatus.content} mentions={displayedStatus.mentions} spoilerText={displayedStatus.spoiler_text}>
+                  <StatusBody html={displayedStatus.content} mentions={displayedStatus.mentions} tags={displayedStatus.tags} emojis={displayedStatus.emojis} spoilerText={displayedStatus.spoiler_text}>
                     <StatusPoll status={displayedStatus} onVote={onVotePoll ? (choices) => onVotePoll(displayedStatus, choices) : undefined} />
                     <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
                   </StatusBody>

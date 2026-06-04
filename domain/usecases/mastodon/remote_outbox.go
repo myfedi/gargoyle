@@ -105,7 +105,7 @@ func (u UseCase) cacheRemoteOutboxItem(ctx context.Context, localAccount *models
 	if publishedAt.IsZero() {
 		publishedAt = time.Now().UTC()
 	}
-	_, err = u.cfg.NotesRepo.CreateNote(ctx, nil, repos.CreateNoteInput{LocalAccountID: localAccount.ID, ActivityID: activity.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), ObjectType: note.Type, PollMultiple: note.PollMultiple, PollExpiresAt: note.PollExpiresAt, Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: publishedAt})
+	_, err = u.cfg.NotesRepo.CreateNote(ctx, nil, repos.CreateNoteInput{LocalAccountID: localAccount.ID, ActivityID: activity.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), ObjectType: note.Type, PollMultiple: note.PollMultiple, PollExpiresAt: note.PollExpiresAt, Hashtags: note.Hashtags, Emojis: note.Emojis, Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: publishedAt})
 	return err
 }
 

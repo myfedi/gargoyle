@@ -18,6 +18,8 @@ type CreateNoteInput struct {
 	Visibility     string
 	PollMultiple   bool
 	PollExpiresAt  *time.Time
+	Hashtags       []string
+	Emojis         []models.CustomEmoji
 	Sensitive      bool
 	SpoilerText    string
 	AttributedTo   string
@@ -33,6 +35,8 @@ type UpdateNoteInput struct {
 	Visibility    string
 	PollMultiple  bool
 	PollExpiresAt *time.Time
+	Hashtags      []string
+	Emojis        []models.CustomEmoji
 	Sensitive     bool
 	SpoilerText   string
 }

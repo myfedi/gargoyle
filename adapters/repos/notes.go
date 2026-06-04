@@ -2,6 +2,7 @@ package repos
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -26,6 +27,22 @@ func noteVisibility(visibility string) string {
 		return "public"
 	}
 	return visibility
+}
+
+func noteTagsJSON(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+	data, _ := json.Marshal(tags)
+	return string(data)
+}
+
+func noteEmojisJSON(emojis []models.CustomEmoji) string {
+	if len(emojis) == 0 {
+		return ""
+	}
+	data, _ := json.Marshal(emojis)
+	return string(data)
 }
 
 func noteObjectType(objectType string) string {
@@ -70,6 +87,8 @@ func (r *NotesRepo) CreateNote(ctx context.Context, tx *dbPorts.Tx, input repos.
 		Visibility:     noteVisibility(input.Visibility),
 		PollMultiple:   input.PollMultiple,
 		PollExpiresAt:  input.PollExpiresAt,
+		HashtagsJSON:   noteTagsJSON(input.Hashtags),
+		EmojisJSON:     noteEmojisJSON(input.Emojis),
 		Sensitive:      input.Sensitive,
 		SpoilerText:    input.SpoilerText,
 		AttributedTo:   input.AttributedTo,
@@ -143,6 +162,8 @@ func (r *NotesRepo) UpdateNoteByID(ctx context.Context, tx *dbPorts.Tx, id strin
 		Set("poll_multiple = ?", input.PollMultiple).
 		Set("poll_expires_at = ?", input.PollExpiresAt).
 		Set("sensitive = ?", input.Sensitive).
+		Set("hashtags_json = ?", noteTagsJSON(input.Hashtags)).
+		Set("emojis_json = ?", noteEmojisJSON(input.Emojis)).
 		Set("spoiler_text = ?", input.SpoilerText).
 		Set("edited_at = ?", now).
 		Where("id = ?", id). // NOSONAR

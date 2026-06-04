@@ -1159,6 +1159,18 @@ type pollResponse struct {
 	Emojis      []any                `json:"emojis"`
 }
 
+type tagResponse struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+type emojiResponse struct {
+	Shortcode       string `json:"shortcode"`
+	URL             string `json:"url"`
+	StaticURL       string `json:"static_url"`
+	VisibleInPicker bool   `json:"visible_in_picker"`
+}
+
 type statusResponse struct {
 	ID                 string                    `json:"id"`
 	URI                string                    `json:"uri"`
@@ -1175,8 +1187,8 @@ type statusResponse struct {
 	SpoilerText        string                    `json:"spoiler_text"`
 	MediaAttachments   []mediaAttachmentResponse `json:"media_attachments"`
 	Mentions           []mentionResponse         `json:"mentions"`
-	Tags               []any                     `json:"tags"`
-	Emojis             []any                     `json:"emojis"`
+	Tags               []tagResponse             `json:"tags"`
+	Emojis             []emojiResponse           `json:"emojis"`
 	RepliesCount       int                       `json:"replies_count"`
 	ReblogsCount       int                       `json:"reblogs_count"`
 	FavouritesCount    int                       `json:"favourites_count"`
@@ -1228,6 +1240,33 @@ func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
 		statuses = append(statuses, status)
 	}
 	return statuses
+}
+
+func tagResponses(tags []string) []tagResponse {
+	res := make([]tagResponse, 0, len(tags))
+	for _, tag := range tags {
+		name := strings.TrimPrefix(tag, "#")
+		if name == "" {
+			continue
+		}
+		res = append(res, tagResponse{Name: name, URL: "/tags/" + name})
+	}
+	return res
+}
+
+func emojiResponses(emojis []models.CustomEmoji) []emojiResponse {
+	res := make([]emojiResponse, 0, len(emojis))
+	for _, emoji := range emojis {
+		if emoji.Shortcode == "" || emoji.URL == "" {
+			continue
+		}
+		staticURL := emoji.StaticURL
+		if staticURL == "" {
+			staticURL = emoji.URL
+		}
+		res = append(res, emojiResponse{Shortcode: emoji.Shortcode, URL: emoji.URL, StaticURL: staticURL, VisibleInPicker: false})
+	}
+	return res
 }
 
 func mentionResponses(mentions []models.Mention) []mentionResponse {
@@ -1282,5 +1321,5 @@ func noteToStatus(note models.Note, account *models.Account) statusResponse {
 		editedAt = &formatted
 	}
 	objectType := normalizedResponseObjectType(note.ObjectType)
-	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), EditedAt: editedAt, Account: accountToResponse(account), Content: note.Content, Visibility: visibility, ActivityPubType: objectType, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []mentionResponse{}, Tags: []any{}, Emojis: []any{}}
+	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), EditedAt: editedAt, Account: accountToResponse(account), Content: note.Content, Visibility: visibility, ActivityPubType: objectType, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []mentionResponse{}, Tags: tagResponses(note.Hashtags), Emojis: emojiResponses(note.Emojis)}
 }

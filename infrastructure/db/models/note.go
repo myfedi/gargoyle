@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	domainmodels "github.com/myfedi/gargoyle/domain/models"
@@ -17,6 +18,8 @@ type Note struct {
 	Visibility     string     `bun:",nullzero,notnull,default:'public'"`
 	PollMultiple   bool       `bun:",notnull,default:false"`
 	PollExpiresAt  *time.Time `bun:"type:timestamptz,nullzero"`
+	HashtagsJSON   string     `bun:",nullzero"`
+	EmojisJSON     string     `bun:",nullzero"`
 	Sensitive      bool       `bun:",notnull,default:false"`
 	SpoilerText    string     `bun:",nullzero"`
 	AttributedTo   string     `bun:",nullzero,notnull"`
@@ -28,6 +31,10 @@ type Note struct {
 }
 
 func (n Note) ToModel() domainmodels.Note {
+	var hashtags []string
+	_ = json.Unmarshal([]byte(n.HashtagsJSON), &hashtags)
+	var emojis []domainmodels.CustomEmoji
+	_ = json.Unmarshal([]byte(n.EmojisJSON), &emojis)
 	return domainmodels.Note{
 		ID:             n.ID,
 		LocalAccountID: n.LocalAccountID,
@@ -39,6 +46,8 @@ func (n Note) ToModel() domainmodels.Note {
 		Visibility:     n.Visibility,
 		PollMultiple:   n.PollMultiple,
 		PollExpiresAt:  n.PollExpiresAt,
+		Hashtags:       hashtags,
+		Emojis:         emojis,
 		Sensitive:      n.Sensitive,
 		SpoilerText:    n.SpoilerText,
 		AttributedTo:   n.AttributedTo,
