@@ -110,6 +110,31 @@ func (r *NotesRepo) GetNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri string
 	return &model, nil
 }
 
+func (r *NotesRepo) UpdateNoteByID(ctx context.Context, tx *dbPorts.Tx, id string, input repos.UpdateNoteInput) (*models.Note, error) {
+	db := r.db
+	if tx != nil {
+		adapted, ok := (*tx).(dbAdapters.BunTx)
+		if !ok {
+			return nil, errors.New("internal error: unexpected tx implementation provided")
+		}
+		db = adapted.Unwrap()
+	}
+
+	_, err := db.NewUpdate().
+		Model((*dbModels.Note)(nil)).
+		Set("content = ?", input.Content).
+		Set("plain_text = ?", input.PlainText).
+		Set("visibility = ?", noteVisibility(input.Visibility)).
+		Set("sensitive = ?", input.Sensitive).
+		Set("spoiler_text = ?", input.SpoilerText).
+		Where("id = ?", id).
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetNoteByID(ctx, tx, id)
+}
+
 func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri string, content string, plainText string) error {
 	db := r.db
 	if tx != nil {

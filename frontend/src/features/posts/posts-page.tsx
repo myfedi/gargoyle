@@ -145,6 +145,29 @@ export function PostsPage() {
     }
   }
 
+  async function editStatus(status: MastodonStatus, values: ComposeValues) {
+    if (!api) {
+      return false;
+    }
+
+    setTimelineError(null);
+
+    try {
+      const updated = await api.updateStatus(status.id, {
+        status: values.status,
+        visibility: values.visibility,
+        sensitive: values.sensitive,
+        spoiler_text: values.spoilerText,
+        media_ids: values.mediaIds,
+      });
+      setStatuses((current) => replaceStatus(current, updated));
+      return true;
+    } catch (caughtError) {
+      setTimelineError(caughtError instanceof Error ? caughtError.message : "Could not edit post.");
+      return false;
+    }
+  }
+
   async function submitReply(values: ComposeValues) {
     if (!api || !replyingTo) {
       return;
@@ -258,6 +281,7 @@ export function PostsPage() {
               emptyTitle="No posts"
               emptyDescription="Nothing to show here yet."
               onDelete={deleteStatus}
+              onEdit={editStatus}
               actingStatusId={actingStatusId}
               onAction={runAction}
               onForward={setForwardingStatus}

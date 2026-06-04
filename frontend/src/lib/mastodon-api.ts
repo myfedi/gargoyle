@@ -10,6 +10,8 @@ export type CreateStatusInput = {
   media_ids?: string[];
 };
 
+export type UpdateStatusInput = Omit<CreateStatusInput, "in_reply_to_id">;
+
 export type UpdateCredentialsInput = {
   display_name: string;
   note: string;
@@ -55,6 +57,12 @@ export function createMastodonApi(accessToken: string) {
     createStatus(input: CreateStatusInput) {
       return client.request<MastodonStatus>("/api/v1/statuses", {
         method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    updateStatus(id: string, input: UpdateStatusInput) {
+      return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}`, {
+        method: "PUT",
         body: JSON.stringify(input),
       });
     },

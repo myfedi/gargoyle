@@ -104,6 +104,31 @@ export function StatusPage({ route }: StatusPageProps) {
     }
   }
 
+  async function editStatus(statusToEdit: MastodonStatus, values: ComposeValues) {
+    if (!api) {
+      return false;
+    }
+
+    setError(null);
+
+    try {
+      const updated = await api.updateStatus(statusToEdit.id, {
+        status: values.status,
+        visibility: values.visibility,
+        sensitive: values.sensitive,
+        spoiler_text: values.spoilerText,
+        media_ids: values.mediaIds,
+      });
+      setStatus((current) => current?.id === updated.id ? updated : current);
+      setAncestors((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setDescendants((current) => current.map((item) => item.id === updated.id ? updated : item));
+      return true;
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not edit post.");
+      return false;
+    }
+  }
+
   async function submitReply(values: ComposeValues) {
     if (!api || !replyingTo) {
       return;
@@ -152,6 +177,7 @@ export function StatusPage({ route }: StatusPageProps) {
             deletingStatusId={deletingStatusId}
             actingStatusId={actingStatusId}
             onDelete={deleteStatus}
+            onEdit={editStatus}
             onAction={runAction}
             onForward={setForwardingStatus}
             onReply={(nextStatus) => {

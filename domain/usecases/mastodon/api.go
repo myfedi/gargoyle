@@ -81,6 +81,24 @@ type CreateStatusResult struct {
 	MentionInboxes  []string
 }
 
+type UpdateStatusInput struct {
+	Content     string
+	Visibility  string
+	Sensitive   bool
+	SpoilerText string
+	MediaIDs    []string
+}
+
+type UpdateStatusResult struct {
+	Note            models.Note
+	Account         models.Account
+	Media           []models.MediaAttachment
+	Mentions        []models.Mention
+	RawJSON         []byte
+	FollowerInboxes []string
+	MentionInboxes  []string
+}
+
 type TimelineItem struct {
 	ID                 string
 	URI                string

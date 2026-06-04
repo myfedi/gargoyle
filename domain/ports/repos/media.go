@@ -23,6 +23,7 @@ type MediaRepository interface {
 	DeleteMediaAttachment(ctx context.Context, tx *db.Tx, id string) error
 	MediaAttachmentIsAttached(ctx context.Context, tx *db.Tx, id string) (bool, error)
 	AttachMediaToNote(ctx context.Context, tx *db.Tx, noteID string, mediaID string) error
+	ReplaceMediaForNote(ctx context.Context, tx *db.Tx, noteID string, mediaIDs []string) error
 	ListMediaForNote(ctx context.Context, tx *db.Tx, noteID string) ([]models.MediaAttachment, error)
 	ListUnattachedMediaOlderThan(ctx context.Context, tx *db.Tx, cutoff time.Time, limit int) ([]models.MediaAttachment, error)
 	ListMediaWithoutStorage(ctx context.Context, tx *db.Tx, limit int) ([]models.MediaAttachment, error)

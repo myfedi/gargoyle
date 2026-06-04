@@ -103,6 +103,22 @@ func (r *MediaRepo) AttachMediaToNote(ctx context.Context, tx *dbPorts.Tx, noteI
 	return err
 }
 
+func (r *MediaRepo) ReplaceMediaForNote(ctx context.Context, tx *dbPorts.Tx, noteID string, mediaIDs []string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	if _, err := db.NewDelete().Model((*dbModels.NoteMediaAttachment)(nil)).Where("note_id = ?", noteID).Exec(ctx); err != nil {
+		return err
+	}
+	for _, mediaID := range mediaIDs {
+		if _, err := db.NewInsert().Model(&dbModels.NoteMediaAttachment{NoteID: noteID, MediaID: mediaID}).On("CONFLICT DO NOTHING").Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *MediaRepo) ListMediaForNote(ctx context.Context, tx *dbPorts.Tx, noteID string) ([]models.MediaAttachment, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {

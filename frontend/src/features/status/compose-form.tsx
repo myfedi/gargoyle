@@ -21,6 +21,11 @@ type ComposeFormProps = {
   isSubmitting: boolean;
   error?: string | null;
   initialText?: string;
+  initialVisibility?: ComposeValues["visibility"];
+  initialSensitive?: boolean;
+  initialSpoilerText?: string;
+  initialMedia?: MastodonMediaAttachment | null;
+  resetAfterSubmit?: boolean;
   onSubmit: (values: ComposeValues) => Promise<void> | void;
   onUploadMedia?: (file: File, description?: string) => Promise<MastodonMediaAttachment>;
   onDeleteMedia?: (id: string) => Promise<void>;
@@ -38,6 +43,11 @@ export function ComposeForm({
   isSubmitting,
   error,
   initialText = "",
+  initialVisibility = "public",
+  initialSensitive = false,
+  initialSpoilerText = "",
+  initialMedia = null,
+  resetAfterSubmit = true,
   onSubmit,
   onUploadMedia,
   onDeleteMedia,
@@ -48,11 +58,11 @@ export function ComposeForm({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [status, setStatus] = useState(initialText);
-  const [visibility, setVisibility] = useState<ComposeValues["visibility"]>("public");
-  const [sensitive, setSensitive] = useState(false);
-  const [spoilerText, setSpoilerText] = useState("");
-  const [media, setMedia] = useState<MastodonMediaAttachment | null>(null);
-  const [mediaDescription, setMediaDescription] = useState("");
+  const [visibility, setVisibility] = useState<ComposeValues["visibility"]>(initialVisibility);
+  const [sensitive, setSensitive] = useState(initialSensitive);
+  const [spoilerText, setSpoilerText] = useState(initialSpoilerText);
+  const [media, setMedia] = useState<MastodonMediaAttachment | null>(initialMedia);
+  const [mediaDescription, setMediaDescription] = useState(initialMedia?.description ?? "");
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeletingMedia, setIsDeletingMedia] = useState(false);
@@ -63,6 +73,16 @@ export function ComposeForm({
   const [mentionError, setMentionError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(!compact || initialText.length > 0);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  useEffect(() => {
+    setStatus(initialText);
+    setVisibility(initialVisibility);
+    setSensitive(initialSensitive);
+    setSpoilerText(initialSpoilerText);
+    setMedia(initialMedia);
+    setMediaDescription(initialMedia?.description ?? "");
+    setIsExpanded(!compact || initialText.length > 0);
+  }, [compact, initialMedia, initialSensitive, initialSpoilerText, initialText, initialVisibility]);
+
   const mentionQuery = currentMentionQuery(status, caretPosition);
   const mentionSearchQuery = mentionQuery?.endsWith("@") ? mentionQuery.slice(0, -1) : mentionQuery;
   const remaining = maxLength - status.length;
@@ -103,14 +123,16 @@ export function ComposeForm({
     }
 
     await onSubmit({ status: status.trim(), visibility, sensitive, spoilerText, mediaIds: media ? [media.id] : [] });
-    setStatus("");
-    setSensitive(false);
-    setSpoilerText("");
-    setMedia(null);
-    setMediaDescription("");
-    setShowAdvanced(false);
-    if (compact) {
-      setIsExpanded(false);
+    if (resetAfterSubmit) {
+      setStatus("");
+      setSensitive(false);
+      setSpoilerText("");
+      setMedia(null);
+      setMediaDescription("");
+      setShowAdvanced(false);
+      if (compact) {
+        setIsExpanded(false);
+      }
     }
   }
 

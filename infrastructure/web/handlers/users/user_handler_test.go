@@ -142,6 +142,20 @@ func (f *fakeNotesRepo) GetNoteByURI(ctx context.Context, tx *db.Tx, uri string)
 	return nil, sql.ErrNoRows
 }
 
+func (f *fakeNotesRepo) UpdateNoteByID(ctx context.Context, tx *db.Tx, id string, input repos.UpdateNoteInput) (*models.Note, error) {
+	for i := range f.notes {
+		if f.notes[i].ID == id {
+			f.notes[i].Content = input.Content
+			f.notes[i].PlainText = input.PlainText
+			f.notes[i].Visibility = input.Visibility
+			f.notes[i].Sensitive = input.Sensitive
+			f.notes[i].SpoilerText = input.SpoilerText
+			return &f.notes[i], nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+
 func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri string, content string, plainText string) error {
 	for i := range f.notes {
 		if f.notes[i].URI == uri {

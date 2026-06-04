@@ -48,6 +48,15 @@ func (r *MentionsRepo) CreateMention(ctx context.Context, tx *dbPorts.Tx, input 
 	return &model, nil
 }
 
+func (r *MentionsRepo) DeleteMentionsForNote(ctx context.Context, tx *dbPorts.Tx, noteID string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewDelete().Model((*dbModels.Mention)(nil)).Where("note_id = ?", noteID).Exec(ctx)
+	return err
+}
+
 func (r *MentionsRepo) ListMentionsForNote(ctx context.Context, tx *dbPorts.Tx, noteID string) ([]models.Mention, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {

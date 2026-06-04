@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/features/shared";
+import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import { StatusContent } from "@/features/status/status-content";
 import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime, htmlToPlainText } from "@/lib/text";
@@ -28,6 +29,7 @@ type StatusListProps = {
   deletingStatusId?: string | null;
   actingStatusId?: string | null;
   onDelete?: (status: MastodonStatus) => Promise<boolean> | boolean;
+  onEdit?: (status: MastodonStatus, values: ComposeValues) => Promise<boolean> | boolean;
   onReply?: (status: MastodonStatus) => void;
   onForward?: (status: MastodonStatus) => void;
   onAction?: (action: StatusAction, status: MastodonStatus) => Promise<void> | void;
@@ -41,11 +43,15 @@ export function StatusList({
   deletingStatusId,
   actingStatusId,
   onDelete,
+  onEdit,
   onReply,
   onForward,
   onAction,
 }: StatusListProps) {
   const [statusPendingDeletion, setStatusPendingDeletion] = useState<MastodonStatus | null>(null);
+  const [statusBeingEdited, setStatusBeingEdited] = useState<MastodonStatus | null>(null);
+  const [isEditingStatus, setIsEditingStatus] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [mediaPreview, setMediaPreview] = useState<MastodonMediaAttachment | null>(null);
 
   if (statuses.length === 0) {
@@ -61,6 +67,7 @@ export function StatusList({
           const displayedStatus = status.reblog ?? status;
           const canOwn = Boolean(currentAccountId && displayedStatus.account.id === currentAccountId);
           const canDelete = Boolean(onDelete && canOwn);
+          const canEdit = Boolean(onEdit && canOwn);
           const canPin = Boolean(onAction && canOwn && displayedStatus.visibility !== "direct");
           const canReply = Boolean(onReply);
           const canForward = Boolean(onForward);
@@ -93,7 +100,7 @@ export function StatusList({
                   <StatusStats status={displayedStatus} />
                   <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
                 </div>
-                {canDelete || canReply || canForward || canInteract ? (
+                {canDelete || canEdit || canReply || canForward || canInteract ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" aria-label="Post actions" disabled={isActing}>
@@ -102,6 +109,7 @@ export function StatusList({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       {canReply ? <DropdownMenuItem onSelect={() => onReply?.(displayedStatus)}>Reply</DropdownMenuItem> : null}
+                      {canEdit ? <DropdownMenuItem onSelect={() => { setStatusBeingEdited(displayedStatus); setEditError(null); }}>Edit</DropdownMenuItem> : null}
                       {canForward ? <DropdownMenuItem onSelect={() => onForward?.(displayedStatus)}>Forward by DM</DropdownMenuItem> : null}
                       {canInteract ? (
                         <>
@@ -149,6 +157,46 @@ export function StatusList({
                 <a className="text-primary hover:underline" href={mediaPreview.url} target="_blank" rel="noreferrer">Open media</a>
               )}
             </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(statusBeingEdited)} onOpenChange={(open) => !open && setStatusBeingEdited(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit post</DialogTitle>
+            <DialogDescription>Save changes locally and federate an Update activity.</DialogDescription>
+          </DialogHeader>
+          {statusBeingEdited ? (
+            <ComposeForm
+              submitLabel="Save changes"
+              submittingLabel="Saving..."
+              placeholder="Edit your post"
+              isSubmitting={isEditingStatus}
+              error={editError}
+              initialText={htmlToPlainText(statusBeingEdited.content)}
+              initialVisibility={statusBeingEdited.visibility as ComposeValues["visibility"]}
+              initialSensitive={statusBeingEdited.sensitive}
+              initialSpoilerText={statusBeingEdited.spoiler_text}
+              initialMedia={statusBeingEdited.media_attachments?.[0] ?? null}
+              resetAfterSubmit={false}
+              onSubmit={async (values) => {
+                setIsEditingStatus(true);
+                setEditError(null);
+                try {
+                  const edited = await onEdit?.(statusBeingEdited, values);
+                  if (edited) {
+                    setStatusBeingEdited(null);
+                  } else {
+                    setEditError("Could not edit post.");
+                  }
+                } catch (caughtError) {
+                  setEditError(caughtError instanceof Error ? caughtError.message : "Could not edit post.");
+                } finally {
+                  setIsEditingStatus(false);
+                }
+              }}
+            />
           ) : null}
         </DialogContent>
       </Dialog>

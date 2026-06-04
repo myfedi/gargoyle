@@ -23,11 +23,20 @@ type CreateNoteInput struct {
 	PublishedAt    time.Time
 }
 
+type UpdateNoteInput struct {
+	Content     string
+	PlainText   string
+	Visibility  string
+	Sensitive   bool
+	SpoilerText string
+}
+
 type NotesRepository interface {
 	PostsRepository
 	CreateNote(ctx context.Context, tx *db.Tx, input CreateNoteInput) (*models.Note, error)
 	GetNoteByID(ctx context.Context, tx *db.Tx, id string) (*models.Note, error)
 	GetNoteByURI(ctx context.Context, tx *db.Tx, uri string) (*models.Note, error)
+	UpdateNoteByID(ctx context.Context, tx *db.Tx, id string, input UpdateNoteInput) (*models.Note, error)
 	UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri string, content string, plainText string) error
 	DeleteNoteByID(ctx context.Context, tx *db.Tx, id string) error
 	DeleteNoteByURI(ctx context.Context, tx *db.Tx, uri string) error

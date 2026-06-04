@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Panel } from "@/features/shared";
+import type { ComposeValues } from "@/features/status/compose-form";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
@@ -142,6 +143,21 @@ export function MyProfilePage() {
       return false;
     } finally {
       setDeletingStatusId(null);
+    }
+  }
+
+  async function editStatus(status: MastodonStatus, values: ComposeValues) {
+    if (!api) return false;
+    setError(null);
+
+    try {
+      const updated = await api.updateStatus(status.id, { status: values.status, visibility: values.visibility, sensitive: values.sensitive, spoiler_text: values.spoilerText, media_ids: values.mediaIds });
+      setStatuses((current) => replaceStatus(current, updated));
+      setPinnedStatuses((current) => replaceStatus(current, updated));
+      return true;
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not edit post.");
+      return false;
     }
   }
 
@@ -331,6 +347,7 @@ export function MyProfilePage() {
                 emptyTitle="No pinned posts"
                 emptyDescription="No posts are pinned."
                 onDelete={deleteStatus}
+                onEdit={editStatus}
                 onAction={runAction}
               />
             </section>
@@ -345,6 +362,7 @@ export function MyProfilePage() {
               emptyTitle="No posts"
               emptyDescription="No posts to show."
               onDelete={deleteStatus}
+              onEdit={editStatus}
               onAction={runAction}
             />
             {statuses.length > 0 ? (

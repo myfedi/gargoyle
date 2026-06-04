@@ -16,6 +16,10 @@ A cleaner long-term design is adapter-level error classification, e.g. a reposit
 
 Local actor private keys are currently stored as PEM text in the database. This keeps federation signing simple, but a hardened deployment should use encryption-at-rest or a dedicated key management system.
 
+## Status edit history
+
+Gargoyle supports local status edits, federates them as ActivityPub `Update`, and exposes Mastodon-compatible status edit/source endpoints. It does not yet persist historical revisions, so `/api/v1/statuses/:id/history` currently returns the current revision as a compatibility snapshot.
+
 ## Outgoing pending follow request listing
 
 Gargoyle persists outgoing follow requests while they are pending, and exposes their per-account state through the Mastodon-compatible relationships endpoint (`/api/v1/accounts/relationships`) as `requested: true`.

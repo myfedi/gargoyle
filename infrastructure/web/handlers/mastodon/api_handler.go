@@ -78,6 +78,10 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Post("/api/v1/accounts/:id/unfollow", h.unfollowAccount)
 	app.Get("/api/v1/accounts/:id", h.account)
 	app.Post("/api/v1/statuses", h.createStatus)
+	app.Put("/api/v1/statuses/:id", h.updateStatus)
+	app.Patch("/api/v1/statuses/:id", h.updateStatus)
+	app.Get("/api/v1/statuses/:id/source", h.statusSource)
+	app.Get("/api/v1/statuses/:id/history", h.statusHistory)
 	app.Get("/api/v1/statuses/:id/context", h.statusContext)
 	app.Post("/api/v1/statuses/:id/favourite", h.favouriteStatus)
 	app.Post("/api/v1/statuses/:id/unfavourite", h.unfavouriteStatus)
@@ -272,6 +276,14 @@ type createStatusRequest struct {
 	MediaIDs    []string `json:"media_ids" form:"media_ids"`
 }
 
+type updateStatusRequest struct {
+	Status      string   `json:"status" form:"status"`
+	Visibility  string   `json:"visibility" form:"visibility"`
+	Sensitive   bool     `json:"sensitive" form:"sensitive"`
+	SpoilerText string   `json:"spoiler_text" form:"spoiler_text"`
+	MediaIDs    []string `json:"media_ids" form:"media_ids"`
+}
+
 type updateCredentialsRequest struct {
 	DisplayName string `json:"display_name" form:"display_name"`
 	Note        string `json:"note" form:"note"`
@@ -339,6 +351,28 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 		return err
 	}
 	res, derr := h.api.CreateStatus(c.UserContext(), principal.Account, mastodonUC.CreateStatusInput{Content: req.Status, Visibility: req.Visibility, InReplyToID: req.InReplyToID, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText, MediaIDs: req.MediaIDs})
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	for _, inbox := range uniqueInboxes(append(res.FollowerInboxes, res.MentionInboxes...)) {
+		if err := h.queueDelivery(res.RawJSON, inbox, res.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	status := timelineItemsToStatuses([]mastodonUC.TimelineItem{{ID: res.Note.ID, URI: res.Note.URI, CreatedAt: res.Note.PublishedAt, Note: res.Note, Account: res.Account, Media: res.Media, Mentions: res.Mentions}})[0]
+	return c.JSON(status)
+}
+
+func (h APIHandler) updateStatus(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c, "write")
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	var req updateStatusRequest
+	if err := c.BodyParser(&req); err != nil {
+		return err
+	}
+	res, derr := h.api.UpdateStatus(c.UserContext(), principal.Account, c.Params("id"), mastodonUC.UpdateStatusInput{Content: req.Status, Visibility: req.Visibility, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText, MediaIDs: req.MediaIDs})
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -684,6 +718,50 @@ func (h APIHandler) status(c *fiber.Ctx) error {
 	}
 	statuses := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item})
 	return c.JSON(statuses[0])
+}
+
+type statusSourceResponse struct {
+	ID          string `json:"id"`
+	Text        string `json:"text"`
+	SpoilerText string `json:"spoiler_text"`
+}
+
+type statusHistoryResponse struct {
+	Content          string                    `json:"content"`
+	SpoilerText      string                    `json:"spoiler_text"`
+	Sensitive        bool                      `json:"sensitive"`
+	CreatedAt        string                    `json:"created_at"`
+	Account          accountResponse           `json:"account"`
+	MediaAttachments []mediaAttachmentResponse `json:"media_attachments"`
+	Emojis           []any                     `json:"emojis"`
+}
+
+func (h APIHandler) statusSource(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	item, derr := h.api.GetStatus(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	return c.JSON(statusSourceResponse{ID: item.Note.ID, Text: item.Note.PlainText, SpoilerText: item.Note.SpoilerText})
+}
+
+func (h APIHandler) statusHistory(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	item, derr := h.api.GetStatus(c.UserContext(), principal.Account, c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	created := item.Note.PublishedAt
+	if created.IsZero() {
+		created = item.Note.CreatedAt
+	}
+	return c.JSON([]statusHistoryResponse{{Content: item.Note.Content, SpoilerText: item.Note.SpoilerText, Sensitive: item.Note.Sensitive, CreatedAt: created.UTC().Format(time.RFC3339), Account: accountToResponse(&item.Account), MediaAttachments: mediaResponses(item.Media), Emojis: []any{}}})
 }
 
 func (h APIHandler) favouriteStatus(c *fiber.Ctx) error {

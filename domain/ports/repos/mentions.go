@@ -18,5 +18,6 @@ type CreateMentionInput struct {
 
 type MentionsRepository interface {
 	CreateMention(ctx context.Context, tx *db.Tx, input CreateMentionInput) (*models.Mention, error)
+	DeleteMentionsForNote(ctx context.Context, tx *db.Tx, noteID string) error
 	ListMentionsForNote(ctx context.Context, tx *db.Tx, noteID string) ([]models.Mention, error)
 }
