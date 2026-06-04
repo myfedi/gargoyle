@@ -21,6 +21,14 @@ type DereferenceResult struct {
 }
 
 func (u GetDereferenceUseCase) GetObject(ctx context.Context, username, objectID string) (*DereferenceResult, *domainerrors.DomainError) {
+	return u.getObject(ctx, username, objectID, "")
+}
+
+func (u GetDereferenceUseCase) GetObjectForRequester(ctx context.Context, username, objectID, requesterActor string) (*DereferenceResult, *domainerrors.DomainError) {
+	return u.getObject(ctx, username, objectID, requesterActor)
+}
+
+func (u GetDereferenceUseCase) getObject(ctx context.Context, username, objectID, requesterActor string) (*DereferenceResult, *domainerrors.DomainError) {
 	account, derr := localAccount(ctx, u.cfg.AccountsRepo, username)
 	if derr != nil {
 		return nil, derr
@@ -28,7 +36,7 @@ func (u GetDereferenceUseCase) GetObject(ctx context.Context, username, objectID
 	if objectID == "" {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "missing object id")
 	}
-	note, derr := u.localPublicNoteByURI(ctx, account, account.URI+"/objects/"+url.PathEscape(objectID))
+	note, derr := u.localDereferenceableNoteByURI(ctx, account, account.URI+"/objects/"+url.PathEscape(objectID), requesterActor)
 	if derr != nil {
 		return nil, derr
 	}
@@ -73,6 +81,10 @@ func (u GetDereferenceUseCase) GetActivity(ctx context.Context, username, activi
 }
 
 func (u GetDereferenceUseCase) localPublicNoteByURI(ctx context.Context, account *models.Account, uri string) (*models.Note, *domainerrors.DomainError) {
+	return u.localDereferenceableNoteByURI(ctx, account, uri, "")
+}
+
+func (u GetDereferenceUseCase) localDereferenceableNoteByURI(ctx context.Context, account *models.Account, uri, requesterActor string) (*models.Note, *domainerrors.DomainError) {
 	note, err := u.cfg.NotesRepo.GetNoteByURI(ctx, nil, uri)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -80,10 +92,19 @@ func (u GetDereferenceUseCase) localPublicNoteByURI(ctx context.Context, account
 		}
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	if note.LocalAccountID != account.ID || note.AttributedTo != account.URI || !publiclyDereferenceable(note.Visibility) {
+	if note.LocalAccountID != account.ID || note.AttributedTo != account.URI {
 		return nil, domainerrors.New(domainerrors.ErrNotFound, "object not found")
 	}
-	return note, nil
+	if publiclyDereferenceable(note.Visibility) {
+		return note, nil
+	}
+	if note.Visibility == "private" && requesterActor != "" && u.cfg.FollowsRepo != nil {
+		follow, err := u.cfg.FollowsRepo.GetFollowByActor(ctx, nil, account.ID, requesterActor, "follower")
+		if err == nil && follow.AcceptedAt != nil {
+			return note, nil
+		}
+	}
+	return nil, domainerrors.New(domainerrors.ErrNotFound, "object not found")
 }
 
 func (u GetDereferenceUseCase) pollOptions(ctx context.Context, note *models.Note) ([]string, *domainerrors.DomainError) {

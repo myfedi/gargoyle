@@ -274,14 +274,16 @@ func (t httpActivityPubTransport) VerifyInbound(ctx context.Context, input activ
 	}
 
 	digest := input.Headers["digest"]
-	if digest == "" {
-		return domainerrors.New(domainerrors.ErrUnauthorized, "missing digest")
-	}
-	if !signedHeaderIncludes(headers, "digest") {
-		return domainerrors.New(domainerrors.ErrUnauthorized, "digest header is not signed")
-	}
-	if !strings.EqualFold(digest, digestHeader(input.Body)) {
-		return domainerrors.New(domainerrors.ErrUnauthorized, "digest mismatch")
+	if input.Method == http.MethodPost || len(input.Body) > 0 {
+		if digest == "" {
+			return domainerrors.New(domainerrors.ErrUnauthorized, "missing digest")
+		}
+		if !signedHeaderIncludes(headers, "digest") {
+			return domainerrors.New(domainerrors.ErrUnauthorized, "digest header is not signed")
+		}
+		if !strings.EqualFold(digest, digestHeader(input.Body)) {
+			return domainerrors.New(domainerrors.ErrUnauthorized, "digest mismatch")
+		}
 	}
 
 	actorDoc, err := t.FetchActor(ctx, input.Actor, input.LocalAccount)

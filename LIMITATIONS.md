@@ -28,3 +28,6 @@ It intentionally does not expose pending outgoing follows through `/api/v1/accou
 
 A UI that needs to display pending state should query relationships for accounts it is already rendering, rather than depend on a Gargoyle-specific pending-follow list.
 
+## ActivityPub signed GET dereferencing
+
+Signed GET dereferencing supports public/unlisted objects without a signature and followers-only objects for accepted followers with a valid HTTP signature. Direct-message object dereferencing remains disabled because direct recipient addressing is not yet persisted in a form that can be safely authorized.

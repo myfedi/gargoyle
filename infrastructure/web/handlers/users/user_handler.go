@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -259,11 +260,34 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 
 func (h *UsersWebHandler) objectDocument(c *fiber.Ctx) error {
 	res, derr := h.getDereference.GetObject(c.UserContext(), c.Params("username"), c.Params("id"))
+	if derr == nil {
+		c.Set(fiber.HeaderContentType, contentTypeActivityJSON)
+		return c.Send(res.JSON)
+	}
+	requesterActor := actorFromSignature(c.Get("Signature"))
+	if requesterActor == "" {
+		return web.HandleDomainError(c, derr)
+	}
+	if verifyErr := h.cfg.SignatureVerifier.VerifyInbound(c.UserContext(), signatureVerificationInput(c, nil, requesterActor, nil, true)); verifyErr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	res, derr = h.getDereference.GetObjectForRequester(c.UserContext(), c.Params("username"), c.Params("id"), requesterActor)
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
 	c.Set(fiber.HeaderContentType, contentTypeActivityJSON)
 	return c.Send(res.JSON)
+}
+
+func actorFromSignature(header string) string {
+	keyID := parseSignatureHeader(header)["keyId"]
+	if keyID == "" {
+		return ""
+	}
+	if actor, _, ok := strings.Cut(keyID, "#"); ok {
+		return actor
+	}
+	return keyID
 }
 
 func (h *UsersWebHandler) activityDocument(c *fiber.Ctx) error {
