@@ -82,14 +82,12 @@ func (u UseCase) timelineItems(ctx context.Context, localAccount *models.Account
 		if derr != nil {
 			return nil, derr
 		}
-		if author.Domain != nil && *author.Domain != "" {
-			blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *author.Domain)
-			if err != nil {
-				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-			}
-			if blocked {
-				continue
-			}
+		allowed, derr := u.accountDomainAllowed(ctx, author)
+		if derr != nil {
+			return nil, derr
+		}
+		if !allowed {
+			continue
 		}
 		replyAccountID := u.replyAccountID(ctx, localAccount, note)
 		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
@@ -103,6 +101,17 @@ func (u UseCase) timelineItems(ctx context.Context, localAccount *models.Account
 		items = append(items, *item)
 	}
 	return items, nil
+}
+
+func (u UseCase) accountDomainAllowed(ctx context.Context, account *models.Account) (bool, *domainerrors.DomainError) {
+	if account.Domain == nil || *account.Domain == "" {
+		return true, nil
+	}
+	blocked, err := u.cfg.DomainBlocksRepo.DomainIsSuspended(ctx, nil, *account.Domain)
+	if err != nil {
+		return false, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	return !blocked, nil
 }
 
 func (u UseCase) timelineItem(ctx context.Context, localAccount *models.Account, note models.Note, author models.Account, replyAccountID *string, media []models.MediaAttachment) (*TimelineItem, *domainerrors.DomainError) {

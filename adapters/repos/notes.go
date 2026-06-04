@@ -351,6 +351,23 @@ func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, filter noteLi
 
 	var notes []dbModels.Note
 	query := db.NewSelect().Model(&notes).Where("local_account_id = ?", filter.localAccountID).Order("published_at DESC", "id DESC")
+	query = applyNoteListFilters(query, filter)
+	query = r.applyNoteListCursor(ctx, db, query, filter)
+	if filter.limit > 0 {
+		query = query.Limit(filter.limit)
+	}
+	err := query.Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]models.Note, 0, len(notes))
+	for _, note := range notes {
+		res = append(res, note.ToModel())
+	}
+	return res, nil
+}
+
+func applyNoteListFilters(query *bun.SelectQuery, filter noteListFilter) *bun.SelectQuery {
 	if filter.attributedTo != "" {
 		query = query.Where("attributed_to = ?", filter.attributedTo)
 	}
@@ -369,26 +386,18 @@ func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, filter noteLi
 	if filter.visibility != "" {
 		query = query.Where("visibility = ?", filter.visibility) // NOSONAR
 	}
-	if filter.maxID != "" {
-		var cursor dbModels.Note
-		if err := db.NewSelect().Model(&cursor).Where("id = ?", filter.maxID).Limit(1).Scan(ctx); err == nil { // NOSONAR
-			query = query.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
-				return q.Where("published_at < ?", cursor.PublishedAt).WhereOr("published_at = ? AND id < ?", cursor.PublishedAt, filter.maxID)
-			})
-		} else {
-			query = query.Where("id < ?", filter.maxID)
-		}
+	return query
+}
+
+func (r *NotesRepo) applyNoteListCursor(ctx context.Context, db bun.IDB, query *bun.SelectQuery, filter noteListFilter) *bun.SelectQuery {
+	if filter.maxID == "" {
+		return query
 	}
-	if filter.limit > 0 {
-		query = query.Limit(filter.limit)
+	var cursor dbModels.Note
+	if err := db.NewSelect().Model(&cursor).Where("id = ?", filter.maxID).Limit(1).Scan(ctx); err != nil { // NOSONAR
+		return query.Where("id < ?", filter.maxID)
 	}
-	err := query.Scan(ctx)
-	if err != nil {
-		return nil, err
-	}
-	res := make([]models.Note, 0, len(notes))
-	for _, note := range notes {
-		res = append(res, note.ToModel())
-	}
-	return res, nil
+	return query.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+		return q.Where("published_at < ?", cursor.PublishedAt).WhereOr("published_at = ? AND id < ?", cursor.PublishedAt, filter.maxID)
+	})
 }

@@ -288,15 +288,9 @@ func (u UseCase) issueAuthorizationCodeToken(ctx context.Context, app *models.OA
 	var issued *IssuedToken
 	err = u.cfg.TxProvider.RunInTx(ctx, nil, func(ctx context.Context, tx db.Tx) error {
 		txPtr := &tx
-		code, err := u.cfg.OAuthRepo.GetAuthorizationCodeByHash(ctx, txPtr, TokenHash(input.Code))
-		if err != nil || code.ApplicationID != app.ID || code.RedirectURI != input.RedirectURI || code.UsedAt != nil || time.Now().After(code.ExpiresAt) {
-			return derrors.New(derrors.ErrUnauthorized, "invalid authorization code")
-		}
-		if !clientSecretProvided && code.CodeChallenge == "" {
-			return derrors.New(derrors.ErrUnauthorized, "public clients must use PKCE")
-		}
-		if !validPKCE(code.CodeChallenge, code.CodeChallengeMethod, input.CodeVerifier) {
-			return derrors.New(derrors.ErrUnauthorized, "invalid code verifier")
+		code, derr := u.validAuthorizationCode(ctx, txPtr, app, input, clientSecretProvided)
+		if derr != nil {
+			return derr
 		}
 		if err := u.cfg.OAuthRepo.MarkAuthorizationCodeUsed(ctx, txPtr, code.ID, time.Now().UTC()); err != nil {
 			return derrors.New(derrors.ErrUnauthorized, "invalid authorization code")
@@ -314,6 +308,24 @@ func (u UseCase) issueAuthorizationCodeToken(ctx context.Context, app *models.OA
 		return nil, derrors.NewErr(derrors.ErrInternal, err)
 	}
 	return issued, nil
+}
+
+func (u UseCase) validAuthorizationCode(ctx context.Context, tx *db.Tx, app *models.OAuthApplication, input IssueTokenInput, clientSecretProvided bool) (*models.OAuthAuthorizationCode, *derrors.DomainError) {
+	code, err := u.cfg.OAuthRepo.GetAuthorizationCodeByHash(ctx, tx, TokenHash(input.Code))
+	if err != nil || invalidAuthorizationCode(code, app, input) {
+		return nil, derrors.New(derrors.ErrUnauthorized, "invalid authorization code")
+	}
+	if !clientSecretProvided && code.CodeChallenge == "" {
+		return nil, derrors.New(derrors.ErrUnauthorized, "public clients must use PKCE")
+	}
+	if !validPKCE(code.CodeChallenge, code.CodeChallengeMethod, input.CodeVerifier) {
+		return nil, derrors.New(derrors.ErrUnauthorized, "invalid code verifier")
+	}
+	return code, nil
+}
+
+func invalidAuthorizationCode(code *models.OAuthAuthorizationCode, app *models.OAuthApplication, input IssueTokenInput) bool {
+	return code.ApplicationID != app.ID || code.RedirectURI != input.RedirectURI || code.UsedAt != nil || time.Now().After(code.ExpiresAt)
 }
 
 func (u UseCase) issueAccessToken(ctx context.Context, tx *db.Tx, applicationID, userID, scope string) (*IssuedToken, *derrors.DomainError) {

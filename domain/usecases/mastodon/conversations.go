@@ -32,32 +32,44 @@ func (u UseCase) Conversations(ctx context.Context, account *models.Account, lim
 	items := make([]ConversationItem, 0, limit)
 	seen := map[string]bool{}
 	for _, note := range notes {
-		accounts, derr := u.conversationAccounts(ctx, account, note)
+		item, id, ok, derr := u.conversationItem(ctx, account, note, seen)
 		if derr != nil {
 			return nil, derr
 		}
-		id := conversationID(account.URI, accounts)
-		if seen[id] {
+		if !ok {
 			continue
 		}
-		dismissed, err := u.cfg.ConversationsRepo.ConversationDismissed(ctx, nil, account.ID, id)
-		if err != nil {
-			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-		}
-		if dismissed {
-			continue
-		}
-		status, derr := u.GetStatus(ctx, account, note.ID)
-		if derr != nil {
-			continue
-		}
-		items = append(items, ConversationItem{ID: id, Unread: false, Accounts: accounts, LastStatus: *status})
+		items = append(items, *item)
 		seen[id] = true
 		if len(items) >= limit {
 			break
 		}
 	}
 	return items, nil
+}
+
+func (u UseCase) conversationItem(ctx context.Context, account *models.Account, note models.Note, seen map[string]bool) (*ConversationItem, string, bool, *domainerrors.DomainError) {
+	accounts, derr := u.conversationAccounts(ctx, account, note)
+	if derr != nil {
+		return nil, "", false, derr
+	}
+	id := conversationID(account.URI, accounts)
+	if seen[id] {
+		return nil, id, false, nil
+	}
+	dismissed, err := u.cfg.ConversationsRepo.ConversationDismissed(ctx, nil, account.ID, id)
+	if err != nil {
+		return nil, id, false, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	if dismissed {
+		return nil, id, false, nil
+	}
+	status, derr := u.GetStatus(ctx, account, note.ID)
+	if derr != nil {
+		return nil, id, false, nil
+	}
+	item := &ConversationItem{ID: id, Unread: false, Accounts: accounts, LastStatus: *status}
+	return item, id, true, nil
 }
 
 func (u UseCase) DismissConversation(ctx context.Context, account *models.Account, id string) *domainerrors.DomainError {

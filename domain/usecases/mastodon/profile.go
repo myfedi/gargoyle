@@ -27,34 +27,13 @@ func (u UseCase) UpdateCredentials(ctx context.Context, account *models.Account,
 		return nil, domainerrors.New(domainerrors.ErrUnauthorized, "only local accounts can update credentials")
 	}
 
-	displayName := strings.TrimSpace(input.DisplayName)
-	if len([]rune(displayName)) > maxProfileDisplayNameLength {
-		return nil, domainerrors.New(domainerrors.ErrBadRequest, "display_name is too long")
+	displayName, sanitizedNote, derr := u.validatedProfileText(input)
+	if derr != nil {
+		return nil, derr
 	}
-	note := strings.TrimSpace(input.Note)
-	if len([]rune(note)) > maxProfileNoteLength {
-		return nil, domainerrors.New(domainerrors.ErrBadRequest, "note is too long")
-	}
-	sanitizedNote := u.cfg.ContentSanitizer.SanitizeHTML(note)
-	avatarMediaID := account.AvatarMediaID
-	headerMediaID := account.HeaderMediaID
-	createdMedia := []models.MediaAttachment{}
-	if input.Avatar != nil {
-		media, derr := u.createProfileMedia(ctx, account, *input.Avatar)
-		if derr != nil {
-			return nil, derr
-		}
-		createdMedia = append(createdMedia, *media)
-		avatarMediaID = &media.ID
-	}
-	if input.Header != nil {
-		media, derr := u.createProfileMedia(ctx, account, *input.Header)
-		if derr != nil {
-			u.deleteCreatedProfileMedia(ctx, createdMedia)
-			return nil, derr
-		}
-		createdMedia = append(createdMedia, *media)
-		headerMediaID = &media.ID
+	avatarMediaID, headerMediaID, createdMedia, derr := u.profileMediaIDs(ctx, account, input)
+	if derr != nil {
+		return nil, derr
 	}
 
 	var updated *models.Account
@@ -82,6 +61,42 @@ func (u UseCase) UpdateCredentials(ctx context.Context, account *models.Account,
 		return nil, derr
 	}
 	return &UpdateCredentialsResult{Account: *updated, RawJSON: raw, FollowerInboxes: inboxes}, nil
+}
+
+func (u UseCase) validatedProfileText(input UpdateCredentialsInput) (string, string, *domainerrors.DomainError) {
+	displayName := strings.TrimSpace(input.DisplayName)
+	if len([]rune(displayName)) > maxProfileDisplayNameLength {
+		return "", "", domainerrors.New(domainerrors.ErrBadRequest, "display_name is too long")
+	}
+	note := strings.TrimSpace(input.Note)
+	if len([]rune(note)) > maxProfileNoteLength {
+		return "", "", domainerrors.New(domainerrors.ErrBadRequest, "note is too long")
+	}
+	return displayName, u.cfg.ContentSanitizer.SanitizeHTML(note), nil
+}
+
+func (u UseCase) profileMediaIDs(ctx context.Context, account *models.Account, input UpdateCredentialsInput) (*string, *string, []models.MediaAttachment, *domainerrors.DomainError) {
+	avatarMediaID := account.AvatarMediaID
+	headerMediaID := account.HeaderMediaID
+	createdMedia := []models.MediaAttachment{}
+	if input.Avatar != nil {
+		media, derr := u.createProfileMedia(ctx, account, *input.Avatar)
+		if derr != nil {
+			return nil, nil, nil, derr
+		}
+		createdMedia = append(createdMedia, *media)
+		avatarMediaID = &media.ID
+	}
+	if input.Header != nil {
+		media, derr := u.createProfileMedia(ctx, account, *input.Header)
+		if derr != nil {
+			u.deleteCreatedProfileMedia(ctx, createdMedia)
+			return nil, nil, nil, derr
+		}
+		createdMedia = append(createdMedia, *media)
+		headerMediaID = &media.ID
+	}
+	return avatarMediaID, headerMediaID, createdMedia, nil
 }
 
 func (u UseCase) profileUpdateActivity(account models.Account) ([]byte, *domainerrors.DomainError) {

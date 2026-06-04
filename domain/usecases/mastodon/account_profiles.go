@@ -43,30 +43,13 @@ func (u UseCase) AccountStatuses(ctx context.Context, localAccount *models.Accou
 	if limit <= 0 || limit > 40 {
 		limit = 20
 	}
-	var notes []models.Note
-	var err error
-	if account.ID == localAccount.ID {
-		notes, err = u.cfg.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, localAccount.URI, limit, maxID)
-	} else {
-		if maxID == "" {
-			_ = u.cacheRemoteOutbox(ctx, localAccount, *account)
-		}
-		notes, err = u.cfg.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
-	}
+	notes, err := u.accountStatusNotes(ctx, localAccount, account, limit, maxID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	items := make([]TimelineItem, 0, len(notes))
-	for _, note := range notes {
-		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
-		if err != nil {
-			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
-		}
-		item, derr := u.timelineItem(ctx, localAccount, note, *account, u.replyAccountID(ctx, localAccount, note), media)
-		if derr != nil {
-			return nil, derr
-		}
-		items = append(items, *item)
+	items, derr := u.accountStatusItems(ctx, localAccount, account, notes)
+	if derr != nil {
+		return nil, derr
 	}
 	if excludeReblogs {
 		return items, nil
@@ -80,4 +63,30 @@ func (u UseCase) AccountStatuses(ctx context.Context, localAccount *models.Accou
 		return nil, derr
 	}
 	return mergeTimelineItems(items, boostItems, limit), nil
+}
+
+func (u UseCase) accountStatusNotes(ctx context.Context, localAccount, account *models.Account, limit int, maxID string) ([]models.Note, error) {
+	if account.ID == localAccount.ID {
+		return u.cfg.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, localAccount.URI, limit, maxID)
+	}
+	if maxID == "" {
+		_ = u.cacheRemoteOutbox(ctx, localAccount, *account)
+	}
+	return u.cfg.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+}
+
+func (u UseCase) accountStatusItems(ctx context.Context, localAccount, account *models.Account, notes []models.Note) ([]TimelineItem, *domainerrors.DomainError) {
+	items := make([]TimelineItem, 0, len(notes))
+	for _, note := range notes {
+		media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
+		if err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		item, derr := u.timelineItem(ctx, localAccount, note, *account, u.replyAccountID(ctx, localAccount, note), media)
+		if derr != nil {
+			return nil, derr
+		}
+		items = append(items, *item)
+	}
+	return items, nil
 }
