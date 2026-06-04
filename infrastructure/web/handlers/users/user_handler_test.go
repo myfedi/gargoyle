@@ -15,6 +15,8 @@ import (
 	"github.com/myfedi/gargoyle/adapters"
 	apAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
 	"github.com/myfedi/gargoyle/domain/models"
+	"github.com/myfedi/gargoyle/domain/models/domainerrors"
+	activitypubPorts "github.com/myfedi/gargoyle/domain/ports/activitypub"
 	"github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 )
@@ -38,6 +40,24 @@ func (f fakeDeliveryJobsRepo) MarkDeliveryJobDelivered(ctx context.Context, tx *
 }
 func (f fakeDeliveryJobsRepo) MarkDeliveryJobFailed(ctx context.Context, tx *db.Tx, id string, attempts int, nextAttemptAt time.Time, lastError string) error {
 	return nil
+}
+
+type acceptingSignatureVerifier struct {
+	actors []string
+}
+
+func (f *acceptingSignatureVerifier) VerifyInbound(ctx context.Context, input activitypubPorts.SignatureVerificationInput) *domainerrors.DomainError {
+	f.actors = append(f.actors, input.Actor)
+	return nil
+}
+
+type fakeActorFetcher struct {
+	fetched []string
+}
+
+func (f *fakeActorFetcher) FetchActor(ctx context.Context, actor string, signer *models.Account) (*activitypubPorts.RemoteActorDocument, error) {
+	f.fetched = append(f.fetched, actor)
+	return &activitypubPorts.RemoteActorDocument{Inbox: actor + "/inbox"}, nil
 }
 
 type fakeFetchJobsRepo struct{}
@@ -306,11 +326,14 @@ func (f *fakeFollowsRepo) RejectFollowingByActor(ctx context.Context, tx *db.Tx,
 	return nil
 }
 func (f *fakeFollowsRepo) DeleteFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor string) error {
-	return nil
+	return f.deleteByActor(localAccountID, remoteActor, "following")
 }
 func (f *fakeFollowsRepo) DeleteFollowByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor string) error {
+	return f.deleteByActor(localAccountID, remoteActor, "follower")
+}
+func (f *fakeFollowsRepo) deleteByActor(localAccountID, remoteActor, direction string) error {
 	for i, follower := range f.followers {
-		if follower.LocalAccountID == localAccountID && follower.RemoteActor == remoteActor {
+		if follower.LocalAccountID == localAccountID && follower.RemoteActor == remoteActor && follower.Direction == direction {
 			f.followers = append(f.followers[:i], f.followers[i+1:]...)
 			return nil
 		}
@@ -648,6 +671,50 @@ func TestUserProfileHandlerDoesNotDereferencePrivateObject(t *testing.T) {
 	}
 }
 
+func TestUserProfileHandlerDereferencesFollowersOnlyObjectForSignedAcceptedFollower(t *testing.T) {
+	app := fiber.New()
+	acceptedAt := time.Now().UTC()
+	remoteActor := "https://remote.example/users/bob"
+	notes := &fakeNotesRepo{notes: []models.Note{{ID: "note-1", LocalAccountID: "account-1", URI: "https://example.org/users/alice/objects/object-1", Content: "followers only", Visibility: "private", AttributedTo: "https://example.org/users/alice", PublishedAt: time.Date(2026, 5, 19, 12, 0, 0, 0, time.UTC)}}}
+	follows := &fakeFollowsRepo{followers: []models.Follow{{ID: "follow-1", LocalAccountID: "account-1", RemoteActor: remoteActor, Direction: "follower", AcceptedAt: &acceptedAt}}}
+	verifier := &acceptingSignatureVerifier{}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        follows,
+		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		SignatureVerifier:  verifier,
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	req := httptest.NewRequest("GET", "/users/alice/objects/object-1", nil)
+	req.Header.Set("Signature", `keyId="https://remote.example/users/bob#main-key"`)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if len(verifier.actors) != 1 || verifier.actors[0] != remoteActor {
+		t.Fatalf("expected verifier to receive requester actor, got %#v", verifier.actors)
+	}
+}
+
 func TestUserProfileHandlerDereferencesPublicActivity(t *testing.T) {
 	app := fiber.New()
 	activities := &fakeActivitiesRepo{activities: []models.Activity{{LocalAccountID: "account-1", Direction: models.ActivityDirectionOutbox, Type: "Create", Object: "https://example.org/users/alice/objects/object-1", RawJSON: `{"@context":"https://www.w3.org/ns/activitystreams","id":"https://example.org/users/alice/activities/activity-1","type":"Create","actor":"https://example.org/users/alice","object":"https://example.org/users/alice/objects/object-1"}`}}}
@@ -892,6 +959,155 @@ func TestUserProfileHandlerUndoAnnounceDeletesBoostAndNotification(t *testing.T)
 	}
 	if len(social.deleted) != 1 || social.deleted[0] != "account-1|https://remote.example/users/bob|reblog" {
 		t.Fatalf("expected reblog notification deletion, got %#v", social.deleted)
+	}
+}
+
+func TestUserProfileHandlerDeletesNoteOnInboundTombstoneUpdate(t *testing.T) {
+	app := fiber.New()
+	notes := &fakeNotesRepo{notes: []models.Note{{ID: "note-1", LocalAccountID: "account-1", URI: "https://remote.example/notes/1", Content: "gone", Visibility: "public", AttributedTo: "https://remote.example/users/bob"}}}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Update","actor":"https://remote.example/users/bob","object":{"id":"https://remote.example/notes/1","type":"Tombstone","formerType":"Note"}}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(notes.notes) != 0 {
+		t.Fatalf("expected tombstoned note to be deleted, got %#v", notes.notes)
+	}
+}
+
+func TestUserProfileHandlerRemoteBlockRemovesRelationships(t *testing.T) {
+	app := fiber.New()
+	remoteActor := "https://remote.example/users/bob"
+	acceptedAt := time.Now().UTC()
+	follows := &fakeFollowsRepo{followers: []models.Follow{
+		{ID: "follower", LocalAccountID: "account-1", RemoteActor: remoteActor, Direction: "follower", AcceptedAt: &acceptedAt},
+		{ID: "following", LocalAccountID: "account-1", RemoteActor: remoteActor, Direction: "following", AcceptedAt: &acceptedAt},
+	}}
+	newTestHandler(fakeAccountsRepo{}, &fakeActivitiesRepo{}, follows).SetupUserProfileHandler(app)
+
+	body := `{"type":"Block","actor":"https://remote.example/users/bob","object":"https://example.org/users/alice"}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(follows.followers) != 0 {
+		t.Fatalf("expected block to remove follower/following relationships, got %#v", follows.followers)
+	}
+}
+
+func TestUserProfileHandlerAcceptsFlagWithoutSideEffects(t *testing.T) {
+	app := fiber.New()
+	activities := &fakeActivitiesRepo{}
+	notes := &fakeNotesRepo{}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     activities,
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Flag","actor":"https://remote.example/users/bob","object":"https://example.org/users/alice/objects/note-1","content":"report"}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(activities.activities) != 1 || activities.activities[0].Type != "Flag" {
+		t.Fatalf("expected raw Flag activity to be stored, got %#v", activities.activities)
+	}
+	if len(notes.notes) != 0 {
+		t.Fatalf("expected Flag not to create/delete notes, got %#v", notes.notes)
+	}
+}
+
+func TestUserProfileHandlerMoveFetchesTargetButDoesNotRewriteRelationships(t *testing.T) {
+	app := fiber.New()
+	remoteActor := "https://remote.example/users/bob"
+	acceptedAt := time.Now().UTC()
+	follows := &fakeFollowsRepo{followers: []models.Follow{{ID: "following", LocalAccountID: "account-1", RemoteActor: remoteActor, Direction: "following", AcceptedAt: &acceptedAt}}}
+	fetcher := &fakeActorFetcher{}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        follows,
+		NotesRepo:          &fakeNotesRepo{},
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		ActorFetcher:       fetcher,
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Move","actor":"https://remote.example/users/bob","object":"https://remote.example/users/bob","target":"https://new.example/users/bob"}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(fetcher.fetched) != 1 || fetcher.fetched[0] != "https://new.example/users/bob" {
+		t.Fatalf("expected Move target to be fetched, got %#v", fetcher.fetched)
+	}
+	if len(follows.followers) != 1 || follows.followers[0].RemoteActor != remoteActor {
+		t.Fatalf("expected Move not to rewrite relationships, got %#v", follows.followers)
 	}
 }
 

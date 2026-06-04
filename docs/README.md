@@ -2,7 +2,7 @@
 
 ## Compatibility testing
 
-Local Fediverse interoperability fixtures live in [`../compat`](../compat). The current GoToSocial setup validates WebFinger discovery, actor fetches, signed follow/accept, outbound Note delivery, inbound mention Note delivery, and unfollow handling. See [`../compat/README.md`](../compat/README.md) for the exact Docker/Caddy setup and checklist.
+Current Docker-backed Fediverse interoperability tests live in [`../integration`](../integration). The GoToSocial suite validates discovery, signed follow/unfollow, delivery, visibility behavior, replies, deletes, edits/Update, media, polls/votes, retries, and selected hardening checks. Older manual fixtures remain in [`../compat`](../compat). See [`../integration/README.md`](../integration/README.md) for the runnable suite.
 
 ## Architecture
 The ports and adapters (also known as hexagonal) architecture is used with inspiration from domain-driven design (DDD). The architecture is designed to be modular, with clear separation of concerns between the domain logic and the infrastructure.

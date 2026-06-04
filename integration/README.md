@@ -47,6 +47,8 @@ The suite currently validates:
 - Remote URL hardening rejects unconfigured private-host resolution.
 - Profile update credentials persist locally and federate to GTS followers.
 - Status edits persist locally and federate to GTS via ActivityPub Update.
+- Gargoyle-created polls federate to GTS as polls, remote GTS votes are reflected locally, and Gargoyle can vote on a GTS poll through the Mastodon-compatible poll API.
+- Fast handler/usecase coverage validates followers-only signed GET dereferencing, inbound Tombstone deletion, inbound Block relationship cleanup, Flag storage/no-op behavior, conservative Move handling, and ActivityPub hashtag/custom emoji tag extraction.
 
 Known compatibility observation captured by the tests: Gargoyle's unlisted status is currently received by GTS as `public`.
 

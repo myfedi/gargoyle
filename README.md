@@ -110,17 +110,20 @@ Implemented ActivityPub endpoints:
 
 -   `GET /@:username` redirects to the canonical actor URL.
 -   `GET /users/:username` returns an ActivityPub actor.
--   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow`, `Undo Follow`, `Create`, `Delete`, `Update`, `Accept`, `Reject`, `Like`, and `Announce`.
+-   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow`, `Undo Follow`, `Create`, `Delete`, `Update`, `Accept`, `Reject`, `Like`, `Undo Like`, `Announce`, `Undo Announce`, `Block`, `Flag`, and conservative `Move` handling. `Update` with a `Tombstone` object removes the cached note after actor ownership validation.
+-   `POST /inbox` provides a shared inbox for addressed local recipients.
 -   `GET /users/:username/outbox` returns stored outbox activities.
 -   `GET /users/:username/followers` returns accepted followers.
 -   `GET /users/:username/following` returns accepted outbound follows.
 -   `GET /users/:username/collections/featured` returns the actor's featured collection.
+-   `GET /users/:username/objects/:id` returns dereferenceable local ActivityPub objects. Public/unlisted objects are public; followers-only objects require a valid signed GET from an accepted follower. Direct-message object dereferencing is intentionally disabled for now.
+-   `GET /users/:username/activities/:id` returns dereferenceable public/unlisted local ActivityPub activities.
 
 ActivityPub C2S mutation routes are intentionally not exposed. Local posting, following, profile updates, and media management use authenticated Mastodon-compatible API endpoints.
 
 ## Federation
 
-The server now has the basic pieces for federation and Mastodon-compatible clients: actor discovery, signed inbox requirement, follow acceptance, durable signed delivery jobs, fetch jobs, stored local/remote notes, reply threads, OAuth/PKCE login, account search, follow/unfollow, timelines, account profiles, profile updates, status create/detail/edit/delete with persisted edit history, favourites, bookmarks, boosts, conversations, notifications, media uploads/serving, and followers/following collections.
+The server now has the basic pieces for federation and Mastodon-compatible clients: actor discovery, signed inbox requirement, signed GET support for followers-only object dereferencing, follow acceptance, durable signed delivery jobs, fetch jobs, stored local/remote notes, reply threads, polls/ActivityPub Questions, hashtag and remote custom emoji metadata, OAuth/PKCE login, account search with explicit remote resolution, follow/unfollow, timelines, account profiles, profile updates, status create/detail/edit/delete with persisted edit history, favourites, bookmarks, boosts, conversations, notifications, media uploads/serving, and followers/following collections.
 
 Compatibility notes:
 
@@ -164,11 +167,11 @@ Implemented Mastodon-compatible client endpoints include:
 
 -   OAuth app registration, authorization-code PKCE, token issuing, and account verification.
 -   Instance metadata, account search, profile lookup/update, account statuses, relationships, follow/unfollow, followers, and following.
--   Status create/detail/edit/delete/source/history/context, including persisted edit history, favourites, bookmarks, pins, boosts, replies, and visibility handling.
+-   Status create/detail/edit/delete/source/history/context, including persisted edit history, favourites, bookmarks, pins, boosts, replies, polls, hashtag/custom emoji metadata, and visibility handling.
 -   Media upload, metadata update/delete, attachment lookup, and public media serving.
 -   Notifications list/clear/dismiss/delete.
 -   Conversations list/read/delete.
--   Favourites/bookmarks lists, preferences, custom emojis, trends/lists/filters compatibility responses, and home/public timelines with local/remote filters.
+-   Favourites/bookmarks lists, preferences, custom emoji compatibility responses, trends/lists/filters compatibility responses, and home/public timelines with local/remote filters.
 -   A first-party React/Vite frontend that uses this Mastodon-compatible API for login, timelines, compose/reply/edit/delete, media, search, follows, notifications, conversations, and profile management.
 
 The GoToSocial integration suite can be run with:
@@ -196,7 +199,7 @@ go run cmd/cli/admin/main.go media-cleanup --config ./config.yml --older-than 24
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.
--   GoToSocial integration coverage includes discovery, follow/unfollow, outbound follow, multiple visibility statuses, direct mentions, status edits/federated Update, favourites, boosts, replies, deletes, OAuth/token setup, and media upload/fetchability, but broader real-server validation is still needed.
+-   GoToSocial integration coverage includes discovery, follow/unfollow, outbound follow, multiple visibility statuses, direct mentions, status edits/federated Update, favourites, boosts, replies, deletes, polls/votes, OAuth/token setup, delivery retry, private-host hardening, profile update federation, and media upload/fetchability, but broader real-server validation is still needed.
 -   Fetch and delivery queues have basic observability and duplicate fetch suppression, but need richer operational tooling.
 -   Some security limitations remain documented in [`LIMITATIONS.md`](LIMITATIONS.md).
 
