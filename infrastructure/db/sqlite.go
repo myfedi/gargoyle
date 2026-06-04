@@ -2,6 +2,8 @@ package db
 
 import (
 	"database/sql"
+	"net/url"
+	"strings"
 
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
@@ -20,7 +22,7 @@ type SqliteStore struct {
 }
 
 func NewSqliteStore(cfg SqliteStoreConfig) SqliteStore {
-	sqlite, err := sql.Open(sqliteshim.ShimName, cfg.SqlitePath)
+	sqlite, err := sql.Open(sqliteshim.ShimName, sqliteDSN(cfg.SqlitePath))
 	if err != nil {
 		panic(err)
 	}
@@ -42,10 +44,26 @@ func NewSqliteStore(cfg SqliteStoreConfig) SqliteStore {
 	if _, err := bun.Exec("PRAGMA busy_timeout = 5000"); err != nil {
 		panic(err)
 	}
-	sqlite.SetMaxOpenConns(1)
+	sqlite.SetMaxOpenConns(4)
+	sqlite.SetMaxIdleConns(4)
 
 	return SqliteStore{
 		Sqlite: sqlite,
 		Bun:    bun,
 	}
+}
+
+func sqliteDSN(path string) string {
+	if path == "" {
+		return path
+	}
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+	params := url.Values{}
+	params.Add("_pragma", "foreign_keys(1)")
+	params.Add("_pragma", "journal_mode(WAL)")
+	params.Add("_pragma", "busy_timeout(5000)")
+	return path + separator + params.Encode()
 }

@@ -67,6 +67,9 @@ func (w *FetchWorker) Start(ctx context.Context) {
 func (w *FetchWorker) ProcessOnce(ctx context.Context) {
 	due, err := w.jobs.ClaimDueFetchJobs(ctx, nil, time.Now().UTC(), w.batchSize)
 	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		w.logger.Printf("fetch worker claim failed: %v", err)
 		return
 	}
