@@ -34,7 +34,21 @@ type Status struct {
 	Reblog           *Status           `json:"reblog"`
 	Mentions         []Account         `json:"mentions"`
 	MediaAttachments []MediaAttachment `json:"media_attachments"`
+	Poll             *Poll             `json:"poll"`
 	Account          Account           `json:"account"`
+}
+
+type Poll struct {
+	ID       string       `json:"id"`
+	Multiple bool         `json:"multiple"`
+	Voted    bool         `json:"voted"`
+	Votes    []int        `json:"own_votes"`
+	Options  []PollOption `json:"options"`
+}
+
+type PollOption struct {
+	Title      string `json:"title"`
+	VotesCount int    `json:"votes_count"`
 }
 
 type MediaAttachment struct {

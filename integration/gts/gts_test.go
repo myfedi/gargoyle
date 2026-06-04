@@ -842,6 +842,68 @@ func integrationDirFromWD() string {
 	return filepath.Join(wd, "integration", "gts")
 }
 
+func TestPollFederatesBetweenGargoyleAndGoToSocial(t *testing.T) {
+	s := setupSuite(t)
+	ensureGTSFollowsGargoyle(t, s)
+	ensureGargoyleFollowsGTS(t, s)
+
+	marker := fmt.Sprintf("poll-%d", time.Now().UnixNano())
+	var created shared.Status
+	resp, body, err := s.gargoyle.PostForm(s.ctx, "/api/v1/statuses", s.gargoyleToken, url.Values{
+		"status":           {"poll from gargoyle " + marker},
+		"visibility":       {"public"},
+		"activitypub_type": {"Question"},
+		"poll[options][]":  {"red " + marker, "blue " + marker},
+		"poll[expires_in]": {"3600"},
+		"poll[multiple]":   {"false"},
+	}, &created)
+	shared.Require2xx(t, resp, body, err)
+	if created.Poll == nil || len(created.Poll.Options) != 2 {
+		t.Fatalf("created Gargoyle status did not include poll: %+v", created)
+	}
+
+	remote := waitForStatus(t, s.ctx, s.gts, s.gtsToken, "/api/v1/timelines/home?limit=80", marker)
+	if remote.Poll == nil || len(remote.Poll.Options) != 2 {
+		t.Fatalf("GTS did not receive Gargoyle poll as a poll: %+v", remote)
+	}
+	var remoteVoted shared.Poll
+	resp, body, err = s.gts.PostForm(s.ctx, "/api/v1/polls/"+url.PathEscape(remote.Poll.ID)+"/votes", s.gtsToken, url.Values{"choices[]": {"0"}}, &remoteVoted)
+	shared.Require2xx(t, resp, body, err)
+
+	shared.WaitFor(s.ctx, "remote poll vote reaches Gargoyle", 2*time.Second, func(ctx context.Context) (struct{}, bool, error) {
+		var local shared.Status
+		resp, _, err := s.gargoyle.GetJSON(ctx, "/api/v1/statuses/"+url.PathEscape(created.ID), s.gargoyleToken, &local)
+		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return struct{}{}, false, err
+		}
+		if local.Poll == nil || len(local.Poll.Options) == 0 {
+			return struct{}{}, false, nil
+		}
+		return struct{}{}, local.Poll.Options[0].VotesCount > 0, nil
+	})
+
+	gtsMarker := fmt.Sprintf("gts-poll-%d", time.Now().UnixNano())
+	var gtsCreated shared.Status
+	resp, body, err = s.gts.PostForm(s.ctx, "/api/v1/statuses", s.gtsToken, url.Values{
+		"status":           {"@alice@gargoyle.test poll from gts " + gtsMarker},
+		"visibility":       {"public"},
+		"poll[options][]":  {"cat " + gtsMarker, "dog " + gtsMarker},
+		"poll[expires_in]": {"3600"},
+		"poll[multiple]":   {"false"},
+	}, &gtsCreated)
+	shared.Require2xx(t, resp, body, err)
+	localRemote := waitForStatus(t, s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/timelines/public?limit=80", gtsMarker)
+	if localRemote.Poll == nil || len(localRemote.Poll.Options) != 2 {
+		t.Fatalf("Gargoyle did not receive GTS poll as a poll: %+v", localRemote)
+	}
+	var localVote shared.Poll
+	resp, body, err = s.gargoyle.PostForm(s.ctx, "/api/v1/polls/"+url.PathEscape(localRemote.Poll.ID)+"/votes", s.gargoyleToken, url.Values{"choices[]": {"1"}}, &localVote)
+	shared.Require2xx(t, resp, body, err)
+	if !localVote.Voted || len(localVote.Votes) == 0 || localVote.Votes[0] != 1 {
+		t.Fatalf("Gargoyle poll vote response did not record selected option: %+v", localVote)
+	}
+}
+
 func TestStatusEditFederatesToGoToSocial(t *testing.T) {
 	s := setupSuite(t)
 	ensureGTSFollowsGargoyle(t, s)
