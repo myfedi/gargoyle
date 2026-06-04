@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -21,6 +22,7 @@ type DeleteStatusResult struct {
 type StatusContext struct {
 	Ancestors   []TimelineItem
 	Descendants []TimelineItem
+	Warnings    []string
 }
 
 func (u UseCase) GetStatus(ctx context.Context, localAccount *models.Account, statusID string) (*TimelineItem, *domainerrors.DomainError) {
@@ -86,7 +88,7 @@ func (u UseCase) StatusContext(ctx context.Context, localAccount *models.Account
 	if derr != nil {
 		return nil, derr
 	}
-	ancestors, derr := u.statusAncestors(ctx, localAccount, item.Note)
+	ancestors, warnings, derr := u.statusAncestors(ctx, localAccount, item.Note)
 	if derr != nil {
 		return nil, derr
 	}
@@ -98,7 +100,7 @@ func (u UseCase) StatusContext(ctx context.Context, localAccount *models.Account
 	if derr != nil {
 		return nil, derr
 	}
-	return &StatusContext{Ancestors: uniqueTimelineItems(ancestors), Descendants: uniqueTimelineItems(descendants)}, nil
+	return &StatusContext{Ancestors: uniqueTimelineItems(ancestors), Descendants: uniqueTimelineItems(descendants), Warnings: warnings}, nil
 }
 
 func (u UseCase) statusDescendants(ctx context.Context, localAccount *models.Account, note models.Note, depth int, seen map[string]bool) ([]TimelineItem, *domainerrors.DomainError) {
@@ -129,40 +131,43 @@ func (u UseCase) statusDescendants(ctx context.Context, localAccount *models.Acc
 	return descendants, nil
 }
 
-func (u UseCase) statusAncestors(ctx context.Context, localAccount *models.Account, note models.Note) ([]TimelineItem, *domainerrors.DomainError) {
+func (u UseCase) statusAncestors(ctx context.Context, localAccount *models.Account, note models.Note) ([]TimelineItem, []string, *domainerrors.DomainError) {
 	return u.statusAncestorsWithDepth(ctx, localAccount, note, 0, map[string]bool{note.ID: true})
 }
 
-func (u UseCase) statusAncestorsWithDepth(ctx context.Context, localAccount *models.Account, note models.Note, depth int, seen map[string]bool) ([]TimelineItem, *domainerrors.DomainError) {
+func (u UseCase) statusAncestorsWithDepth(ctx context.Context, localAccount *models.Account, note models.Note, depth int, seen map[string]bool) ([]TimelineItem, []string, *domainerrors.DomainError) {
 	if depth >= 40 {
-		return []TimelineItem{}, nil
+		return []TimelineItem{}, nil, nil
 	}
-	parent, derr := u.parentNote(ctx, localAccount, note)
+	parent, warning, derr := u.parentNote(ctx, localAccount, note)
 	if derr != nil {
-		return nil, derr
+		return nil, nil, derr
+	}
+	if warning != "" {
+		return []TimelineItem{}, []string{warning}, nil
 	}
 	if parent == nil || seen[parent.ID] {
-		return []TimelineItem{}, nil
+		return []TimelineItem{}, nil, nil
 	}
 	seen[parent.ID] = true
-	items, derr := u.statusAncestorsWithDepth(ctx, localAccount, *parent, depth+1, seen)
+	items, warnings, derr := u.statusAncestorsWithDepth(ctx, localAccount, *parent, depth+1, seen)
 	if derr != nil {
-		return nil, derr
+		return nil, nil, derr
 	}
 	author, derr := u.noteAuthor(ctx, localAccount, *parent)
 	if derr != nil {
-		return nil, derr
+		return nil, nil, derr
 	}
 	media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, parent.ID)
 	if err != nil {
-		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		return nil, nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	item, derr := u.timelineItem(ctx, localAccount, *parent, *author, u.replyAccountID(ctx, localAccount, *parent), media)
 	if derr != nil {
-		return nil, derr
+		return nil, nil, derr
 	}
 	items = append(items, *item)
-	return items, nil
+	return items, warnings, nil
 }
 
 func uniqueTimelineItems(items []TimelineItem) []TimelineItem {
@@ -182,32 +187,32 @@ func uniqueTimelineItems(items []TimelineItem) []TimelineItem {
 	return unique
 }
 
-func (u UseCase) parentNote(ctx context.Context, localAccount *models.Account, note models.Note) (*models.Note, *domainerrors.DomainError) {
+func (u UseCase) parentNote(ctx context.Context, localAccount *models.Account, note models.Note) (*models.Note, string, *domainerrors.DomainError) {
 	if note.InReplyToID != nil && *note.InReplyToID != "" {
 		parent, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, *note.InReplyToID)
 		if err != nil {
-			return nil, nil
+			return nil, "", nil
 		}
-		return parent, nil
+		return parent, "", nil
 	}
 	if note.InReplyToURI == nil || *note.InReplyToURI == "" {
-		return nil, nil
+		return nil, "", nil
 	}
 	parent, err := u.cfg.NotesRepo.GetNoteByURI(ctx, nil, *note.InReplyToURI)
 	if err == nil {
-		return parent, nil
+		return parent, "", nil
 	}
 	if err != sql.ErrNoRows {
-		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		return nil, "", domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	if err := u.cacheRemoteContextNote(ctx, localAccount, *note.InReplyToURI); err != nil {
-		return nil, nil
+		return nil, fmt.Sprintf("Could not load parent post %s: %v", *note.InReplyToURI, err), nil
 	}
 	parent, err = u.cfg.NotesRepo.GetNoteByURI(ctx, nil, *note.InReplyToURI)
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Sprintf("Could not load parent post %s", *note.InReplyToURI), nil
 	}
-	return parent, nil
+	return parent, "", nil
 }
 
 func (u UseCase) cacheRemoteContextNote(ctx context.Context, localAccount *models.Account, objectURI string) error {

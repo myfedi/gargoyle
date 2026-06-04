@@ -836,6 +836,7 @@ func (h APIHandler) deleteStatus(c *fiber.Ctx) error {
 type contextResponse struct {
 	Ancestors   []statusResponse `json:"ancestors"`
 	Descendants []statusResponse `json:"descendants"`
+	Warnings    []string         `json:"warnings,omitempty"`
 }
 
 func (h APIHandler) statusContext(c *fiber.Ctx) error {
@@ -847,7 +848,7 @@ func (h APIHandler) statusContext(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(contextResponse{Ancestors: timelineItemsToStatuses(ctxResp.Ancestors), Descendants: timelineItemsToStatuses(ctxResp.Descendants)})
+	return c.JSON(contextResponse{Ancestors: timelineItemsToStatuses(ctxResp.Ancestors), Descendants: timelineItemsToStatuses(ctxResp.Descendants), Warnings: ctxResp.Warnings})
 }
 
 func (h APIHandler) homeTimeline(c *fiber.Ctx) error {

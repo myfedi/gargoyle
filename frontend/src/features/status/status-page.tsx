@@ -34,6 +34,7 @@ export function StatusPage({ route }: StatusPageProps) {
   const [status, setStatus] = useState<MastodonStatus | null>(null);
   const [ancestors, setAncestors] = useState<MastodonStatus[]>([]);
   const [descendants, setDescendants] = useState<MastodonStatus[]>([]);
+  const [contextWarnings, setContextWarnings] = useState<string[]>([]);
   const [currentAccount, setCurrentAccount] = useState<MastodonAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
@@ -64,7 +65,9 @@ export function StatusPage({ route }: StatusPageProps) {
       setStatus(nextStatus);
       setAncestors(context.ancestors);
       setDescendants(context.descendants);
+      setContextWarnings(context.warnings ?? []);
     } catch (caughtError) {
+      setContextWarnings([]);
       setError(caughtError instanceof Error ? caughtError.message : "Could not load post.");
     } finally {
       setIsLoading(false);
@@ -174,6 +177,15 @@ export function StatusPage({ route }: StatusPageProps) {
   return (
     <section className="mx-auto max-w-2xl space-y-5">
       <Panel title="Thread">
+        {contextWarnings.length > 0 ? (
+          <div className="mb-4 space-y-2" role="status" aria-live="polite">
+            {contextWarnings.map((warning) => (
+              <p key={warning} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                {warning}
+              </p>
+            ))}
+          </div>
+        ) : null}
         {error ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
             {error}

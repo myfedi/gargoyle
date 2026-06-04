@@ -108,7 +108,7 @@ export function createMastodonApi(accessToken: string) {
       return client.request<MastodonStatus>(`/api/v1/statuses/${encodeURIComponent(id)}`);
     },
     statusContext(id: string) {
-      return client.request<{ ancestors: MastodonStatus[]; descendants: MastodonStatus[] }>(
+      return client.request<{ ancestors: MastodonStatus[]; descendants: MastodonStatus[]; warnings?: string[] }>(
         `/api/v1/statuses/${encodeURIComponent(id)}/context`,
       );
     },
