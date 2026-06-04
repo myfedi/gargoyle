@@ -20,10 +20,6 @@ Local actor private keys are currently stored as PEM text in the database. This 
 
 Outbound ActivityPub HTTP Signatures currently use `rsa-sha256`, which maps to RSASSA-PKCS1-v1_5 with SHA-256 in widely deployed federation software. RSA-PSS is preferable for new protocols, but using it here would break compatibility with many peers. These operations are signatures, not RSA encryption.
 
-## Status edit history
-
-Gargoyle supports local status edits, federates them as ActivityPub `Update`, and exposes Mastodon-compatible status edit/source endpoints. It does not yet persist historical revisions, so `/api/v1/statuses/:id/history` currently returns the current revision as a compatibility snapshot.
-
 ## Outgoing pending follow request listing
 
 Gargoyle persists outgoing follow requests while they are pending, and exposes their per-account state through the Mastodon-compatible relationships endpoint (`/api/v1/accounts/relationships`) as `requested: true`.

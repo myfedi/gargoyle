@@ -120,7 +120,7 @@ ActivityPub C2S mutation routes are intentionally not exposed. Local posting, fo
 
 ## Federation
 
-The server now has the basic pieces for federation and Mastodon-compatible clients: actor discovery, signed inbox requirement, follow acceptance, durable signed delivery jobs, fetch jobs, stored local/remote notes, reply threads, OAuth/PKCE login, account search, follow/unfollow, timelines, account profiles, profile updates, status create/detail/edit/delete, favourites, bookmarks, boosts, conversations, notifications, media uploads/serving, and followers/following collections.
+The server now has the basic pieces for federation and Mastodon-compatible clients: actor discovery, signed inbox requirement, follow acceptance, durable signed delivery jobs, fetch jobs, stored local/remote notes, reply threads, OAuth/PKCE login, account search, follow/unfollow, timelines, account profiles, profile updates, status create/detail/edit/delete with persisted edit history, favourites, bookmarks, boosts, conversations, notifications, media uploads/serving, and followers/following collections.
 
 Compatibility notes:
 
@@ -164,7 +164,7 @@ Implemented Mastodon-compatible client endpoints include:
 
 -   OAuth app registration, authorization-code PKCE, token issuing, and account verification.
 -   Instance metadata, account search, profile lookup/update, account statuses, relationships, follow/unfollow, followers, and following.
--   Status create/detail/edit/delete/source/history/context, favourites, bookmarks, pins, boosts, replies, and visibility handling.
+-   Status create/detail/edit/delete/source/history/context, including persisted edit history, favourites, bookmarks, pins, boosts, replies, and visibility handling.
 -   Media upload, metadata update/delete, attachment lookup, and public media serving.
 -   Notifications list/clear/dismiss/delete.
 -   Conversations list/read/delete.
@@ -196,7 +196,7 @@ go run cmd/cli/admin/main.go media-cleanup --config ./config.yml --older-than 24
 Known gaps before claiming broad compatibility:
 
 -   Mastodon/Akkoma compatibility still needs real-world testing.
--   GoToSocial integration coverage includes discovery, follow/unfollow, outbound follow, multiple visibility statuses, direct mentions, favourites, boosts, replies, deletes, OAuth/token setup, and media upload/fetchability, but broader real-server validation is still needed.
+-   GoToSocial integration coverage includes discovery, follow/unfollow, outbound follow, multiple visibility statuses, direct mentions, status edits/federated Update, favourites, boosts, replies, deletes, OAuth/token setup, and media upload/fetchability, but broader real-server validation is still needed.
 -   Fetch and delivery queues have basic observability and duplicate fetch suppression, but need richer operational tooling.
 -   Some security limitations remain documented in [`LIMITATIONS.md`](LIMITATIONS.md).
 

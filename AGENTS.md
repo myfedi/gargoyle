@@ -55,6 +55,21 @@ Examples:
 
 Do not import utility or infrastructure packages into domain use cases just because it is convenient.
 
+## Database models and migrations
+
+When adding or renaming Bun database models, explicitly set the table name with `bun.BaseModel` if the migrated table name is not exactly Bun's inferred plural form. Do not rely on Bun pluralization for irregular or intentionally singular table names; mismatches such as `status_edit_history` vs `status_edit_histories` only fail at runtime.
+
+Example:
+
+```go
+type StatusEditHistory struct {
+	bun.BaseModel `bun:"table:status_edit_history"`
+	// ...
+}
+```
+
+After adding a migration and model, verify repository queries use the migrated table name.
+
 ## Constructor validation
 
 Required dependencies should be validated in constructors. Panicking during startup wiring is acceptable because missing dependencies are non-recoverable configuration/programming errors.
