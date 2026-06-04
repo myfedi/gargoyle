@@ -132,20 +132,23 @@ function ConversationRow({ conversation, isBusy, onMarkRead, onDelete }: Convers
   return (
     <article className="py-4 first:pt-0 last:pb-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold">{participantLabel || "Conversation"}</h2>
-            {conversation.unread ? <Badge variant="secondary">Unread</Badge> : null}
-          </div>
-          {visibleParticipants.length > 0 ? (
-            <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-              {visibleParticipants.map((participant) => (
-                <a key={participant.id} className="hover:text-foreground hover:underline" href={accountHref(participant.id)}>
-                  @{participant.acct}
-                </a>
-              ))}
+        <div className="flex min-w-0 gap-3">
+          <ParticipantAvatarStack participants={visibleParticipants} />
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-semibold">{participantLabel || "Conversation"}</h2>
+              {conversation.unread ? <Badge variant="secondary">Unread</Badge> : null}
             </div>
-          ) : null}
+            {visibleParticipants.length > 0 ? (
+              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                {visibleParticipants.map((participant) => (
+                  <a key={participant.id} className="hover:text-foreground hover:underline" href={accountHref(participant.id)}>
+                    @{participant.acct}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="flex gap-2">
           {conversation.unread ? (
@@ -161,18 +164,56 @@ function ConversationRow({ conversation, isBusy, onMarkRead, onDelete }: Convers
 
       {lastStatus ? (
         <div className="mt-3 rounded-md border border-border bg-background p-3">
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <a className="font-medium text-foreground hover:underline" href={accountHref(lastStatus.account.id)}>
-              {lastStatus.account.display_name || lastStatus.account.username}
-            </a>
-            <span>@{lastStatus.account.acct}</span>
-            <a className="ml-auto hover:underline" href={statusHref(lastStatus.id)}>
-              <time dateTime={lastStatus.created_at}>{formatDateTime(lastStatus.created_at)}</time>
-            </a>
+          <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <AccountAvatar account={lastStatus.account} className="size-7 text-xs" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <a className="font-medium text-foreground hover:underline" href={accountHref(lastStatus.account.id)}>
+                  {lastStatus.account.display_name || lastStatus.account.username}
+                </a>
+                <span>@{lastStatus.account.acct}</span>
+                <a className="ml-auto hover:underline" href={statusHref(lastStatus.id)}>
+                  <time dateTime={lastStatus.created_at}>{formatDateTime(lastStatus.created_at)}</time>
+                </a>
+              </div>
+            </div>
           </div>
           <StatusContent html={lastStatus.content} mentions={lastStatus.mentions} />
         </div>
       ) : null}
     </article>
   );
+}
+
+function ParticipantAvatarStack({ participants }: { participants: MastodonConversation["accounts"] }) {
+  if (participants.length === 0) {
+    return <div className="size-10 shrink-0 rounded-full border border-border bg-secondary" aria-hidden="true" />;
+  }
+
+  return (
+    <div className="flex shrink-0 -space-x-2" aria-hidden="true">
+      {participants.slice(0, 3).map((participant) => (
+        <AccountAvatar key={participant.id} account={participant} className="size-10 ring-2 ring-card" />
+      ))}
+    </div>
+  );
+}
+
+function AccountAvatar({ account, className }: { account: MastodonConversation["accounts"][number]; className: string }) {
+  const avatar = account.avatar_static || account.avatar;
+
+  if (avatar) {
+    return <img className={`${className} rounded-full border border-border object-cover`} src={avatar} alt="" aria-hidden="true" />;
+  }
+
+  return (
+    <div className={`${className} flex items-center justify-center rounded-full border border-border bg-secondary font-semibold uppercase text-secondary-foreground`} aria-hidden="true">
+      {accountInitials(account)}
+    </div>
+  );
+}
+
+function accountInitials(account: MastodonConversation["accounts"][number]) {
+  const label = account.display_name || account.username || account.acct || "?";
+  return label.trim().slice(0, 1) || "?";
 }

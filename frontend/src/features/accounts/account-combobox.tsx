@@ -141,16 +141,19 @@ export function AccountCombobox({
                 <button
                   key={account.id}
                   type="button"
-                  className="block w-full rounded-md px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground"
+                  className="flex w-full gap-3 rounded-md px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     onSelect(account);
                     setIsOpen(false);
                   }}
                 >
-                  <span className="block truncate text-sm font-medium">{account.display_name || account.username}</span>
-                  <span className="block truncate text-xs text-muted-foreground">@{account.acct}</span>
-                  {account.note ? <span className="mt-1 block truncate text-xs text-muted-foreground">{htmlToPlainText(account.note)}</span> : null}
+                  <AccountResultAvatar account={account} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{account.display_name || account.username}</span>
+                    <span className="block truncate text-xs text-muted-foreground">@{account.acct}</span>
+                    {account.note ? <span className="mt-1 block truncate text-xs text-muted-foreground">{htmlToPlainText(account.note)}</span> : null}
+                  </span>
                 </button>
               ))}
             </div>
@@ -173,6 +176,25 @@ export function AccountCombobox({
       ) : null}
     </div>
   );
+}
+
+function AccountResultAvatar({ account }: { account: MastodonAccount }) {
+  const avatar = account.avatar_static || account.avatar;
+
+  if (avatar) {
+    return <img className="size-10 shrink-0 rounded-full border border-border object-cover" src={avatar} alt="" aria-hidden="true" />;
+  }
+
+  return (
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-secondary text-sm font-semibold uppercase text-secondary-foreground" aria-hidden="true">
+      {accountInitial(account)}
+    </span>
+  );
+}
+
+function accountInitial(account: MastodonAccount) {
+  const label = account.display_name || account.username || account.acct || "?";
+  return label.trim().slice(0, 1) || "?";
 }
 
 export function knownAccountSearchQuery(value: string) {
