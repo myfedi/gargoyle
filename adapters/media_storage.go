@@ -15,7 +15,7 @@ func (s *LocalMediaStorage) SaveMedia(ctx context.Context, id string, fileName s
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dir, 0o750); err != nil {
 		return "", err
 	}
 	ext := filepath.Ext(fileName)
@@ -24,7 +24,7 @@ func (s *LocalMediaStorage) SaveMedia(ctx context.Context, id string, fileName s
 	}
 	name := id + ext
 	path := filepath.Join(s.dir, name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", err
 	}
 	return name, nil
