@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -253,9 +254,28 @@ func (u UseCase) accountForActor(ctx context.Context, localAccount *models.Accou
 	}
 	remote, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, actor)
 	if err == nil {
-		return remote, nil
+		return u.refreshRemoteAccountIfStale(ctx, localAccount, remote), nil
 	}
 	return fallbackRemoteAccount(actor), nil
+}
+
+const remoteAccountRefreshAfter = 24 * time.Hour
+
+func (u UseCase) refreshRemoteAccountIfStale(ctx context.Context, signer *models.Account, cached *models.Account) *models.Account {
+	if cached == nil || cached.URI == "" || u.cfg.RemoteResolver == nil || time.Since(cached.FetchedAt) < remoteAccountRefreshAfter {
+		return cached
+	}
+	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	fresh, err := u.cfg.RemoteResolver.ResolveAccount(refreshCtx, cached.URI, signer)
+	if err != nil || fresh == nil {
+		return cached
+	}
+	updated, err := u.cfg.RemoteAccountsRepo.UpsertRemoteAccount(ctx, nil, *fresh)
+	if err != nil {
+		return cached
+	}
+	return updated
 }
 
 func filterTimelineItemsByActor(items []TimelineItem, actors map[string]bool) []TimelineItem {
