@@ -3,20 +3,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DirectMessageForm } from "@/features/direct/direct-message-form";
-import { EmptyState, FeaturePage, Panel } from "@/features/shared";
+import { EmptyState, Panel } from "@/features/shared";
 import { StatusContent } from "@/features/status/status-content";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime } from "@/lib/text";
-import type { MastodonAccount, MastodonConversation } from "@/types/mastodon";
+import type { MastodonConversation } from "@/types/mastodon";
 
 export function DirectMessagesPage() {
   const { session } = useAuth();
-  const [account, setAccount] = useState<MastodonAccount | null>(null);
   const [conversations, setConversations] = useState<MastodonConversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busyConversationId, setBusyConversationId] = useState<string | null>(null);
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
 
@@ -26,8 +27,7 @@ export function DirectMessagesPage() {
     setError(null);
 
     try {
-      const [nextAccount, nextConversations] = await Promise.all([api.verifyCredentials(), api.conversations()]);
-      setAccount(nextAccount);
+      const nextConversations = await api.conversations();
       setConversations(nextConversations);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not load direct messages.");
@@ -71,13 +71,10 @@ export function DirectMessagesPage() {
   }
 
   return (
-    <FeaturePage eyebrow="Messages" title="Direct messages" description="Private conversations.">
-      <Panel title="New direct message">
-        <DirectMessageForm onSent={() => void loadConversations()} />
-      </Panel>
-
+    <section className="space-y-6">
       <Panel title="Conversations">
-        <div className="mb-5 flex justify-end">
+        <div className="mb-5 flex flex-wrap justify-end gap-2">
+          <Button size="sm" onClick={() => setIsComposerOpen(true)}>New direct message</Button>
           <Button variant="outline" size="sm" onClick={() => void loadConversations()} disabled={isLoading}>Refresh</Button>
         </div>
 
@@ -93,7 +90,6 @@ export function DirectMessagesPage() {
               <ConversationRow
                 key={conversation.id}
                 conversation={conversation}
-                currentAccountId={account?.id}
                 isBusy={busyConversationId === conversation.id}
                 onMarkRead={markRead}
                 onDelete={removeConversation}
@@ -102,21 +98,34 @@ export function DirectMessagesPage() {
           </div>
         )}
       </Panel>
-    </FeaturePage>
+
+      <Dialog open={isComposerOpen} onOpenChange={setIsComposerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New direct message</DialogTitle>
+          </DialogHeader>
+          <DirectMessageForm
+            onCancel={() => setIsComposerOpen(false)}
+            onSent={() => {
+              setIsComposerOpen(false);
+              void loadConversations();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }
 
 type ConversationRowProps = {
   conversation: MastodonConversation;
-  currentAccountId?: string;
   isBusy: boolean;
   onMarkRead: (conversation: MastodonConversation) => void;
   onDelete: (conversation: MastodonConversation) => void;
 };
 
-function ConversationRow({ conversation, currentAccountId, isBusy, onMarkRead, onDelete }: ConversationRowProps) {
-  const participants = conversation.accounts.filter((participant) => participant.id !== currentAccountId);
-  const visibleParticipants = participants.length > 0 ? participants : conversation.accounts;
+function ConversationRow({ conversation, isBusy, onMarkRead, onDelete }: ConversationRowProps) {
+  const visibleParticipants = conversation.accounts;
   const participantLabel = visibleParticipants.map((participant) => participant.display_name || participant.username || participant.acct).join(", ");
   const lastStatus = conversation.last_status;
 
