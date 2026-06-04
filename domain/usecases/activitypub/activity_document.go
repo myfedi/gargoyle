@@ -589,6 +589,34 @@ func ExtractUndoFollowActor(raw []byte) (string, error) {
 	return actor, err
 }
 
+func ExtractObjectIDByType(raw []byte, wantedType string) string {
+	var activity struct {
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(raw, &activity); err != nil || len(activity.Object) == 0 {
+		return ""
+	}
+	var object struct {
+		ID   string `json:"id"`
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(activity.Object, &object); err != nil || object.Type != wantedType {
+		return ""
+	}
+	return object.ID
+}
+
+func ExtractMoveTarget(raw []byte) string {
+	var activity struct {
+		Target json.RawMessage `json:"target"`
+	}
+	if err := json.Unmarshal(raw, &activity); err != nil || len(activity.Target) == 0 {
+		return ""
+	}
+	target, _, _ := ExtractIDAndInbox(activity.Target)
+	return target
+}
+
 // ExtractIDAndInbox accepts either a string ID or an object with id/inbox fields.
 func ExtractIDAndInbox(raw json.RawMessage) (string, string, error) {
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {

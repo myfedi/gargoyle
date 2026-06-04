@@ -147,6 +147,12 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 				return u.cfg.NotesRepo.DeleteNoteByURI(ctx, &tx, activity.Object)
 			}
 		case "Update":
+			if tombstoneID := ExtractObjectIDByType(input.RawJSON, "Tombstone"); tombstoneID != "" && u.cfg.NotesRepo != nil {
+				if err := u.ensureRemoteNoteOwner(ctx, &tx, tombstoneID, activity.Actor); err != nil {
+					return err
+				}
+				return u.cfg.NotesRepo.DeleteNoteByURI(ctx, &tx, tombstoneID)
+			}
 			if u.cfg.NotesRepo != nil {
 				if note, ok := ExtractNoteObject(input.RawJSON); ok {
 					if note.AttributedTo != "" && note.AttributedTo != activity.Actor {
@@ -174,6 +180,14 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 					return err
 				}
 			}
+		case "Move":
+			return u.handleMoveActivity(ctx, &tx, *account, activity, input.RawJSON)
+		case "Flag":
+			// The raw Flag activity is already stored above. Moderation workflows can
+			// surface stored Flag activities without applying automatic punishment here.
+			return nil
+		case "Block":
+			return u.handleBlockActivity(ctx, &tx, *account, activity)
 		case "Like":
 			return u.createInteractionNotification(ctx, &tx, *account, activity, "favourite")
 		case "Announce":
@@ -224,6 +238,39 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return &HandleInboxActivityResult{Account: *account, Activity: activity, AcceptJSON: acceptJSON, AcceptInbox: acceptInbox}, nil
+}
+
+func (u *HandleInboxActivityUseCase) handleMoveActivity(ctx context.Context, tx *db.Tx, account models.Account, activity ParsedActivity, raw []byte) error {
+	if activity.Object != activity.Actor {
+		return domainerrors.New(domainerrors.ErrUnauthorized, "move actor does not own object")
+	}
+	target := ExtractMoveTarget(raw)
+	if target == "" || u.cfg.ActorFetcher == nil {
+		return nil
+	}
+	fetched, err := u.cfg.ActorFetcher.FetchActor(ctx, target, &account)
+	if err != nil || fetched == nil || fetched.Inbox == "" {
+		return nil
+	}
+	// A valid Move is acknowledged only as an observed event for now. Rewriting
+	// follow relationships is intentionally deferred until aliases/alsoKnownAs are
+	// modelled and validated, otherwise Move can become an account-takeover vector.
+	return nil
+}
+
+func (u *HandleInboxActivityUseCase) handleBlockActivity(ctx context.Context, tx *db.Tx, account models.Account, activity ParsedActivity) error {
+	if u.cfg.FollowsRepo == nil || activity.Actor == "" {
+		return nil
+	}
+	// If a remote actor blocks the local actor, remove both relationship rows so
+	// we stop delivering to, and accepting timeline assumptions about, that actor.
+	if activity.Object != "" && activity.Object != account.URI {
+		return nil
+	}
+	if err := u.cfg.FollowsRepo.DeleteFollowingByActor(ctx, tx, account.ID, activity.Actor); err != nil {
+		return err
+	}
+	return u.cfg.FollowsRepo.DeleteFollowByActor(ctx, tx, account.ID, activity.Actor)
 }
 
 func (u *HandleInboxActivityUseCase) handlePollVoteCreate(ctx context.Context, tx *db.Tx, note ExtractedNote) (bool, error) {
