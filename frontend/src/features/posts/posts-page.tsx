@@ -253,6 +253,17 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     return api.publicTimeline(options);
   }
 
+  async function votePoll(status: MastodonStatus, choices: number[]) {
+    if (!api) return;
+    setTimelineError(null);
+    try {
+      const poll = await api.votePoll(status.poll?.id ?? status.id, choices);
+      setStatuses((current) => current.map((item) => item.id === status.id ? { ...item, poll } : item));
+    } catch (caughtError) {
+      setTimelineError(caughtError instanceof Error ? caughtError.message : "Could not vote in poll.");
+    }
+  }
+
   async function runAction(action: StatusAction, status: MastodonStatus) {
     if (!api) {
       return;
@@ -302,6 +313,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
         sensitive: values.sensitive,
         spoiler_text: values.spoilerText,
         media_ids: values.mediaIds,
+        activitypub_type: values.objectType,
+        poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined,
       });
       setStatuses((current) => replaceStatus(current, updated));
       return true;
@@ -326,6 +339,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
         sensitive: values.sensitive,
         spoiler_text: values.spoilerText,
         media_ids: values.mediaIds,
+        activitypub_type: values.objectType,
+        poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined,
         in_reply_to_id: replyingTo.id,
       });
       setReplyingTo(null);
@@ -368,6 +383,8 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
         sensitive: values.sensitive,
         spoiler_text: values.spoilerText,
         media_ids: values.mediaIds,
+        activitypub_type: values.objectType,
+        poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined,
       });
       if (activeTimeline === "home") {
         setStatuses((current) => [createdStatus, ...current]);
@@ -441,6 +458,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
               onEdit={editStatus}
               actingStatusId={actingStatusId}
               onAction={runAction}
+              onVotePoll={votePoll}
               onForward={setForwardingStatus}
               onReply={(status) => {
                 setReplyingTo(status);

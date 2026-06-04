@@ -14,7 +14,10 @@ type CreateNoteInput struct {
 	URI            string
 	Content        string
 	PlainText      string
+	ObjectType     string
 	Visibility     string
+	PollMultiple   bool
+	PollExpiresAt  *time.Time
 	Sensitive      bool
 	SpoilerText    string
 	AttributedTo   string
@@ -24,11 +27,14 @@ type CreateNoteInput struct {
 }
 
 type UpdateNoteInput struct {
-	Content     string
-	PlainText   string
-	Visibility  string
-	Sensitive   bool
-	SpoilerText string
+	Content       string
+	PlainText     string
+	ObjectType    string
+	Visibility    string
+	PollMultiple  bool
+	PollExpiresAt *time.Time
+	Sensitive     bool
+	SpoilerText   string
 }
 
 type CreateNoteEditInput struct {
@@ -43,7 +49,7 @@ type NotesRepository interface {
 	GetNoteByID(ctx context.Context, tx *db.Tx, id string) (*models.Note, error)
 	GetNoteByURI(ctx context.Context, tx *db.Tx, uri string) (*models.Note, error)
 	UpdateNoteByID(ctx context.Context, tx *db.Tx, id string, input UpdateNoteInput) (*models.Note, error)
-	UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri, content, plainText string) error
+	UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri, content, plainText, objectType string) error
 	CreateNoteEdit(ctx context.Context, tx *db.Tx, input CreateNoteEditInput) (*models.NoteEdit, error)
 	ListNoteEdits(ctx context.Context, tx *db.Tx, noteID string) ([]models.NoteEdit, error)
 	DeleteNoteByID(ctx context.Context, tx *db.Tx, id string) error

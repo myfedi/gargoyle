@@ -111,6 +111,13 @@ func ensureActorDocumentMetadata(data []byte, account models.Account) ([]byte, e
 		}
 		actor["featured"] = featured
 	}
+	if sharedInbox := accountSharedInboxURL(account); sharedInbox != "" {
+		endpoints, err := json.Marshal(map[string]string{"sharedInbox": sharedInbox})
+		if err != nil {
+			return nil, err
+		}
+		actor["endpoints"] = endpoints
+	}
 	actor["manuallyApprovesFollowers"] = json.RawMessage(boolJSON(account.Locked))
 
 	return json.Marshal(actor)
@@ -157,6 +164,14 @@ func accountHeaderURL(account models.Account) string {
 		return ""
 	}
 	return accountMediaURL(account.URI, *account.HeaderMediaID)
+}
+
+func accountSharedInboxURL(account models.Account) string {
+	parsed, err := url.Parse(account.URI)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return parsed.Scheme + "://" + parsed.Host + "/inbox"
 }
 
 func accountMediaURL(actorURI, mediaID string) string {

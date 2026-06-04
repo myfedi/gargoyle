@@ -34,8 +34,11 @@ type ActivityPubFlowConfig struct {
 	FetchJobsRepo      repos.FetchJobsRepository
 	SocialRepo         repos.SocialRepository
 	BoostsRepo         repos.BoostsRepository
+	PollsRepo          repos.PollsRepository
+	MediaRepo          repos.MediaRepository
 	ActorFetcher       apPorts.ActorFetcher
 	ContentSanitizer   ports.ContentSanitizer
+	Host               string
 }
 
 // GetOutboxUseCase reads a local actor's outbox collection.
@@ -49,6 +52,9 @@ type GetFollowingUseCase struct{ cfg ActivityPubFlowConfig }
 
 // GetFeaturedUseCase reads a local actor's featured/pinned notes collection.
 type GetFeaturedUseCase struct{ cfg ActivityPubFlowConfig }
+
+// GetDereferenceUseCase reads public local ActivityPub objects and activities by their canonical IDs.
+type GetDereferenceUseCase struct{ cfg ActivityPubFlowConfig }
 
 // CreateFollowingUseCase creates a local Follow activity and following record atomically.
 type CreateFollowingUseCase struct{ cfg ActivityPubFlowConfig }
@@ -83,6 +89,14 @@ func NewGetFeaturedUseCase(cfg ActivityPubFlowConfig) GetFeaturedUseCase {
 		panic("activitypub use case requires SocialRepo")
 	}
 	return GetFeaturedUseCase{cfg: cfg}
+}
+func NewGetDereferenceUseCase(cfg ActivityPubFlowConfig) GetDereferenceUseCase {
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	if cfg.NotesRepo == nil {
+		panic("activitypub use case requires NotesRepo")
+	}
+	return GetDereferenceUseCase{cfg: cfg}
 }
 func NewCreateFollowingUseCase(cfg ActivityPubFlowConfig) CreateFollowingUseCase {
 	requireTxProvider(cfg)

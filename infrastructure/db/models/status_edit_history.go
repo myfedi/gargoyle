@@ -14,6 +14,7 @@ type StatusEditHistory struct {
 	NoteID      string    `bun:"type:CHAR(26),nullzero,notnull"`
 	Content     string    `bun:",nullzero,notnull"`
 	PlainText   string    `bun:",nullzero"`
+	ObjectType  string    `bun:",nullzero,notnull,default:'Note'"`
 	Visibility  string    `bun:",nullzero,notnull,default:'public'"`
 	Sensitive   bool      `bun:",notnull,default:false"`
 	SpoilerText string    `bun:",nullzero"`
@@ -21,7 +22,7 @@ type StatusEditHistory struct {
 }
 
 func (e StatusEditHistory) ToModel(mediaIDs []string) domainmodels.NoteEdit {
-	return domainmodels.NoteEdit{ID: e.ID, NoteID: e.NoteID, Content: e.Content, PlainText: e.PlainText, Visibility: e.Visibility, Sensitive: e.Sensitive, SpoilerText: e.SpoilerText, CreatedAt: e.CreatedAt, MediaIDs: mediaIDs}
+	return domainmodels.NoteEdit{ID: e.ID, NoteID: e.NoteID, Content: e.Content, PlainText: e.PlainText, ObjectType: e.ObjectType, Visibility: e.Visibility, Sensitive: e.Sensitive, SpoilerText: e.SpoilerText, CreatedAt: e.CreatedAt, MediaIDs: mediaIDs}
 }
 
 type StatusEditHistoryMedia struct {

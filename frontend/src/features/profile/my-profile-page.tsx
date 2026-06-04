@@ -134,6 +134,19 @@ export function MyProfilePage() {
     }
   }
 
+  async function votePoll(status: MastodonStatus, choices: number[]) {
+    if (!api) return;
+    setError(null);
+    try {
+      const poll = await api.votePoll(status.poll?.id ?? status.id, choices);
+      const applyPoll = (item: MastodonStatus) => item.id === status.id ? { ...item, poll } : item;
+      setStatuses((current) => current.map(applyPoll));
+      setPinnedStatuses((current) => current.map(applyPoll));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not vote in poll.");
+    }
+  }
+
   async function deleteStatus(status: MastodonStatus) {
     if (!api) return false;
     setDeletingStatusId(status.id);
@@ -157,7 +170,7 @@ export function MyProfilePage() {
     setError(null);
 
     try {
-      const updated = await api.updateStatus(status.id, { status: values.status, visibility: values.visibility, sensitive: values.sensitive, spoiler_text: values.spoilerText, media_ids: values.mediaIds });
+      const updated = await api.updateStatus(status.id, { status: values.status, visibility: values.visibility, sensitive: values.sensitive, spoiler_text: values.spoilerText, media_ids: values.mediaIds, activitypub_type: values.objectType, poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined });
       setStatuses((current) => replaceStatus(current, updated));
       setPinnedStatuses((current) => replaceStatus(current, updated));
       return true;
@@ -391,6 +404,7 @@ export function MyProfilePage() {
           emptyTitle="No bookmarks"
           emptyDescription="Bookmarked posts will appear here."
           onAction={runAction}
+            onVotePoll={votePoll}
         />
       );
     }
@@ -411,6 +425,7 @@ export function MyProfilePage() {
                 onDelete={deleteStatus}
                 onEdit={editStatus}
                 onAction={runAction}
+            onVotePoll={votePoll}
               />
             </section>
           ) : null}
@@ -426,6 +441,7 @@ export function MyProfilePage() {
               onDelete={deleteStatus}
               onEdit={editStatus}
               onAction={runAction}
+            onVotePoll={votePoll}
             />
             {statuses.length > 0 ? (
               <div className="mt-5 flex justify-center">

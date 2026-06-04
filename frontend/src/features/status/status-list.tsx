@@ -1,4 +1,4 @@
-import { MoreHorizontal } from "lucide-react";
+import { Check, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { ComposeForm, type ComposeValues } from "@/features/status/compose-form"
 import { StatusBody } from "@/features/status/status-body";
 import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime, htmlToPlainText } from "@/lib/text";
-import type { MastodonMediaAttachment, MastodonStatus } from "@/types/mastodon";
+import type { ActivityPubObjectType, MastodonMediaAttachment, MastodonStatus } from "@/types/mastodon";
 
 export type StatusAction = "bookmark" | "unbookmark" | "pin" | "unpin" | "favourite" | "unfavourite" | "reblog" | "unreblog";
 
@@ -33,6 +33,7 @@ type StatusListProps = {
   onReply?: (status: MastodonStatus) => void;
   onForward?: (status: MastodonStatus) => void;
   onAction?: (action: StatusAction, status: MastodonStatus) => Promise<void> | void;
+  onVotePoll?: (status: MastodonStatus, choices: number[]) => Promise<void> | void;
 };
 
 export function StatusList({
@@ -47,6 +48,7 @@ export function StatusList({
   onReply,
   onForward,
   onAction,
+  onVotePoll,
 }: StatusListProps) {
   const [statusPendingDeletion, setStatusPendingDeletion] = useState<MastodonStatus | null>(null);
   const [statusBeingEdited, setStatusBeingEdited] = useState<MastodonStatus | null>(null);
@@ -92,12 +94,14 @@ export function StatusList({
                       {displayedStatus.account.display_name || displayedStatus.account.username}
                     </a>
                     <p className="text-xs text-muted-foreground">@{displayedStatus.account.acct}</p>
+                    <StatusTypeBadge status={displayedStatus} />
                     <StatusMeta status={displayedStatus} />
                     <a className="ml-auto text-xs text-muted-foreground hover:underline" href={statusHref(displayedStatus.id)}>
                       <time dateTime={displayedStatus.created_at}>{formatDateTime(displayedStatus.created_at)}</time>
                     </a>
                   </div>
                   <StatusBody html={displayedStatus.content} mentions={displayedStatus.mentions} spoilerText={displayedStatus.spoiler_text}>
+                    <StatusPoll status={displayedStatus} onVote={onVotePoll ? (choices) => onVotePoll(displayedStatus, choices) : undefined} />
                     <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
                   </StatusBody>
                   <StatusStats status={displayedStatus} />
@@ -181,6 +185,9 @@ export function StatusList({
               initialSensitive={statusBeingEdited.sensitive}
               initialSpoilerText={statusBeingEdited.spoiler_text}
               initialMedia={statusBeingEdited.media_attachments?.[0] ?? null}
+              initialObjectType={statusObjectType(statusBeingEdited)}
+              initialPollOptions={statusBeingEdited.poll?.options.map((option) => option.title)}
+              initialPollMultiple={statusBeingEdited.poll?.multiple}
               resetAfterSubmit={false}
               onSubmit={async (values) => {
                 setIsEditingStatus(true);
@@ -240,6 +247,25 @@ export function StatusList({
   );
 }
 
+function StatusTypeBadge({ status }: { status: MastodonStatus }) {
+  const objectType = statusObjectType(status);
+  if (objectType === "Note") {
+    return null;
+  }
+  return <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{objectType}</span>;
+}
+
+function statusObjectType(status: MastodonStatus): ActivityPubObjectType {
+  switch (status.activitypub_type) {
+    case "Article":
+    case "Page":
+    case "Question":
+      return status.activitypub_type;
+    default:
+      return "Note";
+  }
+}
+
 function StatusMeta({ status }: { status: MastodonStatus }) {
   return (
     <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -266,6 +292,85 @@ function StatusStats({ status }: { status: MastodonStatus }) {
   }
 
   return <p className="mt-2 text-xs text-muted-foreground">{stats.join(" · ")}</p>;
+}
+
+function StatusPoll({ status, onVote }: { status: MastodonStatus; onVote?: (choices: number[]) => Promise<void> | void }) {
+  const poll = status.poll;
+  const [selected, setSelected] = useState<number[]>(poll?.own_votes ?? []);
+  if (!poll) {
+    return null;
+  }
+  const currentPoll = poll;
+  const savedVotes = currentPoll.own_votes ?? [];
+  const hasSavedVote = savedVotes.length > 0;
+  const hasPendingChange = !sameChoices(selected, savedVotes);
+  const total = Math.max(currentPoll.votes_count, 1);
+  const canVote = Boolean(onVote && !currentPoll.expired);
+  function toggle(index: number) {
+    if (!canVote) return;
+    setSelected((current) => currentPoll.multiple ? (current.includes(index) ? current.filter((item) => item !== index) : [...current, index]) : [index]);
+  }
+  return (
+    <div className="mt-3 space-y-2 rounded-md border border-border bg-background p-3">
+      {currentPoll.options.map((option, index) => {
+        const percent = Math.round((option.votes_count / total) * 100);
+        const isPending = selected.includes(index);
+        const isSaved = savedVotes.includes(index);
+        const chosen = isPending || isSaved;
+        const optionStateClass = isPending
+          ? "border-primary/70 bg-primary/10 ring-1 ring-primary/40"
+          : isSaved
+            ? "border-border bg-secondary/70"
+            : "border-border bg-card hover:border-primary/30 hover:bg-secondary/60";
+        return (
+          <button
+            key={`${option.title}-${index}`}
+            type="button"
+            disabled={!canVote}
+            aria-pressed={chosen}
+            onClick={() => toggle(index)}
+            className={[
+              "w-full rounded-md border p-2 text-left transition-colors disabled:cursor-default",
+              optionStateClass,
+            ].join(" ")}
+          >
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className={isPending ? "flex items-center gap-2 font-semibold text-primary" : isSaved ? "flex items-center gap-2 font-medium text-foreground" : "font-medium"}>
+                {isPending ? <Check className="size-4 shrink-0" aria-hidden="true" /> : isSaved ? <span className="size-4 shrink-0 rounded-full border border-border bg-background" aria-hidden="true" /> : null}
+                {option.title}
+              </span>
+              <span className="text-xs text-muted-foreground">{percent}%</span>
+            </div>
+            <div className={chosen ? "mt-2 h-1.5 overflow-hidden rounded-full bg-primary/20" : "mt-2 h-1.5 overflow-hidden rounded-full bg-secondary"}>
+              <div className="h-full rounded-full bg-primary/70" style={{ width: `${percent}%` }} />
+            </div>
+          </button>
+        );
+      })}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>{currentPoll.votes_count} votes{currentPoll.expired ? " · closed" : ""}</span>
+        {canVote ? (
+          <div className="flex items-center gap-2">
+            {hasPendingChange ? (
+              <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(savedVotes)}>
+                {hasSavedVote ? "Cancel change" : "Clear"}
+              </Button>
+            ) : null}
+            <Button type="button" size="sm" variant={hasPendingChange ? "default" : "outline"} disabled={!hasPendingChange || selected.length === 0} onClick={() => onVote?.(selected)}>
+              {currentPoll.voted ? "Update vote" : "Vote"}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function sameChoices(a: number[], b: number[]) {
+  if (a.length !== b.length) return false;
+  const left = [...a].sort((x, y) => x - y);
+  const right = [...b].sort((x, y) => x - y);
+  return left.every((value, index) => value === right[index]);
 }
 
 function StatusMedia({ attachments, onPreview }: { attachments: MastodonMediaAttachment[]; onPreview: (attachment: MastodonMediaAttachment) => void }) {

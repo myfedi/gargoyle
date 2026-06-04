@@ -29,9 +29,13 @@ type UsersWebHandlerConfig struct {
 	FollowsRepo         repos.FollowsRepository
 	NotesRepo           repos.NotesRepository
 	SocialRepo          repos.SocialRepository
+	BoostsRepo          repos.BoostsRepository
+	PollsRepo           repos.PollsRepository
 	RemoteAccountsRepo  repos.RemoteAccountsRepository
 	DomainBlocksRepo    repos.DomainBlocksRepository
 	DeliveryJobsRepo    repos.DeliveryJobsRepository
+	FetchJobsRepo       repos.FetchJobsRepository
+	MediaRepo           repos.MediaRepository
 	Serializer          activitypub.ActorSerializer
 	ActorFetcher        activitypub.ActorFetcher
 	Deliverer           activitypub.ActivityDeliverer
@@ -43,6 +47,7 @@ type UsersWebHandlerConfig struct {
 	RequireSignedInbox  bool
 	AllowUnsignedInbox  bool
 	DeliveryRetries     int
+	Host                string
 }
 
 type UsersWebHandler struct {
@@ -52,6 +57,7 @@ type UsersWebHandler struct {
 	getFollowers          apUsecases.GetFollowersUseCase
 	getFollowing          apUsecases.GetFollowingUseCase
 	getFeatured           apUsecases.GetFeaturedUseCase
+	getDereference        apUsecases.GetDereferenceUseCase
 	handleInboxActivityUC apUsecases.HandleInboxActivityUseCase
 }
 
@@ -76,11 +82,20 @@ func validateUsersWebHandlerConfig(cfg UsersWebHandlerConfig) {
 	if cfg.SocialRepo == nil {
 		panic("users web handler requires SocialRepo")
 	}
+	if cfg.BoostsRepo == nil {
+		panic("users web handler requires BoostsRepo")
+	}
+	if cfg.PollsRepo == nil {
+		panic("users web handler requires PollsRepo")
+	}
 	if cfg.DomainBlocksRepo == nil {
 		panic("users web handler requires DomainBlocksRepo")
 	}
 	if cfg.DeliveryJobsRepo == nil {
 		panic("users web handler requires DeliveryJobsRepo")
+	}
+	if cfg.FetchJobsRepo == nil {
+		panic("users web handler requires FetchJobsRepo")
 	}
 	if cfg.Serializer == nil {
 		panic("users web handler requires Serializer")
@@ -93,6 +108,9 @@ func validateUsersWebHandlerConfig(cfg UsersWebHandlerConfig) {
 	}
 	if cfg.BodyLimitBytes <= 0 {
 		panic("users web handler requires positive BodyLimitBytes")
+	}
+	if cfg.Host == "" {
+		panic("users web handler requires Host")
 	}
 }
 
@@ -149,8 +167,13 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		SocialRepo:         cfg.SocialRepo,
 		RemoteAccountsRepo: cfg.RemoteAccountsRepo,
 		DomainBlocksRepo:   cfg.DomainBlocksRepo,
+		FetchJobsRepo:      cfg.FetchJobsRepo,
+		BoostsRepo:         cfg.BoostsRepo,
+		PollsRepo:          cfg.PollsRepo,
+		MediaRepo:          cfg.MediaRepo,
 		ActorFetcher:       cfg.ActorFetcher,
 		ContentSanitizer:   cfg.ContentSanitizer,
+		Host:               cfg.Host,
 	}
 	h := &UsersWebHandler{
 		cfg:                   cfg,
@@ -159,6 +182,7 @@ func NewUsersWebHandler(cfg UsersWebHandlerConfig) *UsersWebHandler {
 		getFollowers:          apUsecases.NewGetFollowersUseCase(flowCfg),
 		getFollowing:          apUsecases.NewGetFollowingUseCase(flowCfg),
 		getFeatured:           apUsecases.NewGetFeaturedUseCase(flowCfg),
+		getDereference:        apUsecases.NewGetDereferenceUseCase(flowCfg),
 		handleInboxActivityUC: apUsecases.NewHandleInboxActivityUseCase(flowCfg),
 	}
 	return h
@@ -185,10 +209,13 @@ func (h *UsersWebHandler) SetupUserProfileHandler(app *fiber.App) {
 	})
 
 	app.Get("/users/:username/outbox", h.outboxCollection)
+	app.Get("/users/:username/objects/:id", h.objectDocument)
+	app.Get("/users/:username/activities/:id", h.activityDocument)
 	app.Get("/users/:username/collections/featured", h.featuredCollection)
 	app.Get("/users/:username/followers", h.followersCollection)
 	app.Get("/users/:username/following", h.followingCollection)
 
+	app.Post("/inbox", h.handleSharedInboxActivity)
 	app.Post("/users/:username/inbox", h.handleInboxActivity)
 }
 
@@ -228,6 +255,24 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 		PartOf:       partOf(c, id),
 		OrderedItems: items,
 	})
+}
+
+func (h *UsersWebHandler) objectDocument(c *fiber.Ctx) error {
+	res, derr := h.getDereference.GetObject(c.UserContext(), c.Params("username"), c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	c.Set(fiber.HeaderContentType, contentTypeActivityJSON)
+	return c.Send(res.JSON)
+}
+
+func (h *UsersWebHandler) activityDocument(c *fiber.Ctx) error {
+	res, derr := h.getDereference.GetActivity(c.UserContext(), c.Params("username"), c.Params("id"))
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	c.Set(fiber.HeaderContentType, contentTypeActivityJSON)
+	return c.Send(res.JSON)
 }
 
 func (h *UsersWebHandler) featuredCollection(c *fiber.Ctx) error {
@@ -296,6 +341,41 @@ func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 		PartOf:       partOf(c, res.Account.FollowersURI),
 		OrderedItems: items,
 	})
+}
+
+func (h *UsersWebHandler) handleSharedInboxActivity(c *fiber.Ctx) error {
+	if err := ensureBodySize(c.Body(), h.cfg.BodyLimitBytes); err != nil {
+		return web.HandleDomainError(c, err)
+	}
+	raw := append([]byte(nil), c.Body()...)
+	activity, derr := apUsecases.ParseActivity(raw)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	// Shared inboxes do not identify a local actor in the path. Verify the remote
+	// actor independently, then dispatch to each addressed local account.
+	if derr := h.cfg.SignatureVerifier.VerifyInbound(c.UserContext(), signatureVerificationInput(c, raw, activity.Actor, nil, h.cfg.RequireSignedInbox)); derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	usernames := apUsecases.ExtractLocalRecipientUsernames(raw, h.cfg.Host)
+	for _, username := range usernames {
+		res, derr := h.handleInboxActivityUC.HandleInboxActivity(c.UserContext(), apUsecases.HandleInboxActivityInput{Username: username, RawJSON: raw, Inbox: activity.Inbox})
+		if derr != nil {
+			// A shared inbox may receive activities for deleted or unknown local actors.
+			// Treat missing recipients as a no-op but surface malformed/unauthorized
+			// activities for known recipients normally.
+			if derr.Code == domainerrors.ErrNotFound {
+				continue
+			}
+			return web.HandleDomainError(c, derr)
+		}
+		if len(res.AcceptJSON) > 0 && res.AcceptInbox != "" {
+			if err := h.queueDelivery(res.AcceptJSON, res.AcceptInbox, res.Account); err != nil {
+				return web.HandleDomainError(c, err)
+			}
+		}
+	}
+	return c.SendStatus(fiber.StatusAccepted)
 }
 
 func (h *UsersWebHandler) handleInboxActivity(c *fiber.Ctx) error {

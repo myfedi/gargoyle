@@ -38,6 +38,7 @@ type Config struct {
 	ContentSanitizer    ports.ContentSanitizer
 	SocialRepo          repos.SocialRepository
 	BoostsRepo          repos.BoostsRepository
+	PollsRepo           repos.PollsRepository
 	ConversationsRepo   repos.ConversationsRepository
 	MentionsRepo        repos.MentionsRepository
 	RemoteAccountsRepo  repos.RemoteAccountsRepository
@@ -66,12 +67,16 @@ type InstanceInfo struct {
 }
 
 type CreateStatusInput struct {
-	Content     string
-	InReplyToID string
-	Visibility  string
-	Sensitive   bool
-	SpoilerText string
-	MediaIDs    []string
+	Content       string
+	InReplyToID   string
+	Visibility    string
+	Sensitive     bool
+	SpoilerText   string
+	MediaIDs      []string
+	ObjectType    string
+	PollOptions   []string
+	PollMultiple  bool
+	PollExpiresIn int
 }
 
 type CreateStatusResult struct {
@@ -85,11 +90,15 @@ type CreateStatusResult struct {
 }
 
 type UpdateStatusInput struct {
-	Content     string
-	Visibility  string
-	Sensitive   bool
-	SpoilerText string
-	MediaIDs    []string
+	Content       string
+	Visibility    string
+	Sensitive     bool
+	SpoilerText   string
+	MediaIDs      []string
+	ObjectType    string
+	PollOptions   []string
+	PollMultiple  bool
+	PollExpiresIn int
 }
 
 type UpdateStatusResult struct {
@@ -111,6 +120,7 @@ type TimelineItem struct {
 	InReplyToAccountID *string
 	Media              []models.MediaAttachment
 	Mentions           []models.Mention
+	Poll               *models.Poll
 	Reblog             *TimelineItem
 	Reblogged          bool
 	Favourited         bool
@@ -185,6 +195,9 @@ func NewUseCase(cfg Config) UseCase {
 	}
 	if cfg.BoostsRepo == nil {
 		panic("mastodon API use case requires BoostsRepo")
+	}
+	if cfg.PollsRepo == nil {
+		panic("mastodon API use case requires PollsRepo")
 	}
 	if cfg.ConversationsRepo == nil {
 		panic("mastodon API use case requires ConversationsRepo")

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { MastodonAccount, MastodonMediaAttachment } from "@/types/mastodon";
+import type { ActivityPubObjectType, MastodonAccount, MastodonMediaAttachment } from "@/types/mastodon";
 
 export type ComposeValues = {
   status: string;
@@ -12,6 +12,10 @@ export type ComposeValues = {
   sensitive: boolean;
   spoilerText: string;
   mediaIds: string[];
+  objectType: ActivityPubObjectType;
+  pollOptions: string[];
+  pollMultiple: boolean;
+  pollExpiresIn: number;
 };
 
 type ComposeFormProps = {
@@ -25,6 +29,10 @@ type ComposeFormProps = {
   initialSensitive?: boolean;
   initialSpoilerText?: string;
   initialMedia?: MastodonMediaAttachment | null;
+  initialObjectType?: ActivityPubObjectType;
+  initialPollOptions?: string[];
+  initialPollMultiple?: boolean;
+  initialPollExpiresIn?: number;
   resetAfterSubmit?: boolean;
   onSubmit: (values: ComposeValues) => Promise<void> | void;
   onUploadMedia?: (file: File, description?: string) => Promise<MastodonMediaAttachment>;
@@ -34,7 +42,15 @@ type ComposeFormProps = {
   compact?: boolean;
 };
 
-const maxLength = 500;
+const objectTypeOptions: Array<{ value: ActivityPubObjectType; label: string; hint: string; maxLength: number }> = [
+  { value: "Note", label: "Post", hint: "Short fediverse status", maxLength: 500 },
+  { value: "Article", label: "Article", hint: "Long-form writing", maxLength: 5000 },
+  { value: "Page", label: "Page", hint: "Stable reference page", maxLength: 5000 },
+  { value: "Question", label: "Question", hint: "Question-shaped post", maxLength: 1000 },
+];
+
+const defaultPollOptions = ["", ""];
+const defaultPollExpiresIn = 24 * 60 * 60;
 
 export function ComposeForm({
   submitLabel,
@@ -47,6 +63,10 @@ export function ComposeForm({
   initialSensitive = false,
   initialSpoilerText = "",
   initialMedia = null,
+  initialObjectType = "Note",
+  initialPollOptions = defaultPollOptions,
+  initialPollMultiple = false,
+  initialPollExpiresIn = defaultPollExpiresIn,
   resetAfterSubmit = true,
   onSubmit,
   onUploadMedia,
@@ -62,6 +82,10 @@ export function ComposeForm({
   const [sensitive, setSensitive] = useState(initialSensitive);
   const [spoilerText, setSpoilerText] = useState(initialSpoilerText);
   const [media, setMedia] = useState<MastodonMediaAttachment | null>(initialMedia);
+  const [objectType, setObjectType] = useState<ActivityPubObjectType>(initialObjectType);
+  const [pollOptions, setPollOptions] = useState(initialPollOptions.length >= 2 ? initialPollOptions : defaultPollOptions);
+  const [pollMultiple, setPollMultiple] = useState(initialPollMultiple);
+  const [pollExpiresIn, setPollExpiresIn] = useState(initialPollExpiresIn);
   const [mediaDescription, setMediaDescription] = useState(initialMedia?.description ?? "");
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -73,19 +97,28 @@ export function ComposeForm({
   const [mentionError, setMentionError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(!compact || initialText.length > 0);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const initialPollOptionsKey = initialPollOptions.join("\u0000");
+
   useEffect(() => {
     setStatus(initialText);
     setVisibility(initialVisibility);
     setSensitive(initialSensitive);
     setSpoilerText(initialSpoilerText);
     setMedia(initialMedia);
+    setObjectType(initialObjectType);
+    setPollOptions(initialPollOptions.length >= 2 ? initialPollOptions : defaultPollOptions);
+    setPollMultiple(initialPollMultiple);
+    setPollExpiresIn(initialPollExpiresIn);
     setMediaDescription(initialMedia?.description ?? "");
     setIsExpanded(!compact || initialText.length > 0);
-  }, [compact, initialMedia, initialSensitive, initialSpoilerText, initialText, initialVisibility]);
+  }, [compact, initialMedia, initialObjectType, initialPollExpiresIn, initialPollMultiple, initialPollOptionsKey, initialSensitive, initialSpoilerText, initialText, initialVisibility]);
 
   const mentionQuery = currentMentionQuery(status, caretPosition);
   const mentionSearchQuery = mentionQuery?.endsWith("@") ? mentionQuery.slice(0, -1) : mentionQuery;
+  const maxLength = objectTypeOptions.find((option) => option.value === objectType)?.maxLength ?? 500;
   const remaining = maxLength - status.length;
+  const validPollOptions = pollOptions.map((option) => option.trim()).filter(Boolean);
+  const pollInvalid = objectType === "Question" && validPollOptions.length < 2;
 
   useEffect(() => {
     if (!searchKnownAccounts || !mentionSearchQuery || mentionSearchQuery.length < 2) {
@@ -118,17 +151,21 @@ export function ComposeForm({
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!status.trim() || remaining < 0) {
+    if (!status.trim() || remaining < 0 || pollInvalid) {
       return;
     }
 
-    await onSubmit({ status: status.trim(), visibility, sensitive, spoilerText, mediaIds: media ? [media.id] : [] });
+    await onSubmit({ status: status.trim(), visibility, sensitive, spoilerText, mediaIds: media ? [media.id] : [], objectType, pollOptions: pollOptions.map((option) => option.trim()).filter(Boolean), pollMultiple, pollExpiresIn });
     if (resetAfterSubmit) {
       setStatus("");
       setSensitive(false);
       setSpoilerText("");
       setMedia(null);
       setMediaDescription("");
+      setObjectType("Note");
+      setPollOptions(defaultPollOptions);
+      setPollMultiple(false);
+      setPollExpiresIn(defaultPollExpiresIn);
       setShowAdvanced(false);
       if (compact) {
         setIsExpanded(false);
@@ -287,7 +324,23 @@ export function ComposeForm({
 
           {showAdvanced ? (
             <div className="space-y-4 rounded-md border border-border bg-background p-3">
-              <div className="grid gap-3 md:grid-cols-[12rem_1fr]">
+              <div className="grid gap-3 md:grid-cols-[12rem_12rem_1fr]">
+                <label className="space-y-1 text-sm font-medium">
+                  <span>Format</span>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                    value={objectType}
+                    onChange={(event) => setObjectType(event.target.value as ActivityPubObjectType)}
+                  >
+                    {objectTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {objectTypeOptions.find((option) => option.value === objectType)?.hint}
+                  </span>
+                </label>
+
                 <label className="space-y-1 text-sm font-medium">
                   <span>Visibility</span>
                   <select
@@ -306,6 +359,45 @@ export function ComposeForm({
                   <Input value={spoilerText} onChange={(event) => setSpoilerText(event.target.value)} placeholder="Optional" />
                 </label>
               </div>
+
+              {objectType === "Question" ? (
+                <div className="space-y-3 rounded-md border border-border bg-card p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">Poll options</p>
+                      <p className="text-xs text-muted-foreground">Two to four choices.</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" disabled={pollOptions.length >= 4} onClick={() => setPollOptions((current) => [...current, ""])}>
+                      Add option
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {pollOptions.map((option, index) => (
+                      <div key={index} className="flex gap-2">
+                        <Input value={option} onChange={(event) => setPollOptions((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Option ${index + 1}`} />
+                        <Button type="button" variant="ghost" size="sm" disabled={pollOptions.length <= 2} onClick={() => setPollOptions((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-sm font-medium">
+                      <span>Poll duration</span>
+                      <select className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm" value={pollExpiresIn} onChange={(event) => setPollExpiresIn(Number(event.target.value))}>
+                        <option value={300}>5 minutes</option>
+                        <option value={3600}>1 hour</option>
+                        <option value={86400}>1 day</option>
+                        <option value={604800}>1 week</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 pt-6 text-sm text-muted-foreground">
+                      <input type="checkbox" checked={pollMultiple} onChange={(event) => setPollMultiple(event.target.checked)} />
+                      <span>Allow multiple choices</span>
+                    </label>
+                  </div>
+                </div>
+              ) : null}
 
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <input type="checkbox" checked={sensitive} onChange={(event) => setSensitive(event.target.checked)} />
@@ -354,7 +446,7 @@ export function ComposeForm({
                 Collapse
               </Button>
             ) : null}
-            <Button type="submit" disabled={isSubmitting || !status.trim() || remaining < 0}>
+            <Button type="submit" disabled={isSubmitting || !status.trim() || remaining < 0 || pollInvalid}>
               {isSubmitting ? submittingLabel : submitLabel}
             </Button>
           </div>

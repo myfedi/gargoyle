@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -161,23 +163,28 @@ func SanitizeObjectContent(object map[string]any, sanitizer ports.ContentSanitiz
 
 // ExtractedNote is the domain data persisted when an ActivityPub Note is found.
 type ExtractedNote struct {
-	URI          string
-	Content      string
-	Visibility   string
-	Sensitive    bool
-	SpoilerText  string
-	AttributedTo string
-	InReplyToURI *string
-	MentionURIs  []string
-	To           []string
-	CC           []string
-	PublishedAt  time.Time
+	URI           string
+	Type          string
+	Content       string
+	Visibility    string
+	Sensitive     bool
+	SpoilerText   string
+	AttributedTo  string
+	InReplyToURI  *string
+	MentionURIs   []string
+	To            []string
+	CC            []string
+	PublishedAt   time.Time
+	PollOptions   []string
+	PollMultiple  bool
+	PollExpiresAt *time.Time
 }
 
 type extractedNoteJSON struct {
 	ID           string          `json:"id"`
 	Type         string          `json:"type"`
 	Content      string          `json:"content"`
+	Name         string          `json:"name"`
 	Summary      string          `json:"summary"`
 	Visibility   string          `json:"visibility"`
 	Sensitive    bool            `json:"sensitive"`
@@ -187,6 +194,9 @@ type extractedNoteJSON struct {
 	CC           json.RawMessage `json:"cc"`
 	Tag          json.RawMessage `json:"tag"`
 	Published    string          `json:"published"`
+	EndTime      string          `json:"endTime"`
+	OneOf        json.RawMessage `json:"oneOf"`
+	AnyOf        json.RawMessage `json:"anyOf"`
 }
 
 func normalizedExtractedVisibility(visibility string) string {
@@ -208,7 +218,7 @@ func ExtractNote(raw []byte) (ExtractedNote, bool) {
 		return ExtractedNote{}, false
 	}
 	var note extractedNoteJSON
-	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
+	if err := json.Unmarshal(activity.Object, &note); err != nil || !isNoteLikeObjectType(note.Type) || note.ID == "" {
 		return ExtractedNote{}, false
 	}
 	return extractedNoteFromJSON(note), true
@@ -217,7 +227,7 @@ func ExtractNote(raw []byte) (ExtractedNote, bool) {
 // ExtractStandaloneNote returns a Note document fetched directly by URI.
 func ExtractStandaloneNote(raw []byte) (ExtractedNote, bool) {
 	var note extractedNoteJSON
-	if err := json.Unmarshal(raw, &note); err != nil || note.Type != "Note" || note.ID == "" {
+	if err := json.Unmarshal(raw, &note); err != nil || !isNoteLikeObjectType(note.Type) || note.ID == "" {
 		return ExtractedNote{}, false
 	}
 	return extractedNoteFromJSON(note), true
@@ -232,10 +242,26 @@ func ExtractNoteObject(raw []byte) (ExtractedNote, bool) {
 		return ExtractedNote{}, false
 	}
 	var note extractedNoteJSON
-	if err := json.Unmarshal(activity.Object, &note); err != nil || note.Type != "Note" || note.ID == "" {
+	if err := json.Unmarshal(activity.Object, &note); err != nil || !isNoteLikeObjectType(note.Type) || note.ID == "" {
 		return ExtractedNote{}, false
 	}
 	return extractedNoteFromJSON(note), true
+}
+
+func isNoteLikeObjectType(value string) bool {
+	switch value {
+	case "Note", "Article", "Page", "Question":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizedObjectType(value string) string {
+	if isNoteLikeObjectType(value) {
+		return value
+	}
+	return "Note"
 }
 
 func extractedNoteFromJSON(note extractedNoteJSON) ExtractedNote {
@@ -243,7 +269,95 @@ func extractedNoteFromJSON(note extractedNoteJSON) ExtractedNote {
 	if err != nil {
 		publishedAt = time.Now().UTC()
 	}
-	return ExtractedNote{URI: note.ID, Content: note.Content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: extractStringList(note.To), CC: extractStringList(note.CC), PublishedAt: publishedAt}
+	content := note.Content
+	if content == "" {
+		content = note.Name
+	}
+	var expiresAt *time.Time
+	if parsed, err := time.Parse(time.RFC3339, note.EndTime); err == nil {
+		expiresAt = &parsed
+	}
+	pollOptions, multiple := extractPollOptions(note.OneOf, note.AnyOf)
+	return ExtractedNote{URI: note.ID, Type: normalizedObjectType(note.Type), Content: content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: extractStringList(note.To), CC: extractStringList(note.CC), PublishedAt: publishedAt, PollOptions: pollOptions, PollMultiple: multiple, PollExpiresAt: expiresAt}
+}
+
+// ExtractLocalRecipientUsernames returns local actor usernames referenced by an
+// ActivityPub activity. Shared inbox delivery does not carry the target username
+// in the route, so this conservative extractor looks at common addressing and
+// ownership fields and maps local actor URIs back to usernames.
+func ExtractLocalRecipientUsernames(raw []byte, host string) []string {
+	base := strings.TrimRight(host, "/") + "/users/"
+	if host == "" {
+		return nil
+	}
+	var doc any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	collectLocalUsernames(doc, base, seen)
+	res := make([]string, 0, len(seen))
+	for username := range seen {
+		res = append(res, username)
+	}
+	return res
+}
+
+func collectLocalUsernames(value any, base string, seen map[string]bool) {
+	switch v := value.(type) {
+	case string:
+		if username := localUsernameFromURI(v, base); username != "" {
+			seen[username] = true
+		}
+	case []any:
+		for _, item := range v {
+			collectLocalUsernames(item, base, seen)
+		}
+	case map[string]any:
+		for _, key := range []string{"actor", "object", "target", "attributedTo", "to", "cc", "bto", "bcc", "audience", "href", "tag"} {
+			if child, ok := v[key]; ok {
+				collectLocalUsernames(child, base, seen)
+			}
+		}
+	}
+}
+
+func localUsernameFromURI(raw, base string) string {
+	if !strings.HasPrefix(raw, base) {
+		return ""
+	}
+	rest := strings.TrimPrefix(raw, base)
+	segment, _, _ := strings.Cut(rest, "/")
+	username, err := url.PathUnescape(segment)
+	if err != nil || username == "" {
+		return ""
+	}
+	return username
+}
+
+func extractPollOptions(oneOf, anyOf json.RawMessage) ([]string, bool) {
+	raw := oneOf
+	multiple := false
+	if len(anyOf) > 0 {
+		raw = anyOf
+		multiple = true
+	}
+	if len(raw) == 0 {
+		return nil, false
+	}
+	var rows []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, false
+	}
+	options := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if strings.TrimSpace(row.Name) != "" {
+			options = append(options, strings.TrimSpace(row.Name))
+		}
+	}
+	return options, multiple
 }
 
 func extractStringList(raw json.RawMessage) []string {
@@ -322,6 +436,46 @@ func ExtractFollowObject(raw []byte) (ExtractedFollowObject, bool, error) {
 		return ExtractedFollowObject{}, false, err
 	}
 	return ExtractedFollowObject{Actor: actor, Object: object}, true, nil
+}
+
+// ExtractedUndoActivity is the embedded activity object inside an Undo.
+type ExtractedUndoActivity struct {
+	Type   string
+	Actor  string
+	Object string
+}
+
+// ExtractUndoActivity resolves an embedded Like/Announce/Follow activity inside
+// an Undo. When peers send only the undone activity ID, the returned Object is
+// that ID and Type is empty; callers may look up the original stored activity.
+func ExtractUndoActivity(raw []byte) (ExtractedUndoActivity, error) {
+	var doc struct {
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return ExtractedUndoActivity{}, err
+	}
+	var objectID string
+	if err := json.Unmarshal(doc.Object, &objectID); err == nil && objectID != "" {
+		return ExtractedUndoActivity{Object: objectID}, nil
+	}
+	var obj struct {
+		Type   string          `json:"type"`
+		Actor  json.RawMessage `json:"actor"`
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(doc.Object, &obj); err != nil {
+		return ExtractedUndoActivity{}, err
+	}
+	actor, _, err := ExtractIDAndInbox(obj.Actor)
+	if err != nil {
+		return ExtractedUndoActivity{}, err
+	}
+	object, _, err := ExtractIDAndInbox(obj.Object)
+	if err != nil {
+		return ExtractedUndoActivity{}, err
+	}
+	return ExtractedUndoActivity{Type: obj.Type, Actor: actor, Object: object}, nil
 }
 
 // ExtractUndoFollowActor resolves the actor whose Follow is being undone.
@@ -463,36 +617,5 @@ func extractURLValue(raw json.RawMessage) string {
 
 // MarshalFeaturedNoteObject serializes a stored local Note as an ActivityPub Note for featured collections.
 func MarshalFeaturedNoteObject(note models.Note, account models.Account) ([]byte, error) {
-	to := []string{activityStreamsPublicURI}
-	cc := []string{account.FollowersURI}
-	if note.Visibility == "private" {
-		to = []string{account.FollowersURI}
-		cc = []string{}
-	} else if note.Visibility == "direct" {
-		to = []string{}
-		cc = []string{}
-	}
-	published := note.PublishedAt
-	if published.IsZero() {
-		published = note.CreatedAt
-	}
-	object := map[string]any{
-		"id":           note.URI,
-		"type":         "Note",
-		"attributedTo": account.URI,
-		"content":      note.Content,
-		"published":    published.UTC().Format(time.RFC3339),
-		"to":           to,
-		"cc":           cc,
-	}
-	if note.SpoilerText != "" {
-		object["summary"] = note.SpoilerText
-	}
-	if note.Sensitive {
-		object["sensitive"] = true
-	}
-	if note.InReplyToURI != nil && *note.InReplyToURI != "" {
-		object["inReplyTo"] = *note.InReplyToURI
-	}
-	return json.Marshal(object)
+	return json.Marshal(noteObjectDocument(note, account))
 }

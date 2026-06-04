@@ -14,12 +14,13 @@ import (
 )
 
 type statusEdit struct {
-	Original   models.Note
-	Note       models.Note
-	Visibility string
-	Media      []models.MediaAttachment
-	Mentions   []models.Account
-	RawJSON    []byte
+	Original    models.Note
+	Note        models.Note
+	Visibility  string
+	Media       []models.MediaAttachment
+	Mentions    []models.Account
+	PollOptions []string
+	RawJSON     []byte
 }
 
 // UpdateStatus edits a local status and prepares the committed ActivityPub
@@ -82,14 +83,37 @@ func (u UseCase) prepareStatusEdit(ctx context.Context, account *models.Account,
 	if derr != nil {
 		return nil, derr
 	}
-
+	if input.ObjectType == "" {
+		input.ObjectType = note.ObjectType
+	}
+	if input.ObjectType == "Question" && len(input.PollOptions) == 0 {
+		existing, err := u.cfg.PollsRepo.GetPollOptions(ctx, nil, note.ID)
+		if err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		for _, option := range existing {
+			input.PollOptions = append(input.PollOptions, option.Title)
+		}
+		input.PollMultiple = note.PollMultiple
+	}
+	pollOptions, pollExpiresAt, derr := pollInput(input.ObjectType, input.PollOptions, input.PollExpiresIn)
+	if derr != nil {
+		return nil, derr
+	}
+	if input.ObjectType == "Question" && input.PollExpiresIn == 0 {
+		pollExpiresAt = note.PollExpiresAt
+	}
 	editedNote := statusWithEdits(*note, input, visibility, u.cfg.ContentSanitizer.SanitizeHTML(input.Content), u.cfg.ContentSanitizer.StripHTMLFromText(input.Content))
-	raw, derr := u.statusUpdateActivity(*account, editedNote, media, mentions)
+	if input.ObjectType == "Question" {
+		editedNote.PollMultiple = input.PollMultiple
+		editedNote.PollExpiresAt = pollExpiresAt
+	}
+	raw, derr := u.statusUpdateActivity(*account, editedNote, media, mentions, pollOptions)
 	if derr != nil {
 		return nil, derr
 	}
 
-	return &statusEdit{Original: *note, Note: editedNote, Visibility: visibility, Media: media, Mentions: mentions, RawJSON: raw}, nil
+	return &statusEdit{Original: *note, Note: editedNote, Visibility: visibility, Media: media, Mentions: mentions, PollOptions: pollOptions, RawJSON: raw}, nil
 }
 
 func (u UseCase) editableStatus(ctx context.Context, account *models.Account, statusID string) (*models.Note, *domainerrors.DomainError) {
@@ -106,6 +130,7 @@ func statusWithEdits(note models.Note, input UpdateStatusInput, visibility, cont
 	note.Visibility = visibility
 	note.Sensitive = input.Sensitive
 	note.SpoilerText = input.SpoilerText
+	note.ObjectType = normalizedStatusObjectType(input.ObjectType)
 	return note
 }
 
@@ -121,6 +146,9 @@ func (u UseCase) persistStatusEdit(ctx context.Context, account *models.Account,
 		}
 		updated = stored
 		if err := u.replaceStatusMedia(ctx, &tx, edit.Note.ID, edit.Media); err != nil {
+			return err
+		}
+		if _, err := u.cfg.PollsRepo.ReplacePoll(ctx, &tx, repos.CreatePollInput{NoteID: edit.Note.ID, Options: edit.PollOptions, Multiple: edit.Note.PollMultiple}); err != nil {
 			return err
 		}
 		if err := u.replaceStatusMentions(ctx, &tx, account.ID, edit.Note.ID, edit.Mentions); err != nil {
@@ -157,11 +185,14 @@ func (u UseCase) storeCurrentStatusRevision(ctx context.Context, tx *db.Tx, note
 
 func (u UseCase) updateStatusNote(ctx context.Context, tx *db.Tx, edit *statusEdit) (*models.Note, error) {
 	return u.cfg.NotesRepo.UpdateNoteByID(ctx, tx, edit.Note.ID, repos.UpdateNoteInput{
-		Content:     edit.Note.Content,
-		PlainText:   edit.Note.PlainText,
-		Visibility:  edit.Visibility,
-		Sensitive:   edit.Note.Sensitive,
-		SpoilerText: edit.Note.SpoilerText,
+		Content:       edit.Note.Content,
+		PlainText:     edit.Note.PlainText,
+		ObjectType:    edit.Note.ObjectType,
+		Visibility:    edit.Visibility,
+		PollMultiple:  edit.Note.PollMultiple,
+		PollExpiresAt: edit.Note.PollExpiresAt,
+		Sensitive:     edit.Note.Sensitive,
+		SpoilerText:   edit.Note.SpoilerText,
 	})
 }
 
@@ -206,7 +237,7 @@ func (u UseCase) storedStatusMentions(ctx context.Context, noteID string) ([]mod
 	return mentions, nil
 }
 
-func (u UseCase) statusUpdateActivity(account models.Account, note models.Note, media []models.MediaAttachment, mentions []models.Account) ([]byte, *domainerrors.DomainError) {
+func (u UseCase) statusUpdateActivity(account models.Account, note models.Note, media []models.MediaAttachment, mentions []models.Account, pollOptions []string) ([]byte, *domainerrors.DomainError) {
 	activityID, err := u.cfg.IDGenerator.NewID()
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -214,6 +245,7 @@ func (u UseCase) statusUpdateActivity(account models.Account, note models.Note, 
 
 	noteDoc := statusUpdateNoteDocument(account, note)
 	applyVisibilityAddressing(noteDoc, note.Visibility, &account, mentions)
+	applyPollOptions(noteDoc, note, pollOptions)
 	applyMediaAttachments(noteDoc, u.cfg.Host, media)
 
 	raw, err := json.Marshal(map[string]any{
@@ -234,7 +266,7 @@ func (u UseCase) statusUpdateActivity(account models.Account, note models.Note, 
 func statusUpdateNoteDocument(account models.Account, note models.Note) map[string]any {
 	doc := map[string]any{
 		"id":           note.URI,
-		"type":         "Note",
+		"type":         normalizedStatusObjectType(note.ObjectType),
 		"content":      note.Content,
 		"attributedTo": account.URI,
 		"visibility":   note.Visibility,

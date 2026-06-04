@@ -122,12 +122,18 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 					if note.AttributedTo == "" || note.AttributedTo != activity.Actor {
 						return domainerrors.New(domainerrors.ErrUnauthorized, "create actor does not own note")
 					}
+					if handled, err := u.handlePollVoteCreate(ctx, &tx, note); handled || err != nil {
+						return err
+					}
 					replyID, replyURI := replyIDs(ctx, u.cfg.NotesRepo, &tx, note)
 					if err := enqueueMissingReplyFetch(ctx, u.cfg.FetchJobsRepo, &tx, account.ID, note, replyID); err != nil {
 						return err
 					}
-					created, err := u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: stored.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
+					created, err := u.cfg.NotesRepo.CreateNote(ctx, &tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: stored.ID, URI: note.URI, Content: u.cfg.ContentSanitizer.SanitizeHTML(note.Content), PlainText: u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), ObjectType: note.Type, PollMultiple: note.PollMultiple, PollExpiresAt: note.PollExpiresAt, Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
 					if err != nil {
+						return err
+					}
+					if err := u.createPollOptions(ctx, &tx, created.ID, note); err != nil {
 						return err
 					}
 					return u.createStatusNotification(ctx, &tx, *account, note, created.ID, replyID)
@@ -149,7 +155,7 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 					if err := u.ensureRemoteNoteOwner(ctx, &tx, note.URI, activity.Actor); err != nil {
 						return err
 					}
-					return u.cfg.NotesRepo.UpdateNoteByURI(ctx, &tx, note.URI, u.cfg.ContentSanitizer.SanitizeHTML(note.Content), u.cfg.ContentSanitizer.StripHTMLFromText(note.Content))
+					return u.cfg.NotesRepo.UpdateNoteByURI(ctx, &tx, note.URI, u.cfg.ContentSanitizer.SanitizeHTML(note.Content), u.cfg.ContentSanitizer.StripHTMLFromText(note.Content), note.Type)
 				}
 			}
 			if u.cfg.RemoteAccountsRepo != nil {
@@ -190,14 +196,22 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 				return u.cfg.FollowsRepo.RejectFollowingByActor(ctx, &tx, account.ID, activity.Actor)
 			}
 		case "Undo":
-			if u.cfg.FollowsRepo != nil {
-				remoteActor, err := ExtractUndoFollowActor(input.RawJSON)
-				if err != nil {
-					return domainerrors.NewErr(domainerrors.ErrBadRequest, err)
+			undo, err := u.resolveUndoActivity(ctx, &tx, account.ID, activity.Actor, input.RawJSON)
+			if err != nil {
+				return err
+			}
+			switch undo.Type {
+			case "Follow":
+				if u.cfg.FollowsRepo != nil && undo.Actor != "" {
+					return u.cfg.FollowsRepo.DeleteFollowByActor(ctx, &tx, account.ID, undo.Actor)
 				}
-				if remoteActor != "" {
-					return u.cfg.FollowsRepo.DeleteFollowByActor(ctx, &tx, account.ID, remoteActor)
+			case "Like":
+				return u.undoInteractionNotification(ctx, &tx, *account, undo, "favourite")
+			case "Announce":
+				if err := u.undoInboundBoost(ctx, &tx, *account, undo); err != nil {
+					return err
 				}
+				return u.undoInteractionNotification(ctx, &tx, *account, undo, "reblog")
 			}
 		}
 		return nil
@@ -210,6 +224,21 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	return &HandleInboxActivityResult{Account: *account, Activity: activity, AcceptJSON: acceptJSON, AcceptInbox: acceptInbox}, nil
+}
+
+func (u *HandleInboxActivityUseCase) handlePollVoteCreate(ctx context.Context, tx *db.Tx, note ExtractedNote) (bool, error) {
+	if u.cfg.PollsRepo == nil || u.cfg.NotesRepo == nil || note.InReplyToURI == nil || note.Content == "" {
+		return false, nil
+	}
+	parent, err := u.cfg.NotesRepo.GetNoteByURI(ctx, tx, *note.InReplyToURI)
+	if err != nil || parent.ObjectType != "Question" {
+		return false, nil
+	}
+	_, err = u.cfg.PollsRepo.CreateRemoteVote(ctx, tx, parent.ID, note.AttributedTo, note.Content, parent.PollMultiple)
+	if err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 func (u *HandleInboxActivityUseCase) createStatusNotification(ctx context.Context, tx *db.Tx, account models.Account, note ExtractedNote, statusID string, replyID *string) error {
@@ -254,6 +283,31 @@ func noteMentionsLocalActor(note ExtractedNote, localActor string) bool {
 	return false
 }
 
+func (u *HandleInboxActivityUseCase) resolveUndoActivity(ctx context.Context, tx *db.Tx, localAccountID, outerActor string, raw []byte) (ExtractedUndoActivity, error) {
+	undo, err := ExtractUndoActivity(raw)
+	if err != nil {
+		return ExtractedUndoActivity{}, domainerrors.NewErr(domainerrors.ErrBadRequest, err)
+	}
+	if undo.Type == "" && undo.Object != "" && u.cfg.ActivitiesRepo != nil {
+		stored, err := u.cfg.ActivitiesRepo.GetActivityByURI(ctx, tx, localAccountID, undo.Object)
+		if err != nil {
+			return ExtractedUndoActivity{}, nil
+		}
+		parsed, derr := ParseActivity([]byte(stored.RawJSON))
+		if derr != nil {
+			return ExtractedUndoActivity{}, derr
+		}
+		undo = ExtractedUndoActivity{Type: parsed.Type, Actor: parsed.Actor, Object: parsed.Object}
+	}
+	if undo.Type == "" {
+		return undo, nil
+	}
+	if undo.Actor != outerActor {
+		return ExtractedUndoActivity{}, domainerrors.New(domainerrors.ErrUnauthorized, "undo actor does not own embedded activity")
+	}
+	return undo, nil
+}
+
 func (u *HandleInboxActivityUseCase) createInboundBoost(ctx context.Context, tx *db.Tx, account models.Account, activity ParsedActivity) error {
 	if u.cfg.BoostsRepo == nil || u.cfg.NotesRepo == nil || activity.Object == "" {
 		return nil
@@ -269,9 +323,27 @@ func (u *HandleInboxActivityUseCase) createInboundBoost(ctx context.Context, tx 
 	return err
 }
 
+func (u *HandleInboxActivityUseCase) undoInboundBoost(ctx context.Context, tx *db.Tx, account models.Account, undo ExtractedUndoActivity) error {
+	if u.cfg.BoostsRepo == nil || u.cfg.NotesRepo == nil || undo.Object == "" {
+		return nil
+	}
+	note, err := u.cfg.NotesRepo.GetNoteByURI(ctx, tx, undo.Object)
+	if err != nil {
+		return nil
+	}
+	return u.cfg.BoostsRepo.DeleteBoost(ctx, tx, account.ID, undo.Actor, note.ID)
+}
+
 func enqueueMissingAnnounceFetch(ctx context.Context, repo repos.FetchJobsRepository, tx *db.Tx, accountID, object string) error {
 	_, err := repo.CreateFetchJob(ctx, tx, repos.CreateFetchJobInput{URL: object, Kind: "activitypub_object", AccountID: accountID, NextAttemptAt: time.Now().UTC()})
 	return err
+}
+
+func (u *HandleInboxActivityUseCase) undoInteractionNotification(ctx context.Context, tx *db.Tx, account models.Account, undo ExtractedUndoActivity, notificationType string) error {
+	if u.cfg.SocialRepo == nil || undo.Object == "" {
+		return nil
+	}
+	return u.cfg.SocialRepo.DeleteNotificationsByActorAndType(ctx, tx, account.ID, undo.Actor, notificationType)
 }
 
 func (u *HandleInboxActivityUseCase) createInteractionNotification(ctx context.Context, tx *db.Tx, account models.Account, activity ParsedActivity, notificationType string) error {

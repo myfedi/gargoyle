@@ -99,12 +99,13 @@ func (u *CreateOutboxActivityUseCase) persistOutboxActivity(
 	if err := enqueueMissingReplyFetch(ctx, u.cfg.FetchJobsRepo, tx, account.ID, note, replyID); err != nil {
 		return err
 	}
-	_, err = u.cfg.NotesRepo.CreateNote(ctx, tx, repos.CreateNoteInput{
+	created, err := u.cfg.NotesRepo.CreateNote(ctx, tx, repos.CreateNoteInput{
 		LocalAccountID: account.ID,
 		ActivityID:     stored.ID,
 		URI:            note.URI,
 		Content:        u.cfg.ContentSanitizer.SanitizeHTML(note.Content),
 		PlainText:      u.cfg.ContentSanitizer.StripHTMLFromText(note.Content),
+		ObjectType:     note.Type,
 		Visibility:     note.Visibility,
 		Sensitive:      note.Sensitive,
 		SpoilerText:    note.SpoilerText,
@@ -113,7 +114,10 @@ func (u *CreateOutboxActivityUseCase) persistOutboxActivity(
 		InReplyToURI:   replyURI,
 		PublishedAt:    note.PublishedAt,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return u.createPollOptions(ctx, tx, created.ID, note)
 }
 
 // followerInboxes returns delivery targets after commit. Delivery itself stays

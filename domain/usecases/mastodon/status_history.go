@@ -11,6 +11,7 @@ import (
 type StatusEditHistoryItem struct {
 	Content     string
 	PlainText   string
+	ObjectType  string
 	SpoilerText string
 	Sensitive   bool
 	CreatedAt   time.Time
@@ -33,13 +34,13 @@ func (u UseCase) StatusHistory(ctx context.Context, localAccount *models.Account
 		if derr != nil {
 			return nil, derr
 		}
-		res = append(res, StatusEditHistoryItem{Content: edit.Content, PlainText: edit.PlainText, SpoilerText: edit.SpoilerText, Sensitive: edit.Sensitive, CreatedAt: historyCreatedAt(edit.CreatedAt, item.Note), Account: item.Account, Media: media})
+		res = append(res, StatusEditHistoryItem{Content: edit.Content, PlainText: edit.PlainText, ObjectType: edit.ObjectType, SpoilerText: edit.SpoilerText, Sensitive: edit.Sensitive, CreatedAt: historyCreatedAt(edit.CreatedAt, item.Note), Account: item.Account, Media: media})
 	}
 	created := item.Note.PublishedAt
 	if item.Note.EditedAt != nil {
 		created = *item.Note.EditedAt
 	}
-	res = append(res, StatusEditHistoryItem{Content: item.Note.Content, PlainText: item.Note.PlainText, SpoilerText: item.Note.SpoilerText, Sensitive: item.Note.Sensitive, CreatedAt: historyCreatedAt(created, item.Note), Account: item.Account, Media: item.Media})
+	res = append(res, StatusEditHistoryItem{Content: item.Note.Content, PlainText: item.Note.PlainText, ObjectType: item.Note.ObjectType, SpoilerText: item.Note.SpoilerText, Sensitive: item.Note.Sensitive, CreatedAt: historyCreatedAt(created, item.Note), Account: item.Account, Media: item.Media})
 	return res, nil
 }
 

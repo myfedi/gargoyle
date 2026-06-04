@@ -13,7 +13,10 @@ type Note struct {
 	URI            string     `bun:",nullzero,notnull,unique"`
 	Content        string     `bun:",nullzero,notnull"`
 	PlainText      string     `bun:",nullzero"`
+	ObjectType     string     `bun:",nullzero,notnull,default:'Note'"`
 	Visibility     string     `bun:",nullzero,notnull,default:'public'"`
+	PollMultiple   bool       `bun:",notnull,default:false"`
+	PollExpiresAt  *time.Time `bun:"type:timestamptz,nullzero"`
 	Sensitive      bool       `bun:",notnull,default:false"`
 	SpoilerText    string     `bun:",nullzero"`
 	AttributedTo   string     `bun:",nullzero,notnull"`
@@ -32,7 +35,10 @@ func (n Note) ToModel() domainmodels.Note {
 		URI:            n.URI,
 		Content:        n.Content,
 		PlainText:      n.PlainText,
+		ObjectType:     n.ObjectType,
 		Visibility:     n.Visibility,
+		PollMultiple:   n.PollMultiple,
+		PollExpiresAt:  n.PollExpiresAt,
 		Sensitive:      n.Sensitive,
 		SpoilerText:    n.SpoilerText,
 		AttributedTo:   n.AttributedTo,

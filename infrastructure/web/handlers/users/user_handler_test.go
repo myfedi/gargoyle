@@ -40,6 +40,27 @@ func (f fakeDeliveryJobsRepo) MarkDeliveryJobFailed(ctx context.Context, tx *db.
 	return nil
 }
 
+type fakeFetchJobsRepo struct{}
+
+func (fakeFetchJobsRepo) CreateFetchJob(ctx context.Context, tx *db.Tx, input repos.CreateFetchJobInput) (*models.FetchJob, error) {
+	return &models.FetchJob{ID: "fetch-1", URL: input.URL, Kind: input.Kind, AccountID: input.AccountID, NextAttemptAt: input.NextAttemptAt}, nil
+}
+func (fakeFetchJobsRepo) ClaimDueFetchJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.FetchJob, error) {
+	return nil, nil
+}
+func (fakeFetchJobsRepo) ListDueFetchJobs(ctx context.Context, tx *db.Tx, now time.Time, limit int) ([]models.FetchJob, error) {
+	return nil, nil
+}
+func (fakeFetchJobsRepo) ListFetchJobsByStatus(ctx context.Context, tx *db.Tx, status models.JobStatus, limit int) ([]models.FetchJob, error) {
+	return nil, nil
+}
+func (fakeFetchJobsRepo) MarkFetchJobFetched(ctx context.Context, tx *db.Tx, id string, fetchedAt time.Time) error {
+	return nil
+}
+func (fakeFetchJobsRepo) MarkFetchJobFailed(ctx context.Context, tx *db.Tx, id string, attempts int, nextAttemptAt time.Time, lastError string) error {
+	return nil
+}
+
 type fakeAccountsRepo struct{ err error }
 
 func (f fakeAccountsRepo) CreateAccount(ctx context.Context, tx *db.Tx, input repos.CreateAccountInput) (*models.Account, error) {
@@ -99,6 +120,28 @@ func (f *fakeActivitiesRepo) GetActivityByID(ctx context.Context, tx *db.Tx, id 
 	}
 	return nil, sql.ErrNoRows
 }
+func (f *fakeActivitiesRepo) GetActivityByURI(ctx context.Context, tx *db.Tx, localAccountID, uri string) (*models.Activity, error) {
+	for _, activity := range f.activities {
+		var doc struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal([]byte(activity.RawJSON), &doc)
+		if activity.LocalAccountID == localAccountID && doc.ID == uri {
+			return &activity, nil
+		}
+	}
+	return nil, sql.ErrNoRows
+}
+func (f *fakeActivitiesRepo) GetOutboxActivityByURI(ctx context.Context, tx *db.Tx, localAccountID, uri string) (*models.Activity, error) {
+	activity, err := f.GetActivityByURI(ctx, tx, localAccountID, uri)
+	if err != nil {
+		return nil, err
+	}
+	if activity.Direction != models.ActivityDirectionOutbox {
+		return nil, sql.ErrNoRows
+	}
+	return activity, nil
+}
 func (f *fakeActivitiesRepo) ListOutboxActivitiesPaged(ctx context.Context, tx *db.Tx, localAccountID string, limit, offset int) ([]models.Activity, error) {
 	if limit <= 0 {
 		return f.activities, nil
@@ -128,7 +171,7 @@ func (f *fakeNotesRepo) GetLocalPostsCount(ctx context.Context) (int, error) {
 	return len(f.notes), nil
 }
 func (f *fakeNotesRepo) CreateNote(ctx context.Context, tx *db.Tx, input repos.CreateNoteInput) (*models.Note, error) {
-	note := models.Note{ID: "note-1", LocalAccountID: input.LocalAccountID, ActivityID: input.ActivityID, URI: input.URI, Content: input.Content, PlainText: input.PlainText, Visibility: input.Visibility, Sensitive: input.Sensitive, SpoilerText: input.SpoilerText, AttributedTo: input.AttributedTo, InReplyToID: input.InReplyToID, InReplyToURI: input.InReplyToURI, PublishedAt: input.PublishedAt}
+	note := models.Note{ID: "note-1", LocalAccountID: input.LocalAccountID, ActivityID: input.ActivityID, URI: input.URI, Content: input.Content, PlainText: input.PlainText, ObjectType: input.ObjectType, Visibility: input.Visibility, Sensitive: input.Sensitive, SpoilerText: input.SpoilerText, AttributedTo: input.AttributedTo, InReplyToID: input.InReplyToID, InReplyToURI: input.InReplyToURI, PublishedAt: input.PublishedAt}
 	f.notes = append(f.notes, note)
 	return &note, nil
 }
@@ -155,6 +198,7 @@ func (f *fakeNotesRepo) UpdateNoteByID(ctx context.Context, tx *db.Tx, id string
 		if f.notes[i].ID == id {
 			f.notes[i].Content = input.Content
 			f.notes[i].PlainText = input.PlainText
+			f.notes[i].ObjectType = input.ObjectType
 			f.notes[i].Visibility = input.Visibility
 			f.notes[i].Sensitive = input.Sensitive
 			f.notes[i].SpoilerText = input.SpoilerText
@@ -164,17 +208,18 @@ func (f *fakeNotesRepo) UpdateNoteByID(ctx context.Context, tx *db.Tx, id string
 	return nil, sql.ErrNoRows
 }
 
-func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri, content, plainText string) error {
+func (f *fakeNotesRepo) UpdateNoteByURI(ctx context.Context, tx *db.Tx, uri, content, plainText, objectType string) error {
 	for i := range f.notes {
 		if f.notes[i].URI == uri {
 			f.notes[i].Content = content
 			f.notes[i].PlainText = plainText
+			f.notes[i].ObjectType = objectType
 		}
 	}
 	return nil
 }
 func (f *fakeNotesRepo) CreateNoteEdit(ctx context.Context, tx *db.Tx, input repos.CreateNoteEditInput) (*models.NoteEdit, error) {
-	return &models.NoteEdit{ID: "edit-1", NoteID: input.Note.ID, Content: input.Note.Content, PlainText: input.Note.PlainText, Visibility: input.Note.Visibility, Sensitive: input.Note.Sensitive, SpoilerText: input.Note.SpoilerText, CreatedAt: input.CreatedAt, MediaIDs: input.MediaIDs}, nil
+	return &models.NoteEdit{ID: "edit-1", NoteID: input.Note.ID, Content: input.Note.Content, PlainText: input.Note.PlainText, ObjectType: input.Note.ObjectType, Visibility: input.Note.Visibility, Sensitive: input.Note.Sensitive, SpoilerText: input.Note.SpoilerText, CreatedAt: input.CreatedAt, MediaIDs: input.MediaIDs}, nil
 }
 func (f *fakeNotesRepo) ListNoteEdits(ctx context.Context, tx *db.Tx, noteID string) ([]models.NoteEdit, error) {
 	return nil, nil
@@ -351,6 +396,94 @@ func (fakeSocialRepo) ClearNotifications(ctx context.Context, tx *db.Tx, localAc
 	return nil
 }
 
+type trackingSocialRepo struct {
+	deleted []string
+}
+
+func (trackingSocialRepo) CreateInteraction(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) (*models.StatusInteraction, error) {
+	return &models.StatusInteraction{LocalAccountID: localAccountID, NoteID: noteID, Type: typ}, nil
+}
+func (trackingSocialRepo) DeleteInteraction(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) error {
+	return nil
+}
+func (trackingSocialRepo) InteractionExists(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) (bool, error) {
+	return false, nil
+}
+func (trackingSocialRepo) ListInteractions(ctx context.Context, tx *db.Tx, localAccountID, typ string, limit int) ([]models.StatusInteraction, error) {
+	return nil, nil
+}
+func (trackingSocialRepo) CreateNotification(ctx context.Context, tx *db.Tx, localAccountID, actorAccountID, typ string, statusID *string) (*models.Notification, error) {
+	return &models.Notification{}, nil
+}
+func (trackingSocialRepo) ListNotifications(ctx context.Context, tx *db.Tx, localAccountID string, limit int) ([]models.Notification, error) {
+	return nil, nil
+}
+func (trackingSocialRepo) DeleteNotification(ctx context.Context, tx *db.Tx, localAccountID, notificationID string) error {
+	return nil
+}
+func (t *trackingSocialRepo) DeleteNotificationsByActorAndType(ctx context.Context, tx *db.Tx, localAccountID, actorAccountID, typ string) error {
+	t.deleted = append(t.deleted, localAccountID+"|"+actorAccountID+"|"+typ)
+	return nil
+}
+func (trackingSocialRepo) ClearNotifications(ctx context.Context, tx *db.Tx, localAccountID string) error {
+	return nil
+}
+
+type fakePollsRepo struct{}
+
+func (fakePollsRepo) CreatePoll(ctx context.Context, tx *db.Tx, input repos.CreatePollInput) ([]models.PollOption, error) {
+	return fakePollOptions(input.NoteID, input.Options), nil
+}
+func (fakePollsRepo) ReplacePoll(ctx context.Context, tx *db.Tx, input repos.CreatePollInput) ([]models.PollOption, error) {
+	return fakePollOptions(input.NoteID, input.Options), nil
+}
+func (fakePollsRepo) GetPollOptions(ctx context.Context, tx *db.Tx, noteID string) ([]models.PollOption, error) {
+	return nil, nil
+}
+func (fakePollsRepo) CreateLocalVote(ctx context.Context, tx *db.Tx, noteID, localAccountID string, choices []int, multiple bool) ([]models.PollOption, error) {
+	return nil, nil
+}
+func (fakePollsRepo) CreateRemoteVote(ctx context.Context, tx *db.Tx, noteID, remoteActor, optionTitle string, multiple bool) ([]models.PollOption, error) {
+	return nil, nil
+}
+func (fakePollsRepo) LocalVoteChoices(ctx context.Context, tx *db.Tx, noteID, localAccountID string) ([]int, error) {
+	return nil, nil
+}
+
+func fakePollOptions(noteID string, titles []string) []models.PollOption {
+	options := make([]models.PollOption, 0, len(titles))
+	for i, title := range titles {
+		options = append(options, models.PollOption{ID: "poll-option", NoteID: noteID, Title: title, Position: i})
+	}
+	return options
+}
+
+type fakeBoostsRepo struct {
+	created []repos.CreateBoostInput
+	deleted []string
+}
+
+func (f *fakeBoostsRepo) CreateBoost(ctx context.Context, tx *db.Tx, input repos.CreateBoostInput) (*models.Boost, error) {
+	f.created = append(f.created, input)
+	return &models.Boost{LocalAccountID: input.LocalAccountID, Actor: input.Actor, NoteID: input.NoteID, URI: input.URI, PublishedAt: input.PublishedAt}, nil
+}
+func (f *fakeBoostsRepo) DeleteBoost(ctx context.Context, tx *db.Tx, localAccountID, actor, noteID string) error {
+	f.deleted = append(f.deleted, localAccountID+"|"+actor+"|"+noteID)
+	return nil
+}
+func (fakeBoostsRepo) ListTimelineBoosts(ctx context.Context, tx *db.Tx, localAccountID string, limit int, maxID string) ([]models.Boost, error) {
+	return nil, nil
+}
+func (fakeBoostsRepo) ListActorBoosts(ctx context.Context, tx *db.Tx, localAccountID, actor string, limit int, maxID string) ([]models.Boost, error) {
+	return nil, nil
+}
+func (fakeBoostsRepo) CountBoostsForNote(ctx context.Context, tx *db.Tx, noteID string) (int, error) {
+	return 0, nil
+}
+func (fakeBoostsRepo) BoostExists(ctx context.Context, tx *db.Tx, localAccountID, actor, noteID string) (bool, error) {
+	return false, nil
+}
+
 type fakeTx struct{}
 
 func (fakeTx) NewInsert() any { return nil }
@@ -376,8 +509,11 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		FollowsRepo:      follows,
 		NotesRepo:        &fakeNotesRepo{},
 		SocialRepo:       fakeSocialRepo{},
+		BoostsRepo:       &fakeBoostsRepo{},
+		PollsRepo:        fakePollsRepo{},
 		DomainBlocksRepo: fakeDomainBlocksRepo{},
 		DeliveryJobsRepo: fakeDeliveryJobsRepo{},
+		FetchJobsRepo:    fakeFetchJobsRepo{},
 		Serializer:       apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer: adapters.NewContentSanitizer(),
 		HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -386,6 +522,7 @@ func newTestHandler(accounts repos.AccountsRepo, activities repos.ActivitiesRepo
 		BodyLimitBytes:     1 << 20,
 		AllowUnsignedInbox: true,
 		DeliveryRetries:    1,
+		Host:               "https://example.org",
 	})
 }
 
@@ -436,6 +573,116 @@ func TestUserProfileHandlerReturnsEmptyOutboxCollection(t *testing.T) {
 	}
 }
 
+func TestUserProfileHandlerDereferencesPublicObject(t *testing.T) {
+	app := fiber.New()
+	notes := &fakeNotesRepo{notes: []models.Note{{ID: "note-1", LocalAccountID: "account-1", URI: "https://example.org/users/alice/objects/object-1", Content: "<p>Hello</p>", Visibility: "public", AttributedTo: "https://example.org/users/alice", PublishedAt: time.Date(2026, 5, 19, 12, 0, 0, 0, time.UTC)}}}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/users/alice/objects/object-1", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var got map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("invalid JSON response: %v", err)
+	}
+	if got["type"] != "Note" || got["id"] != "https://example.org/users/alice/objects/object-1" {
+		t.Fatalf("unexpected object document: %#v", got)
+	}
+}
+
+func TestUserProfileHandlerDoesNotDereferencePrivateObject(t *testing.T) {
+	app := fiber.New()
+	notes := &fakeNotesRepo{notes: []models.Note{{ID: "note-1", LocalAccountID: "account-1", URI: "https://example.org/users/alice/objects/object-1", Content: "secret", Visibility: "direct", AttributedTo: "https://example.org/users/alice"}}}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/users/alice/objects/object-1", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserProfileHandlerDereferencesPublicActivity(t *testing.T) {
+	app := fiber.New()
+	activities := &fakeActivitiesRepo{activities: []models.Activity{{LocalAccountID: "account-1", Direction: models.ActivityDirectionOutbox, Type: "Create", Object: "https://example.org/users/alice/objects/object-1", RawJSON: `{"@context":"https://www.w3.org/ns/activitystreams","id":"https://example.org/users/alice/activities/activity-1","type":"Create","actor":"https://example.org/users/alice","object":"https://example.org/users/alice/objects/object-1"}`}}}
+	notes := &fakeNotesRepo{notes: []models.Note{{ID: "note-1", LocalAccountID: "account-1", URI: "https://example.org/users/alice/objects/object-1", Content: "hello", Visibility: "public", AttributedTo: "https://example.org/users/alice"}}}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     activities,
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/users/alice/activities/activity-1", nil))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
 func TestUserProfileHandlerAcceptsInboxActivities(t *testing.T) {
 	app := fiber.New()
 	newTestHandler(fakeAccountsRepo{}, &fakeActivitiesRepo{}, &fakeFollowsRepo{}).SetupUserProfileHandler(app)
@@ -452,6 +699,44 @@ func TestUserProfileHandlerAcceptsInboxActivities(t *testing.T) {
 	}
 }
 
+func TestSharedInboxDispatchesToAddressedLocalActor(t *testing.T) {
+	app := fiber.New()
+	notes := &fakeNotesRepo{}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Create","actor":"https://remote.example/users/bob","to":["https://example.org/users/alice"],"object":{"id":"https://remote.example/notes/1","type":"Note","content":"<p>shared</p>","attributedTo":"https://remote.example/users/bob","published":"2026-05-19T12:00:00Z"}}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(notes.notes) != 1 || notes.notes[0].PlainText != "shared" {
+		t.Fatalf("expected shared inbox note to be stored, got %#v", notes.notes)
+	}
+}
+
 func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
@@ -462,13 +747,17 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 		FollowsRepo:        &fakeFollowsRepo{},
 		NotesRepo:          notes,
 		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
 		DomainBlocksRepo:   fakeDomainBlocksRepo{},
 		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
 		BodyLimitBytes:     1 << 20,
 		AllowUnsignedInbox: true,
 		DeliveryRetries:    1,
+		Host:               "https://example.org",
 	})
 	handler.SetupUserProfileHandler(app)
 
@@ -486,6 +775,126 @@ func TestUserProfileHandlerStoresInboundCreateNote(t *testing.T) {
 	}
 }
 
+func TestUserProfileHandlerStoresInboundArticleAsNoteLikeObject(t *testing.T) {
+	app := fiber.New()
+	notes := &fakeNotesRepo{}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Create","actor":"https://remote.example/users/bob","object":{"id":"https://remote.example/articles/1","type":"Article","name":"Article title","attributedTo":"https://remote.example/users/bob","published":"2026-05-19T12:00:00Z"}}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(notes.notes) != 1 || notes.notes[0].PlainText != "Article title" {
+		t.Fatalf("expected stored article fallback text, got %#v", notes.notes)
+	}
+}
+
+func TestUserProfileHandlerUndoLikeDeletesNotification(t *testing.T) {
+	app := fiber.New()
+	social := &trackingSocialRepo{}
+	notes := &fakeNotesRepo{notes: []models.Note{{ID: "note-1", LocalAccountID: "account-1", URI: "https://example.org/users/alice/objects/note-1", Visibility: "public", AttributedTo: "https://example.org/users/alice"}}}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         social,
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Undo","actor":"https://remote.example/users/bob","object":{"type":"Like","actor":"https://remote.example/users/bob","object":"https://example.org/users/alice/objects/note-1"}}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(social.deleted) != 1 || social.deleted[0] != "account-1|https://remote.example/users/bob|favourite" {
+		t.Fatalf("expected favourite notification deletion, got %#v", social.deleted)
+	}
+}
+
+func TestUserProfileHandlerUndoAnnounceDeletesBoostAndNotification(t *testing.T) {
+	app := fiber.New()
+	social := &trackingSocialRepo{}
+	boosts := &fakeBoostsRepo{}
+	notes := &fakeNotesRepo{notes: []models.Note{{ID: "note-1", LocalAccountID: "account-1", URI: "https://example.org/users/alice/objects/note-1", Visibility: "public", AttributedTo: "https://example.org/users/alice"}}}
+	handler := NewUsersWebHandler(UsersWebHandlerConfig{
+		TxProvider:         fakeTxProvider{},
+		AccountsRepo:       fakeAccountsRepo{},
+		ActivitiesRepo:     &fakeActivitiesRepo{},
+		FollowsRepo:        &fakeFollowsRepo{},
+		NotesRepo:          notes,
+		SocialRepo:         social,
+		BoostsRepo:         boosts,
+		PollsRepo:          fakePollsRepo{},
+		DomainBlocksRepo:   fakeDomainBlocksRepo{},
+		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
+		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
+		ContentSanitizer:   adapters.NewContentSanitizer(),
+		BodyLimitBytes:     1 << 20,
+		AllowUnsignedInbox: true,
+		DeliveryRetries:    1,
+		Host:               "https://example.org",
+	})
+	handler.SetupUserProfileHandler(app)
+
+	body := `{"type":"Undo","actor":"https://remote.example/users/bob","object":{"type":"Announce","actor":"https://remote.example/users/bob","object":"https://example.org/users/alice/objects/note-1"}}`
+	resp, err := app.Test(httptest.NewRequest("POST", "/users/alice/inbox", strings.NewReader(body)))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusAccepted {
+		t.Fatalf("expected 202, got %d", resp.StatusCode)
+	}
+	if len(boosts.deleted) != 1 || boosts.deleted[0] != "account-1|https://remote.example/users/bob|note-1" {
+		t.Fatalf("expected boost deletion, got %#v", boosts.deleted)
+	}
+	if len(social.deleted) != 1 || social.deleted[0] != "account-1|https://remote.example/users/bob|reblog" {
+		t.Fatalf("expected reblog notification deletion, got %#v", social.deleted)
+	}
+}
+
 func TestUserProfileHandlerRejectsForgedInboundCreateAuthor(t *testing.T) {
 	app := fiber.New()
 	notes := &fakeNotesRepo{}
@@ -496,13 +905,17 @@ func TestUserProfileHandlerRejectsForgedInboundCreateAuthor(t *testing.T) {
 		FollowsRepo:        &fakeFollowsRepo{},
 		NotesRepo:          notes,
 		SocialRepo:         fakeSocialRepo{},
+		BoostsRepo:         &fakeBoostsRepo{},
+		PollsRepo:          fakePollsRepo{},
 		DomainBlocksRepo:   fakeDomainBlocksRepo{},
 		DeliveryJobsRepo:   fakeDeliveryJobsRepo{},
+		FetchJobsRepo:      fakeFetchJobsRepo{},
 		Serializer:         apAdapters.NewActorSerializer(apAdapters.ActorSerializerConfig{}),
 		ContentSanitizer:   adapters.NewContentSanitizer(),
 		BodyLimitBytes:     1 << 20,
 		AllowUnsignedInbox: true,
 		DeliveryRetries:    1,
+		Host:               "https://example.org",
 	})
 	handler.SetupUserProfileHandler(app)
 

@@ -81,6 +81,7 @@ func main() {
 	mediaStorage := adapters.NewLocalMediaStorage(config.Media.StorageDir)
 	socialRepo := repos.NewSocialRepo(sqlite.Bun)
 	boostsRepo := repos.NewBoostsRepo(sqlite.Bun)
+	pollsRepo := repos.NewPollsRepo(sqlite.Bun)
 	conversationsRepo := repos.NewConversationsRepo(sqlite.Bun)
 	mentionsRepo := repos.NewMentionsRepo(sqlite.Bun)
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
@@ -151,15 +152,20 @@ func main() {
 		FollowsRepo:         followsRepo,
 		NotesRepo:           notesRepo,
 		SocialRepo:          socialRepo,
+		BoostsRepo:          boostsRepo,
+		PollsRepo:           pollsRepo,
 		RemoteAccountsRepo:  remoteAccountsRepo,
 		DomainBlocksRepo:    moderationRepo,
 		DeliveryJobsRepo:    jobsRepo,
+		FetchJobsRepo:       jobsRepo,
+		MediaRepo:           mediaRepo,
 		Serializer:          actorSerializer,
 		ContentSanitizer:    contentSanitizer,
 		BodyLimitBytes:      config.ActivityPub.BodyLimitBytes,
 		RemoteURLExceptions: userRemoteURLExceptions,
 		RequireSignedInbox:  true,
 		DeliveryRetries:     3,
+		Host:                host,
 	})
 	userProfileHandler.SetupUserProfileHandler(app)
 
@@ -186,7 +192,10 @@ func main() {
 		FetchJobsRepo:      jobsRepo,
 		SocialRepo:         socialRepo,
 		BoostsRepo:         boostsRepo,
+		PollsRepo:          pollsRepo,
+		MediaRepo:          mediaRepo,
 		ContentSanitizer:   contentSanitizer,
+		Host:               host,
 	}
 	mastodonAPIUC := mastodonUsecases.NewUseCase(mastodonUsecases.Config{
 		Host:                host,
@@ -202,6 +211,7 @@ func main() {
 		ContentSanitizer:    contentSanitizer,
 		SocialRepo:          socialRepo,
 		BoostsRepo:          boostsRepo,
+		PollsRepo:           pollsRepo,
 		ConversationsRepo:   conversationsRepo,
 		MentionsRepo:        mentionsRepo,
 		RemoteAccountsRepo:  remoteAccountsRepo,

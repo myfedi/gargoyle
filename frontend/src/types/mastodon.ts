@@ -70,6 +70,20 @@ export type MastodonMention = {
   url: string;
 };
 
+export type ActivityPubObjectType = "Note" | "Article" | "Page" | "Question";
+
+export type MastodonPoll = {
+  id: string;
+  expires_at?: string | null;
+  expired: boolean;
+  multiple: boolean;
+  votes_count: number;
+  voters_count: number;
+  voted: boolean;
+  own_votes: number[];
+  options: Array<{ title: string; votes_count: number }>;
+};
+
 export type MastodonStatus = {
   id: string;
   uri: string;
@@ -78,6 +92,7 @@ export type MastodonStatus = {
   account: MastodonAccount;
   content: string;
   visibility: "public" | "unlisted" | "private" | "direct" | string;
+  activitypub_type?: ActivityPubObjectType | string;
   sensitive: boolean;
   spoiler_text: string;
   replies_count: number;
@@ -92,6 +107,7 @@ export type MastodonStatus = {
   in_reply_to_id?: string | null;
   in_reply_to_account_id?: string | null;
   reblog?: MastodonStatus | null;
+  poll?: MastodonPoll | null;
 };
 
 export type MastodonNotification = {

@@ -118,6 +118,20 @@ export function StatusPage({ route }: StatusPageProps) {
     }
   }
 
+  async function votePoll(statusToVote: MastodonStatus, choices: number[]) {
+    if (!api) return;
+    setError(null);
+    try {
+      const poll = await api.votePoll(statusToVote.poll?.id ?? statusToVote.id, choices);
+      const applyPoll = (item: MastodonStatus) => item.id === statusToVote.id ? { ...item, poll } : item;
+      setStatus((current) => current ? applyPoll(current) : current);
+      setAncestors((current) => current.map(applyPoll));
+      setDescendants((current) => current.map(applyPoll));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not vote in poll.");
+    }
+  }
+
   async function editStatus(statusToEdit: MastodonStatus, values: ComposeValues) {
     if (!api) {
       return false;
@@ -132,6 +146,8 @@ export function StatusPage({ route }: StatusPageProps) {
         sensitive: values.sensitive,
         spoiler_text: values.spoilerText,
         media_ids: values.mediaIds,
+        activitypub_type: values.objectType,
+        poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined,
       });
       setStatus((current) => current?.id === updated.id ? updated : current);
       setAncestors((current) => current.map((item) => item.id === updated.id ? updated : item));
@@ -158,6 +174,8 @@ export function StatusPage({ route }: StatusPageProps) {
         sensitive: values.sensitive,
         spoiler_text: values.spoilerText,
         media_ids: values.mediaIds,
+        activitypub_type: values.objectType,
+        poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined,
         in_reply_to_id: replyingTo.id,
       });
       setReplyingTo(null);
@@ -205,6 +223,7 @@ export function StatusPage({ route }: StatusPageProps) {
             onDelete={deleteStatus}
             onEdit={editStatus}
             onAction={runAction}
+            onVotePoll={votePoll}
             onForward={setForwardingStatus}
             onReply={(nextStatus) => {
               setReplyingTo(nextStatus);

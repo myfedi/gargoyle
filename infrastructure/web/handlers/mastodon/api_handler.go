@@ -3,6 +3,7 @@ package mastodon
 import (
 	"context"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -98,6 +99,7 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Post("/api/v1/statuses/:id/unpin", h.unpinStatus)
 	app.Post("/api/v1/statuses/:id/reblog", h.reblogStatus)
 	app.Post("/api/v1/statuses/:id/unreblog", h.unreblogStatus)
+	app.Post("/api/v1/polls/:id/votes", h.votePoll)
 	app.Get(mastodonStatusRoute, h.status)
 	app.Delete(mastodonStatusRoute, h.deleteStatus)
 	app.Get("/api/v1/timelines/home", h.homeTimeline)
@@ -359,27 +361,62 @@ func domainBlockToResponse(block models.DomainBlock) domainBlockResponse {
 	return domainBlockResponse{ID: block.ID, Domain: block.Domain, Severity: block.Severity, RejectMedia: block.RejectMedia, PublicComment: block.PublicComment, PrivateComment: block.PrivateComment, CreatedByUserID: block.CreatedByUserID, CreatedAt: block.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: block.UpdatedAt.UTC().Format(time.RFC3339)}
 }
 
+type pollRequest struct {
+	Options   []string `json:"options" form:"options"`
+	ExpiresIn int      `json:"expires_in" form:"expires_in"`
+	Multiple  bool     `json:"multiple" form:"multiple"`
+}
+
 type createStatusRequest struct {
-	Status      string   `json:"status" form:"status"`
-	Visibility  string   `json:"visibility" form:"visibility"`
-	InReplyToID string   `json:"in_reply_to_id" form:"in_reply_to_id"`
-	Sensitive   bool     `json:"sensitive" form:"sensitive"`
-	SpoilerText string   `json:"spoiler_text" form:"spoiler_text"`
-	MediaIDs    []string `json:"media_ids" form:"media_ids"`
+	Status      string      `json:"status" form:"status"`
+	Visibility  string      `json:"visibility" form:"visibility"`
+	InReplyToID string      `json:"in_reply_to_id" form:"in_reply_to_id"`
+	Sensitive   bool        `json:"sensitive" form:"sensitive"`
+	SpoilerText string      `json:"spoiler_text" form:"spoiler_text"`
+	MediaIDs    []string    `json:"media_ids" form:"media_ids"`
+	ObjectType  string      `json:"activitypub_type" form:"activitypub_type"`
+	Poll        pollRequest `json:"poll" form:"poll"`
 }
 
 type updateStatusRequest struct {
-	Status      string   `json:"status" form:"status"`
-	Visibility  string   `json:"visibility" form:"visibility"`
-	Sensitive   bool     `json:"sensitive" form:"sensitive"`
-	SpoilerText string   `json:"spoiler_text" form:"spoiler_text"`
-	MediaIDs    []string `json:"media_ids" form:"media_ids"`
+	Status      string      `json:"status" form:"status"`
+	Visibility  string      `json:"visibility" form:"visibility"`
+	Sensitive   bool        `json:"sensitive" form:"sensitive"`
+	SpoilerText string      `json:"spoiler_text" form:"spoiler_text"`
+	MediaIDs    []string    `json:"media_ids" form:"media_ids"`
+	ObjectType  string      `json:"activitypub_type" form:"activitypub_type"`
+	Poll        pollRequest `json:"poll" form:"poll"`
 }
 
 type updateCredentialsRequest struct {
 	DisplayName string `json:"display_name" form:"display_name"`
 	Note        string `json:"note" form:"note"`
 	Locked      bool   `json:"locked" form:"locked"`
+}
+
+func mergeFormPoll(c *fiber.Ctx, poll *pollRequest) {
+	args := c.Request().PostArgs()
+	args.VisitAll(func(key, value []byte) {
+		switch string(key) {
+		case "poll[options][]", "poll[options]":
+			poll.Options = append(poll.Options, string(value))
+		case "poll[expires_in]":
+			if parsed, err := strconv.Atoi(string(value)); err == nil {
+				poll.ExpiresIn = parsed
+			}
+		case "poll[multiple]":
+			poll.Multiple = truthyFormValue(string(value))
+		}
+	})
+}
+
+func truthyFormValue(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func (h APIHandler) updateCredentials(c *fiber.Ctx) error {
@@ -443,7 +480,8 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
-	res, derr := h.api.CreateStatus(c.UserContext(), principal.Account, mastodonUC.CreateStatusInput{Content: req.Status, Visibility: req.Visibility, InReplyToID: req.InReplyToID, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText, MediaIDs: req.MediaIDs})
+	mergeFormPoll(c, &req.Poll)
+	res, derr := h.api.CreateStatus(c.UserContext(), principal.Account, mastodonUC.CreateStatusInput{Content: req.Status, Visibility: req.Visibility, InReplyToID: req.InReplyToID, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText, MediaIDs: req.MediaIDs, ObjectType: req.ObjectType, PollOptions: req.Poll.Options, PollMultiple: req.Poll.Multiple, PollExpiresIn: req.Poll.ExpiresIn})
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -452,7 +490,11 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 			return web.HandleDomainError(c, err)
 		}
 	}
-	status := timelineItemsToStatuses([]mastodonUC.TimelineItem{{ID: res.Note.ID, URI: res.Note.URI, CreatedAt: res.Note.PublishedAt, Note: res.Note, Account: res.Account, Media: res.Media, Mentions: res.Mentions}})[0]
+	item, derr := h.api.GetStatus(c.UserContext(), principal.Account, res.Note.ID)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	status := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item})[0]
 	return c.JSON(status)
 }
 
@@ -465,7 +507,8 @@ func (h APIHandler) updateStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
-	res, derr := h.api.UpdateStatus(c.UserContext(), principal.Account, c.Params("id"), mastodonUC.UpdateStatusInput{Content: req.Status, Visibility: req.Visibility, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText, MediaIDs: req.MediaIDs})
+	mergeFormPoll(c, &req.Poll)
+	res, derr := h.api.UpdateStatus(c.UserContext(), principal.Account, c.Params("id"), mastodonUC.UpdateStatusInput{Content: req.Status, Visibility: req.Visibility, Sensitive: req.Sensitive, SpoilerText: req.SpoilerText, MediaIDs: req.MediaIDs, ObjectType: req.ObjectType, PollOptions: req.Poll.Options, PollMultiple: req.Poll.Multiple, PollExpiresIn: req.Poll.ExpiresIn})
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
@@ -474,7 +517,11 @@ func (h APIHandler) updateStatus(c *fiber.Ctx) error {
 			return web.HandleDomainError(c, err)
 		}
 	}
-	status := timelineItemsToStatuses([]mastodonUC.TimelineItem{{ID: res.Note.ID, URI: res.Note.URI, CreatedAt: res.Note.PublishedAt, Note: res.Note, Account: res.Account, Media: res.Media, Mentions: res.Mentions}})[0]
+	item, derr := h.api.GetStatus(c.UserContext(), principal.Account, res.Note.ID)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	status := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item})[0]
 	return c.JSON(status)
 }
 
@@ -860,15 +907,17 @@ func (h APIHandler) status(c *fiber.Ctx) error {
 }
 
 type statusSourceResponse struct {
-	ID          string `json:"id"`
-	Text        string `json:"text"`
-	SpoilerText string `json:"spoiler_text"`
+	ID              string `json:"id"`
+	Text            string `json:"text"`
+	SpoilerText     string `json:"spoiler_text"`
+	ActivityPubType string `json:"activitypub_type"`
 }
 
 type statusHistoryResponse struct {
 	Content          string                    `json:"content"`
 	SpoilerText      string                    `json:"spoiler_text"`
 	Sensitive        bool                      `json:"sensitive"`
+	ActivityPubType  string                    `json:"activitypub_type"`
 	CreatedAt        string                    `json:"created_at"`
 	Account          accountResponse           `json:"account"`
 	MediaAttachments []mediaAttachmentResponse `json:"media_attachments"`
@@ -884,7 +933,7 @@ func (h APIHandler) statusSource(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(statusSourceResponse{ID: item.Note.ID, Text: item.Note.PlainText, SpoilerText: item.Note.SpoilerText})
+	return c.JSON(statusSourceResponse{ID: item.Note.ID, Text: item.Note.PlainText, SpoilerText: item.Note.SpoilerText, ActivityPubType: normalizedResponseObjectType(item.Note.ObjectType)})
 }
 
 func (h APIHandler) statusHistory(c *fiber.Ctx) error {
@@ -898,9 +947,34 @@ func (h APIHandler) statusHistory(c *fiber.Ctx) error {
 	}
 	resp := make([]statusHistoryResponse, 0, len(history))
 	for _, item := range history {
-		resp = append(resp, statusHistoryResponse{Content: item.Content, SpoilerText: item.SpoilerText, Sensitive: item.Sensitive, CreatedAt: item.CreatedAt.UTC().Format(time.RFC3339), Account: accountToResponse(&item.Account), MediaAttachments: mediaResponses(item.Media), Emojis: []any{}})
+		resp = append(resp, statusHistoryResponse{Content: item.Content, SpoilerText: item.SpoilerText, Sensitive: item.Sensitive, ActivityPubType: normalizedResponseObjectType(item.ObjectType), CreatedAt: item.CreatedAt.UTC().Format(time.RFC3339), Account: accountToResponse(&item.Account), MediaAttachments: mediaResponses(item.Media), Emojis: []any{}})
 	}
 	return c.JSON(resp)
+}
+
+type votePollRequest struct {
+	Choices []int `json:"choices" form:"choices"`
+}
+
+func (h APIHandler) votePoll(c *fiber.Ctx) error {
+	principal, derr := h.authenticate(c, "write")
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	var req votePollRequest
+	if err := c.BodyParser(&req); err != nil {
+		return err
+	}
+	res, derr := h.api.VotePoll(c.UserContext(), principal.Account, c.Params("id"), req.Choices)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
+	for _, delivery := range res.Deliveries {
+		if err := h.queueDelivery(delivery.RawJSON, delivery.Inbox, delivery.Account); err != nil {
+			return web.HandleDomainError(c, err)
+		}
+	}
+	return c.JSON(pollToResponse(res.Poll))
 }
 
 func (h APIHandler) favouriteStatus(c *fiber.Ctx) error {
@@ -1062,6 +1136,24 @@ type mentionResponse struct {
 	URL      string `json:"url"`
 }
 
+type pollOptionResponse struct {
+	Title      string `json:"title"`
+	VotesCount int    `json:"votes_count"`
+}
+
+type pollResponse struct {
+	ID          string               `json:"id"`
+	ExpiresAt   *string              `json:"expires_at"`
+	Expired     bool                 `json:"expired"`
+	Multiple    bool                 `json:"multiple"`
+	VotesCount  int                  `json:"votes_count"`
+	VotersCount int                  `json:"voters_count"`
+	Voted       bool                 `json:"voted"`
+	OwnVotes    []int                `json:"own_votes"`
+	Options     []pollOptionResponse `json:"options"`
+	Emojis      []any                `json:"emojis"`
+}
+
 type statusResponse struct {
 	ID                 string                    `json:"id"`
 	URI                string                    `json:"uri"`
@@ -1071,6 +1163,7 @@ type statusResponse struct {
 	Account            accountResponse           `json:"account"`
 	Content            string                    `json:"content"`
 	Visibility         string                    `json:"visibility"`
+	ActivityPubType    string                    `json:"activitypub_type"`
 	InReplyToID        *string                   `json:"in_reply_to_id"`
 	InReplyToAccountID *string                   `json:"in_reply_to_account_id"`
 	Sensitive          bool                      `json:"sensitive"`
@@ -1088,6 +1181,7 @@ type statusResponse struct {
 	Bookmarked         bool                      `json:"bookmarked"`
 	Pinned             bool                      `json:"pinned"`
 	Reblog             *statusResponse           `json:"reblog"`
+	Poll               *pollResponse             `json:"poll"`
 }
 
 func timelineOptions(c *fiber.Ctx) mastodonUC.TimelineOptions {
@@ -1116,6 +1210,10 @@ func timelineItemsToStatuses(items []mastodonUC.TimelineItem) []statusResponse {
 		status.Favourited = item.Favourited
 		status.Bookmarked = item.Bookmarked
 		status.Pinned = item.Pinned
+		if item.Poll != nil {
+			poll := pollToResponse(*item.Poll)
+			status.Poll = &poll
+		}
 		if item.Reblog != nil {
 			reblog := timelineItemsToStatuses([]mastodonUC.TimelineItem{*item.Reblog})[0]
 			status.Content = ""
@@ -1135,6 +1233,32 @@ func mentionResponses(mentions []models.Mention) []mentionResponse {
 	return res
 }
 
+func pollToResponse(poll models.Poll) pollResponse {
+	var expiresAt *string
+	expired := false
+	if poll.ExpiresAt != nil {
+		formatted := poll.ExpiresAt.UTC().Format(time.RFC3339)
+		expiresAt = &formatted
+		expired = time.Now().UTC().After(*poll.ExpiresAt)
+	}
+	options := make([]pollOptionResponse, 0, len(poll.Options))
+	votes := 0
+	for _, option := range poll.Options {
+		options = append(options, pollOptionResponse{Title: option.Title, VotesCount: option.VotesCount})
+		votes += option.VotesCount
+	}
+	return pollResponse{ID: poll.NoteID, ExpiresAt: expiresAt, Expired: expired, Multiple: poll.Multiple, VotesCount: votes, VotersCount: votes, Voted: poll.Voted, OwnVotes: poll.OwnVotes, Options: options, Emojis: []any{}}
+}
+
+func normalizedResponseObjectType(objectType string) string {
+	switch objectType {
+	case "Article", "Page", "Question":
+		return objectType
+	default:
+		return "Note"
+	}
+}
+
 func noteToStatus(note models.Note, account *models.Account) statusResponse {
 	created := note.PublishedAt
 	if created.IsZero() {
@@ -1152,5 +1276,6 @@ func noteToStatus(note models.Note, account *models.Account) statusResponse {
 		formatted := note.EditedAt.UTC().Format(time.RFC3339)
 		editedAt = &formatted
 	}
-	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), EditedAt: editedAt, Account: accountToResponse(account), Content: note.Content, Visibility: visibility, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []mentionResponse{}, Tags: []any{}, Emojis: []any{}}
+	objectType := normalizedResponseObjectType(note.ObjectType)
+	return statusResponse{ID: note.ID, URI: note.URI, URL: note.URI, CreatedAt: created.UTC().Format(time.RFC3339), EditedAt: editedAt, Account: accountToResponse(account), Content: note.Content, Visibility: visibility, ActivityPubType: objectType, InReplyToID: note.InReplyToID, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, MediaAttachments: []mediaAttachmentResponse{}, Mentions: []mentionResponse{}, Tags: []any{}, Emojis: []any{}}
 }

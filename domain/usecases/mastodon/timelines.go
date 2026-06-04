@@ -158,6 +158,10 @@ func (u UseCase) timelineItem(
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+	poll, derr := u.pollForNote(ctx, localAccount, note)
+	if derr != nil {
+		return nil, derr
+	}
 	return &TimelineItem{
 		ID:                 note.ID,
 		URI:                note.URI,
@@ -167,6 +171,7 @@ func (u UseCase) timelineItem(
 		InReplyToAccountID: replyAccountID,
 		Media:              media,
 		Mentions:           mentions,
+		Poll:               poll,
 		ReblogsCount:       reblogsCount,
 		Reblogged:          reblogged,
 		Favourited:         favourited,

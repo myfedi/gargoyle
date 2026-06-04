@@ -1,5 +1,5 @@
 import { ApiClient } from "@/lib/api";
-import type { DomainBlock, MastodonAccount, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
+import type { ActivityPubObjectType, DomainBlock, MastodonAccount, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
@@ -8,6 +8,8 @@ export type CreateStatusInput = {
   spoiler_text?: string;
   in_reply_to_id?: string;
   media_ids?: string[];
+  activitypub_type?: ActivityPubObjectType;
+  poll?: { options: string[]; expires_in: number; multiple: boolean };
 };
 
 export type UpdateStatusInput = Omit<CreateStatusInput, "in_reply_to_id">;
@@ -72,6 +74,12 @@ export function createMastodonApi(accessToken: string) {
       return client.request<MastodonStatus>("/api/v1/statuses", {
         method: "POST",
         body: JSON.stringify(input),
+      });
+    },
+    votePoll(id: string, choices: number[]) {
+      return client.request<MastodonPoll>(`/api/v1/polls/${encodeURIComponent(id)}/votes`, {
+        method: "POST",
+        body: JSON.stringify({ choices }),
       });
     },
     updateStatus(id: string, input: UpdateStatusInput) {

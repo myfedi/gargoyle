@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -49,10 +50,14 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	if derr != nil {
 		return nil, derr
 	}
+	pollOptions, pollExpiresAt, derr := pollInput(input.ObjectType, input.PollOptions, input.PollExpiresIn)
+	if derr != nil {
+		return nil, derr
+	}
 	// Build an ActivityPub Note document, then hand off persistence and outbox
 	// normalization to the ActivityPub use case. This keeps Mastodon API behavior
 	// aligned with federation behavior instead of duplicating business rules here.
-	raw, derr := u.statusNoteJSON(ctx, account, input, visibility, mentions, media)
+	raw, derr := u.statusNoteJSON(ctx, account, input, visibility, mentions, media, pollOptions, pollExpiresAt)
 	if derr != nil {
 		return nil, derr
 	}
@@ -88,6 +93,8 @@ func (u UseCase) CreateStatus(ctx context.Context, account *models.Account, inpu
 	note.Visibility = visibility
 	note.Sensitive = input.Sensitive
 	note.SpoilerText = input.SpoilerText
+	note.PollMultiple = input.PollMultiple
+	note.PollExpiresAt = pollExpiresAt
 	return &CreateStatusResult{
 		Note:            *note,
 		Account:         res.Account,
@@ -108,14 +115,17 @@ func (u UseCase) statusNoteJSON(
 	visibility string,
 	mentions []models.Account,
 	media []models.MediaAttachment,
+	pollOptions []string,
+	pollExpiresAt *time.Time,
 ) ([]byte, *domainerrors.DomainError) {
 	noteDoc := map[string]any{
-		"type":       "Note",
+		"type":       normalizedStatusObjectType(input.ObjectType),
 		"content":    input.Content,
 		"visibility": visibility,
 		"sensitive":  input.Sensitive,
 	}
 	applyVisibilityAddressing(noteDoc, visibility, account, mentions)
+	applyPollQuestion(noteDoc, input, pollOptions, pollExpiresAt)
 	applyMediaAttachments(noteDoc, u.cfg.Host, media)
 
 	if input.SpoilerText != "" {
@@ -178,6 +188,81 @@ func (u UseCase) statusMedia(ctx context.Context, account *models.Account, media
 		media = append(media, *item)
 	}
 	return media, nil
+}
+
+func pollInput(objectType string, rawOptions []string, expiresIn int) ([]string, *time.Time, *domainerrors.DomainError) {
+	if normalizedStatusObjectType(objectType) != "Question" {
+		return nil, nil, nil
+	}
+	options := make([]string, 0, len(rawOptions))
+	seen := map[string]bool{}
+	for _, option := range rawOptions {
+		option = strings.TrimSpace(option)
+		if option == "" || seen[strings.ToLower(option)] {
+			continue
+		}
+		seen[strings.ToLower(option)] = true
+		options = append(options, option)
+	}
+	if len(options) < 2 {
+		return nil, nil, domainerrors.New(domainerrors.ErrBadRequest, "polls require at least two options")
+	}
+	if len(options) > 4 {
+		return nil, nil, domainerrors.New(domainerrors.ErrBadRequest, "polls support up to four options")
+	}
+	if expiresIn <= 0 {
+		expiresIn = 24 * 60 * 60
+	}
+	if expiresIn < 300 || expiresIn > 14*24*60*60 {
+		return nil, nil, domainerrors.New(domainerrors.ErrBadRequest, "poll expiration must be between 5 minutes and 14 days")
+	}
+	expiresAt := time.Now().UTC().Add(time.Duration(expiresIn) * time.Second)
+	return options, &expiresAt, nil
+}
+
+func applyPollQuestion(noteDoc map[string]any, input CreateStatusInput, options []string, expiresAt *time.Time) {
+	if normalizedStatusObjectType(input.ObjectType) != "Question" {
+		return
+	}
+	items := make([]map[string]string, 0, len(options))
+	for _, option := range options {
+		items = append(items, map[string]string{"type": "Note", "name": option})
+	}
+	if input.PollMultiple {
+		noteDoc["anyOf"] = items
+	} else {
+		noteDoc["oneOf"] = items
+	}
+	if expiresAt != nil {
+		noteDoc["endTime"] = expiresAt.UTC().Format(time.RFC3339)
+	}
+}
+
+func applyPollOptions(noteDoc map[string]any, note models.Note, options []string) {
+	if normalizedStatusObjectType(note.ObjectType) != "Question" || len(options) == 0 {
+		return
+	}
+	items := make([]map[string]string, 0, len(options))
+	for _, option := range options {
+		items = append(items, map[string]string{"type": "Note", "name": option})
+	}
+	if note.PollMultiple {
+		noteDoc["anyOf"] = items
+	} else {
+		noteDoc["oneOf"] = items
+	}
+	if note.PollExpiresAt != nil {
+		noteDoc["endTime"] = note.PollExpiresAt.UTC().Format(time.RFC3339)
+	}
+}
+
+func normalizedStatusObjectType(objectType string) string {
+	switch objectType {
+	case "Article", "Page", "Question":
+		return objectType
+	default:
+		return "Note"
+	}
 }
 
 func applyMediaAttachments(noteDoc map[string]any, host string, media []models.MediaAttachment) {

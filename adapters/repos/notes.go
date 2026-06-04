@@ -28,6 +28,15 @@ func noteVisibility(visibility string) string {
 	return visibility
 }
 
+func noteObjectType(objectType string) string {
+	switch objectType {
+	case "Article", "Page", "Question":
+		return objectType
+	default:
+		return "Note"
+	}
+}
+
 func (r *NotesRepo) GetLocalPostsCount(ctx context.Context) (int, error) {
 	return r.db.NewSelect().Model((*dbModels.Note)(nil)).Count(ctx)
 }
@@ -57,7 +66,10 @@ func (r *NotesRepo) CreateNote(ctx context.Context, tx *dbPorts.Tx, input repos.
 		URI:            input.URI,
 		Content:        input.Content,
 		PlainText:      input.PlainText,
+		ObjectType:     noteObjectType(input.ObjectType),
 		Visibility:     noteVisibility(input.Visibility),
+		PollMultiple:   input.PollMultiple,
+		PollExpiresAt:  input.PollExpiresAt,
 		Sensitive:      input.Sensitive,
 		SpoilerText:    input.SpoilerText,
 		AttributedTo:   input.AttributedTo,
@@ -126,7 +138,10 @@ func (r *NotesRepo) UpdateNoteByID(ctx context.Context, tx *dbPorts.Tx, id strin
 		Model((*dbModels.Note)(nil)).
 		Set("content = ?", input.Content).
 		Set("plain_text = ?", input.PlainText).
+		Set("object_type = ?", noteObjectType(input.ObjectType)).
 		Set("visibility = ?", noteVisibility(input.Visibility)). // NOSONAR
+		Set("poll_multiple = ?", input.PollMultiple).
+		Set("poll_expires_at = ?", input.PollExpiresAt).
 		Set("sensitive = ?", input.Sensitive).
 		Set("spoiler_text = ?", input.SpoilerText).
 		Set("edited_at = ?", now).
@@ -138,7 +153,7 @@ func (r *NotesRepo) UpdateNoteByID(ctx context.Context, tx *dbPorts.Tx, id strin
 	return r.GetNoteByID(ctx, tx, id)
 }
 
-func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri, content, plainText string) error {
+func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri, content, plainText, objectType string) error {
 	db := r.db
 	if tx != nil {
 		adapted, ok := (*tx).(dbAdapters.BunTx)
@@ -160,7 +175,7 @@ func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri, co
 	if err != nil {
 		return err
 	}
-	if _, err := db.NewInsert().Model(&dbModels.StatusEditHistory{ID: ulid, NoteID: existing.ID, Content: existing.Content, PlainText: existing.PlainText, Visibility: noteVisibility(existing.Visibility), Sensitive: existing.Sensitive, SpoilerText: existing.SpoilerText, CreatedAt: createdAt}).Exec(ctx); err != nil {
+	if _, err := db.NewInsert().Model(&dbModels.StatusEditHistory{ID: ulid, NoteID: existing.ID, Content: existing.Content, PlainText: existing.PlainText, ObjectType: noteObjectType(existing.ObjectType), Visibility: noteVisibility(existing.Visibility), Sensitive: existing.Sensitive, SpoilerText: existing.SpoilerText, CreatedAt: createdAt}).Exec(ctx); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
@@ -168,6 +183,7 @@ func (r *NotesRepo) UpdateNoteByURI(ctx context.Context, tx *dbPorts.Tx, uri, co
 		Model((*dbModels.Note)(nil)).
 		Set("content = ?", content).
 		Set("plain_text = ?", plainText).
+		Set("object_type = ?", noteObjectType(objectType)).
 		Set("edited_at = ?", now).
 		Where("uri = ?", uri). // NOSONAR
 		Exec(ctx)
@@ -195,7 +211,7 @@ func (r *NotesRepo) CreateNoteEdit(ctx context.Context, tx *dbPorts.Tx, input re
 	if createdAt.IsZero() {
 		createdAt = input.Note.CreatedAt
 	}
-	edit := &dbModels.StatusEditHistory{ID: ulid, NoteID: input.Note.ID, Content: input.Note.Content, PlainText: input.Note.PlainText, Visibility: noteVisibility(input.Note.Visibility), Sensitive: input.Note.Sensitive, SpoilerText: input.Note.SpoilerText, CreatedAt: createdAt}
+	edit := &dbModels.StatusEditHistory{ID: ulid, NoteID: input.Note.ID, Content: input.Note.Content, PlainText: input.Note.PlainText, ObjectType: noteObjectType(input.Note.ObjectType), Visibility: noteVisibility(input.Note.Visibility), Sensitive: input.Note.Sensitive, SpoilerText: input.Note.SpoilerText, CreatedAt: createdAt}
 	if _, err := db.NewInsert().Model(edit).Exec(ctx); err != nil {
 		return nil, err
 	}

@@ -47,6 +47,10 @@ func TestActorSerializerMarshallUsesAccountURI(t *testing.T) {
 	if got["featured"] != "https://example.org/users/alice/collections/featured" {
 		t.Fatalf("expected featured collection, got %v", got["featured"])
 	}
+	endpoints, ok := got["endpoints"].(map[string]any)
+	if !ok || endpoints["sharedInbox"] != "https://example.org/inbox" {
+		t.Fatalf("expected shared inbox endpoint, got %#v", got["endpoints"])
+	}
 	icon, ok := got["icon"].(map[string]any)
 	if !ok || icon["url"] != "https://example.org/media/avatar-1" {
 		t.Fatalf("expected local avatar icon URL, got %#v", got["icon"])

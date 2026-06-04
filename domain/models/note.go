@@ -9,7 +9,10 @@ type Note struct {
 	URI            string
 	Content        string
 	PlainText      string
+	ObjectType     string
 	Visibility     string
+	PollMultiple   bool
+	PollExpiresAt  *time.Time
 	Sensitive      bool
 	SpoilerText    string
 	AttributedTo   string
@@ -28,6 +31,7 @@ type NoteEdit struct {
 	Visibility  string
 	Sensitive   bool
 	SpoilerText string
+	ObjectType  string
 	CreatedAt   time.Time
 	MediaIDs    []string
 }

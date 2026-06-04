@@ -65,6 +65,36 @@ func (r *ActivitiesRepo) GetActivityByID(ctx context.Context, tx *dbPorts.Tx, id
 	return &model, nil
 }
 
+func (r *ActivitiesRepo) GetActivityByURI(ctx context.Context, tx *dbPorts.Tx, localAccountID, uri string) (*models.Activity, error) {
+	db, err := unwrapDB(r.db, tx)
+	if err != nil {
+		return nil, err
+	}
+	var activity dbModels.Activity
+	// Activity IDs are part of the JSON-LD payload. SQLite's JSON extractor gives
+	// us an exact match without relying on brittle string containment checks.
+	if err := db.NewSelect().Model(&activity).
+		Where("local_account_id = ?", localAccountID). // NOSONAR
+		Where("json_extract(raw_json, '$.id') = ?", uri).
+		Limit(1).
+		Scan(ctx); err != nil {
+		return nil, err
+	}
+	model := activity.ToModel()
+	return &model, nil
+}
+
+func (r *ActivitiesRepo) GetOutboxActivityByURI(ctx context.Context, tx *dbPorts.Tx, localAccountID, uri string) (*models.Activity, error) {
+	activity, err := r.GetActivityByURI(ctx, tx, localAccountID, uri)
+	if err != nil {
+		return nil, err
+	}
+	if activity.Direction != models.ActivityDirectionOutbox {
+		return nil, errors.New("activity is not an outbox activity")
+	}
+	return activity, nil
+}
+
 func (r *ActivitiesRepo) CountOutboxActivities(ctx context.Context, tx *dbPorts.Tx, localAccountID string) (int, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {
