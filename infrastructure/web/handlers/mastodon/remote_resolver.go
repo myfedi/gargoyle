@@ -151,7 +151,7 @@ func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string, 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/activity+json")
+	req.Header.Set("Accept", contentTypeActivityJSON)
 	if signer != nil {
 		signFederatedGet(req, *signer)
 	}
@@ -196,7 +196,7 @@ func (r RemoteAccountResolver) fetchActor(ctx context.Context, actorURL string, 
 }
 
 func mastodonAccountID(actor string) string {
-	return "remote:" + base64.RawURLEncoding.EncodeToString([]byte(actor))
+	return remoteAccountIDPrefix + base64.RawURLEncoding.EncodeToString([]byte(actor))
 }
 
 func signFederatedGet(req *http.Request, account models.Account) {

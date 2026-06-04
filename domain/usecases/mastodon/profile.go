@@ -97,17 +97,17 @@ func (u UseCase) profileUpdateActivity(account models.Account) ([]byte, *domaine
 	if err := json.Unmarshal([]byte(actorJSON), &actor); err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	delete(actor, "@context")
+	delete(actor, activityStreamsContextKey)
 	now := time.Now().UTC().Format(time.RFC3339)
 	activity := map[string]any{
-		"@context":  "https://www.w3.org/ns/activitystreams",
-		"id":        strings.TrimRight(account.URI, "/") + "/updates/" + activityID,
-		"type":      "Update",
-		"actor":     account.URI,
-		"published": now,
-		"to":        []string{"https://www.w3.org/ns/activitystreams#Public"},
-		"cc":        []string{account.FollowersURI},
-		"object":    actor,
+		activityStreamsContextKey: activityStreamsContextURI,
+		"id":                      strings.TrimRight(account.URI, "/") + "/updates/" + activityID,
+		"type":                    "Update",
+		"actor":                   account.URI,
+		"published":               now,
+		"to":                      []string{activityStreamsPublicURI},
+		"cc":                      []string{account.FollowersURI},
+		"object":                  actor,
 	}
 	raw, err := json.Marshal(activity)
 	if err != nil {

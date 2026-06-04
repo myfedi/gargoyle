@@ -53,7 +53,7 @@ func (u *CreateFollowingUseCase) CreateFollowing(ctx context.Context, input Crea
 		}
 	}
 
-	followActivity := map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": account.URI + "/follows/" + input.FollowID, "type": "Follow", "actor": account.URI, "object": input.Actor}
+	followActivity := map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": account.URI + "/follows/" + input.FollowID, "type": "Follow", "actor": account.URI, "object": input.Actor}
 	raw, err := json.Marshal(followActivity)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)

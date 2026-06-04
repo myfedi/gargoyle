@@ -26,7 +26,7 @@ func (r *MediaRepo) resolveDB(tx *dbPorts.Tx) (bun.IDB, error) {
 	}
 	adapted, ok := (*tx).(dbAdapters.BunTx)
 	if !ok {
-		return nil, errors.New("internal error: unexpected tx implementation provided")
+		return nil, errors.New(unexpectedTxImplementationError)
 	}
 	return adapted.Unwrap(), nil
 }
@@ -54,7 +54,7 @@ func (r *MediaRepo) GetMediaAttachmentByID(ctx context.Context, tx *dbPorts.Tx, 
 		return nil, err
 	}
 	var row dbModels.MediaAttachment
-	if err := db.NewSelect().Model(&row).Where("id = ?", id).Scan(ctx); err != nil {
+	if err := db.NewSelect().Model(&row).Where("id = ?", id).Scan(ctx); err != nil { // NOSONAR
 		return nil, err
 	}
 	model := row.ToModel()
@@ -66,7 +66,7 @@ func (r *MediaRepo) UpdateMediaAttachmentDescription(ctx context.Context, tx *db
 	if err != nil {
 		return nil, err
 	}
-	_, err = db.NewUpdate().Model((*dbModels.MediaAttachment)(nil)).Set("description = ?", description).Set("updated_at = ?", time.Now().UTC()).Where("id = ?", id).Exec(ctx)
+	_, err = db.NewUpdate().Model((*dbModels.MediaAttachment)(nil)).Set("description = ?", description).Set("updated_at = ?", time.Now().UTC()).Where("id = ?", id).Exec(ctx) // NOSONAR
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (r *MediaRepo) DeleteMediaAttachment(ctx context.Context, tx *dbPorts.Tx, i
 	if err != nil {
 		return err
 	}
-	_, err = db.NewDelete().Model((*dbModels.MediaAttachment)(nil)).Where("id = ?", id).Exec(ctx)
+	_, err = db.NewDelete().Model((*dbModels.MediaAttachment)(nil)).Where("id = ?", id).Exec(ctx) // NOSONAR
 	return err
 }
 

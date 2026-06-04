@@ -157,7 +157,7 @@ func (t httpActivityPubTransport) FetchActor(ctx context.Context, actor string, 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/activity+json")
+	req.Header.Set("Accept", contentTypeActivityJSON)
 	if signer != nil {
 		signOutboundRequest(req, nil, *signer)
 	}
@@ -194,8 +194,8 @@ func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbo
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Content-Type", "application/activity+json")
-		req.Header.Set("Accept", "application/activity+json")
+		req.Header.Set("Content-Type", contentTypeActivityJSON)
+		req.Header.Set("Accept", contentTypeActivityJSON)
 		signOutboundRequest(req, body, account)
 		resp, err := client.Do(req)
 		if err == nil && resp != nil {
@@ -297,10 +297,10 @@ func (t httpActivityPubTransport) VerifyInbound(ctx context.Context, input activ
 	}
 
 	headerValues := map[string]string{
-		"host":         input.Host,
-		"date":         input.Headers["date"],
-		"digest":       digest,
-		"content-type": input.Headers["content-type"],
+		"host":                input.Host,
+		"date":                input.Headers["date"],
+		"digest":              digest,
+		contentTypeHeaderName: input.Headers[contentTypeHeaderName],
 	}
 	signed := signatureString(input.Method, input.URL, headerValues, headers)
 	hash := sha256.Sum256([]byte(signed))
@@ -325,10 +325,10 @@ func signatureVerificationInput(c *fiber.Ctx, body []byte, actor string, account
 		LocalAccount: account,
 		Required:     required,
 		Headers: map[string]string{
-			"signature":    c.Get("Signature"),
-			"date":         c.Get("Date"),
-			"digest":       c.Get("Digest"),
-			"content-type": c.Get("Content-Type"),
+			"signature":           c.Get("Signature"),
+			"date":                c.Get("Date"),
+			"digest":              c.Get("Digest"),
+			contentTypeHeaderName: c.Get("Content-Type"),
 		},
 	}
 }

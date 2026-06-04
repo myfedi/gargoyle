@@ -157,7 +157,7 @@ func (u UseCase) resolveMentions(ctx context.Context, account *models.Account, c
 }
 
 func applyVisibilityAddressing(noteDoc map[string]any, visibility string, account *models.Account, mentions []models.Account) {
-	public := "https://www.w3.org/ns/activitystreams#Public"
+	public := activityStreamsPublicURI
 	mentionURIs := make([]string, 0, len(mentions))
 	tags := make([]map[string]string, 0, len(mentions))
 	for _, mention := range mentions {

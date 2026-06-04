@@ -38,8 +38,8 @@ func TestActorSerializerMarshallUsesAccountURI(t *testing.T) {
 	if got["type"] != "Person" {
 		t.Fatalf("expected Person actor, got %v", got["type"])
 	}
-	if got["@context"] != "https://www.w3.org/ns/activitystreams" {
-		t.Fatalf("expected ActivityStreams context, got %v", got["@context"])
+	if got[activityStreamsContextKey] != activityStreamsContextURI {
+		t.Fatalf("expected ActivityStreams context, got %v", got[activityStreamsContextKey])
 	}
 	if got["name"] != "Alice A." {
 		t.Fatalf("expected display name in actor name, got %v", got["name"])

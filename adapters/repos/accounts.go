@@ -28,7 +28,7 @@ func (r *AccountsRepo) CreateAccount(ctx context.Context, tx *dbPorts.Tx, input 
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -79,7 +79,7 @@ func (r *AccountsRepo) GetAccountByID(ctx context.Context, tx *dbPorts.Tx, id st
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -97,7 +97,7 @@ func (r *AccountsRepo) UpdateLocalAccountProfile(ctx context.Context, tx *dbPort
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -115,7 +115,7 @@ func (r *AccountsRepo) UpdateLocalAccountProfile(ctx context.Context, tx *dbPort
 		Set("header_url = ?", input.HeaderURL).
 		Set("updated_at = ?", updatedAt).
 		Where("id = ?", id).
-		Where("user_id IS NOT NULL")
+		Where("user_id IS NOT NULL") // NOSONAR
 	if input.Locked != nil {
 		query = query.Set("locked = ?", *input.Locked)
 	}
@@ -132,7 +132,7 @@ func (r *AccountsRepo) GetAccountByUserID(ctx context.Context, tx *dbPorts.Tx, u
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -155,7 +155,7 @@ func (r *AccountsRepo) GetLocalAccountByUsername(ctx context.Context, tx *dbPort
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -163,7 +163,7 @@ func (r *AccountsRepo) GetLocalAccountByUsername(ctx context.Context, tx *dbPort
 	err := db.NewSelect().
 		Model(&account).
 		Where("username = ?", username).
-		Where("user_id IS NOT NULL").
+		Where("user_id IS NOT NULL"). // NOSONAR
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
@@ -179,7 +179,7 @@ func (r *AccountsRepo) SearchLocalAccounts(ctx context.Context, tx *dbPorts.Tx, 
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 	if limit <= 0 || limit > 40 {
@@ -188,7 +188,7 @@ func (r *AccountsRepo) SearchLocalAccounts(ctx context.Context, tx *dbPorts.Tx, 
 	pattern := "%" + query + "%"
 	var rows []dbModels.Account
 	err := db.NewSelect().Model(&rows).
-		Where("user_id IS NOT NULL").
+		Where("user_id IS NOT NULL"). // NOSONAR
 		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
 			return q.Where("username LIKE ?", pattern).WhereOr("display_name LIKE ?", pattern)
 		}).
@@ -211,7 +211,7 @@ func (r AccountsRepo) AccountWithUsernameExists(ctx context.Context, tx *dbPorts
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return false, errors.New("internal error: unexpected tx implementation provided")
+			return false, errors.New(unexpectedTxImplementationError)
 		}
 	}
 

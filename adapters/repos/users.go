@@ -32,7 +32,7 @@ func (r UsersRepo) GetUsersCount(ctx context.Context, tx *dbPorts.Tx) (int, erro
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return 0, errors.New("internal error: unexpected tx implementation provided")
+			return 0, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -45,7 +45,7 @@ func (r UsersRepo) UserWithUsernameExists(ctx context.Context, tx *dbPorts.Tx, u
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return false, errors.New("internal error: unexpected tx implementation provided")
+			return false, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -61,7 +61,7 @@ func (r UsersRepo) UserWithEmailExists(ctx context.Context, tx *dbPorts.Tx, emai
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return false, errors.New("internal error: unexpected tx implementation provided")
+			return false, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -77,7 +77,7 @@ func (r UsersRepo) GetUserByUsername(ctx context.Context, tx *dbPorts.Tx, userna
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -95,7 +95,7 @@ func (r UsersRepo) GetUserByEmail(ctx context.Context, tx *dbPorts.Tx, email str
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -113,7 +113,7 @@ func (r UsersRepo) GetUserByID(ctx context.Context, tx *dbPorts.Tx, id string) (
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 
@@ -131,7 +131,7 @@ func (r UsersRepo) CreateUser(ctx context.Context, tx *dbPorts.Tx, input ports.U
 		if adapted, ok := (*tx).(dbAdapters.BunTx); ok {
 			db = adapted.Unwrap()
 		} else {
-			return nil, errors.New("internal error: unexpected tx implementation provided")
+			return nil, errors.New(unexpectedTxImplementationError)
 		}
 	}
 

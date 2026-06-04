@@ -70,8 +70,8 @@ func NormalizeOutboxActivity(raw []byte, account models.Account, activityID, obj
 	if typeValue != "Create" {
 		object := doc
 		SanitizeObjectContent(object, sanitizer)
-		if _, ok := object["@context"]; !ok {
-			object["@context"] = "https://www.w3.org/ns/activitystreams"
+		if _, ok := object[activityStreamsContextKey]; !ok {
+			object[activityStreamsContextKey] = activityStreamsContextURI
 		}
 		if _, ok := object["id"]; !ok {
 			object["id"] = account.URI + "/objects/" + objectID
@@ -83,28 +83,28 @@ func NormalizeOutboxActivity(raw []byte, account models.Account, activityID, obj
 			object["published"] = now
 		}
 		if _, ok := object["to"]; !ok {
-			object["to"] = []string{"https://www.w3.org/ns/activitystreams#Public"}
+			object["to"] = []string{activityStreamsPublicURI}
 		}
 		if _, ok := object["cc"]; !ok {
 			object["cc"] = []string{account.FollowersURI}
 		}
-		doc = map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": account.URI + "/activities/" + activityID, "type": "Create", "actor": account.URI, "published": now, "to": object["to"], "cc": object["cc"], "object": object}
+		doc = map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": account.URI + activityPathSegment + activityID, "type": "Create", "actor": account.URI, "published": now, "to": object["to"], "cc": object["cc"], "object": object}
 	} else {
 		if object, ok := doc["object"].(map[string]any); ok {
 			SanitizeObjectContent(object, sanitizer)
 		}
-		if _, ok := doc["@context"]; !ok {
-			doc["@context"] = "https://www.w3.org/ns/activitystreams"
+		if _, ok := doc[activityStreamsContextKey]; !ok {
+			doc[activityStreamsContextKey] = activityStreamsContextURI
 		}
 		if _, ok := doc["id"]; !ok {
-			doc["id"] = account.URI + "/activities/" + activityID
+			doc["id"] = account.URI + activityPathSegment + activityID
 		}
 		doc["actor"] = account.URI
 		if _, ok := doc["published"]; !ok {
 			doc["published"] = now
 		}
 		if _, ok := doc["to"]; !ok {
-			doc["to"] = []string{"https://www.w3.org/ns/activitystreams#Public"}
+			doc["to"] = []string{activityStreamsPublicURI}
 		}
 		if _, ok := doc["cc"]; !ok {
 			doc["cc"] = []string{account.FollowersURI}
@@ -347,13 +347,13 @@ func ExtractIDAndInbox(raw json.RawMessage) (string, string, error) {
 
 // MarshalAccept creates the Accept activity sent in response to an inbound Follow.
 func MarshalAccept(account models.Account, follow models.Follow, followRaw []byte) ([]byte, error) {
-	accept := map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": account.URI + "/accepts/" + follow.ID, "type": "Accept", "actor": account.URI, "object": json.RawMessage(followRaw)}
+	accept := map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": account.URI + "/accepts/" + follow.ID, "type": "Accept", "actor": account.URI, "object": json.RawMessage(followRaw)}
 	return json.Marshal(accept)
 }
 
 // MarshalReject creates the Reject activity sent when an inbound Follow is denied.
 func MarshalReject(account models.Account, follow models.Follow, followRaw []byte) ([]byte, error) {
-	reject := map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": account.URI + "/rejects/" + follow.ID, "type": "Reject", "actor": account.URI, "object": json.RawMessage(followRaw)}
+	reject := map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": account.URI + "/rejects/" + follow.ID, "type": "Reject", "actor": account.URI, "object": json.RawMessage(followRaw)}
 	return json.Marshal(reject)
 }
 
@@ -439,7 +439,7 @@ func extractURLValue(raw json.RawMessage) string {
 
 // MarshalFeaturedNoteObject serializes a stored local Note as an ActivityPub Note for featured collections.
 func MarshalFeaturedNoteObject(note models.Note, account models.Account) ([]byte, error) {
-	to := []string{"https://www.w3.org/ns/activitystreams#Public"}
+	to := []string{activityStreamsPublicURI}
 	cc := []string{account.FollowersURI}
 	if note.Visibility == "private" {
 		to = []string{account.FollowersURI}

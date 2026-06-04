@@ -101,8 +101,8 @@ func ensureActorDocumentMetadata(data []byte, account models.Account) ([]byte, e
 		return nil, err
 	}
 
-	if _, ok := actor["@context"]; !ok {
-		actor["@context"] = json.RawMessage(`"https://www.w3.org/ns/activitystreams"`)
+	if _, ok := actor[activityStreamsContextKey]; !ok {
+		actor[activityStreamsContextKey] = json.RawMessage(`"` + activityStreamsContextURI + `"`)
 	}
 	if account.FeaturedCollectionURI != "" {
 		featured, err := json.Marshal(account.FeaturedCollectionURI)

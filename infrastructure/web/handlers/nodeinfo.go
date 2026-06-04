@@ -51,20 +51,20 @@ func (h NodeInfoWebHandler) SetupNodeInfo(app *fiber.App) {
 	})
 
 	app.Get("/.well-known/nodeinfo", func(c *fiber.Ctx) error {
-		c.Accepts("application/json")
+		c.Accepts(contentTypeApplicationJSON)
 
 		nodeInfo, err := handler.HandleNodeInfo()
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 		}
 
-		c.Set("content-type", "application/json")
+		c.Set("content-type", contentTypeApplicationJSON)
 		return c.SendString(nodeInfo)
 	})
 
 	// Handle nodeinfo retrieval for specific version
 	app.Get("/nodeinfo/:version", func(c *fiber.Ctx) error {
-		c.Accepts("application/json")
+		c.Accepts(contentTypeApplicationJSON)
 
 		version := c.Params("version")
 		if version == "" {

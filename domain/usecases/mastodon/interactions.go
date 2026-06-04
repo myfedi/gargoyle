@@ -48,7 +48,7 @@ func (u UseCase) interact(ctx context.Context, account *models.Account, id, typ,
 		if err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
-		activityURI = account.URI + "/activities/" + activityID
+		activityURI = account.URI + activityPathSegment + activityID
 		if _, err := u.cfg.BoostsRepo.CreateBoost(ctx, nil, repos.CreateBoostInput{LocalAccountID: account.ID, Actor: account.URI, NoteID: id, URI: activityURI, PublishedAt: time.Now().UTC()}); err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
@@ -98,15 +98,15 @@ func (u UseCase) interactionPayload(ctx context.Context, account *models.Account
 		if err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
-		activityURI = account.URI + "/activities/" + activityID
+		activityURI = account.URI + activityPathSegment + activityID
 	}
-	activity := map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": activityURI, "type": apType, "actor": account.URI, "object": item.Note.URI}
+	activity := map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": activityURI, "type": apType, "actor": account.URI, "object": item.Note.URI}
 	if undo {
 		undoID, err := u.cfg.IDGenerator.NewID()
 		if err != nil {
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
-		activity = map[string]any{"@context": "https://www.w3.org/ns/activitystreams", "id": account.URI + "/activities/" + undoID, "type": "Undo", "actor": account.URI, "object": activity}
+		activity = map[string]any{activityStreamsContextKey: activityStreamsContextURI, "id": account.URI + activityPathSegment + undoID, "type": "Undo", "actor": account.URI, "object": activity}
 	}
 	raw, err := json.Marshal(activity)
 	if err != nil {

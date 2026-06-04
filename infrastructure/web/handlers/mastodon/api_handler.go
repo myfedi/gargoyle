@@ -63,9 +63,9 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v2/filters", h.emptyList)
 	app.Post("/api/v2/media", h.uploadMedia)
 	app.Post("/api/v1/media", h.uploadMedia)
-	app.Get("/api/v1/media/:id", h.getMediaAttachment)
-	app.Put("/api/v1/media/:id", h.updateMedia)
-	app.Delete("/api/v1/media/:id", h.deleteMedia)
+	app.Get(mastodonMediaRoute, h.getMediaAttachment)
+	app.Put(mastodonMediaRoute, h.updateMedia)
+	app.Delete(mastodonMediaRoute, h.deleteMedia)
 	app.Get("/media/:id", h.media)
 	app.Get("/media/:id/:filename", h.media)
 	app.Head("/media/:id", h.media)
@@ -81,8 +81,8 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Post("/api/v1/accounts/:id/unfollow", h.unfollowAccount)
 	app.Get("/api/v1/accounts/:id", h.account)
 	app.Post("/api/v1/statuses", h.createStatus)
-	app.Put("/api/v1/statuses/:id", h.updateStatus)
-	app.Patch("/api/v1/statuses/:id", h.updateStatus)
+	app.Put(mastodonStatusRoute, h.updateStatus)
+	app.Patch(mastodonStatusRoute, h.updateStatus)
 	app.Get("/api/v1/statuses/:id/source", h.statusSource)
 	app.Get("/api/v1/statuses/:id/history", h.statusHistory)
 	app.Get("/api/v1/statuses/:id/context", h.statusContext)
@@ -94,8 +94,8 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Post("/api/v1/statuses/:id/unpin", h.unpinStatus)
 	app.Post("/api/v1/statuses/:id/reblog", h.reblogStatus)
 	app.Post("/api/v1/statuses/:id/unreblog", h.unreblogStatus)
-	app.Get("/api/v1/statuses/:id", h.status)
-	app.Delete("/api/v1/statuses/:id", h.deleteStatus)
+	app.Get(mastodonStatusRoute, h.status)
+	app.Delete(mastodonStatusRoute, h.deleteStatus)
 	app.Get("/api/v1/timelines/home", h.homeTimeline)
 	app.Get("/api/v1/timelines/public", h.publicTimeline)
 }
@@ -187,7 +187,7 @@ func (h APIHandler) getMediaAttachment(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	if media.LocalAccountID != principal.Account.ID {
-		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrNotFound, "media not found"))
+		return web.HandleDomainError(c, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage))
 	}
 	return c.JSON(h.mediaResponse(media))
 }

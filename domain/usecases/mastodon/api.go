@@ -215,7 +215,7 @@ func requireAccount(account *models.Account) *domainerrors.DomainError {
 }
 
 func AccountIDForRemoteActor(actor string) string {
-	return "remote:" + base64.RawURLEncoding.EncodeToString([]byte(actor))
+	return remoteAccountIDPrefix + base64.RawURLEncoding.EncodeToString([]byte(actor))
 }
 
 func RemoteActorFromAccountID(id string) (string, error) {
@@ -224,10 +224,10 @@ func RemoteActorFromAccountID(id string) (string, error) {
 		return "", err
 	}
 	id = unescaped
-	if !strings.HasPrefix(id, "remote:") {
+	if !strings.HasPrefix(id, remoteAccountIDPrefix) {
 		return id, nil
 	}
-	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(id, "remote:"))
+	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(id, remoteAccountIDPrefix))
 	if err != nil {
 		return "", err
 	}

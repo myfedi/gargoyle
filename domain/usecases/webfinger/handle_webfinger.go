@@ -49,7 +49,7 @@ func (h *WebfingerHandler) HandleWebfinger(ctx context.Context, resource string)
 
 	parts := strings.SplitN(resource, split, 2)
 	if len(parts) != 2 || parts[0] != "acct" {
-		return "", errors.New(errors.ErrBadRequest, "invalid resource format, expected 'acct:username@domain'")
+		return "", errors.New(errors.ErrBadRequest, invalidResourceFormatMessage)
 	}
 
 	if parts[0] != "acct" {
@@ -57,12 +57,12 @@ func (h *WebfingerHandler) HandleWebfinger(ctx context.Context, resource string)
 	}
 
 	if !strings.Contains(parts[1], "@") {
-		return "", errors.New(errors.ErrBadRequest, "invalid resource format, expected 'acct:username@domain'")
+		return "", errors.New(errors.ErrBadRequest, invalidResourceFormatMessage)
 	}
 
 	uparts := strings.SplitN(parts[1], "@", 2)
 	if len(uparts) != 2 {
-		return "", errors.New(errors.ErrBadRequest, "invalid resource format, expected 'acct:username@domain'")
+		return "", errors.New(errors.ErrBadRequest, invalidResourceFormatMessage)
 	}
 
 	username, domain := uparts[0], uparts[1]

@@ -84,14 +84,14 @@ func safeMediaContentType(declared string, data []byte) (string, *domainerrors.D
 func (u UseCase) GetMedia(ctx context.Context, id string) (*models.MediaAttachment, *domainerrors.DomainError) {
 	media, err := u.cfg.MediaRepo.GetMediaAttachmentByID(ctx, nil, id)
 	if err != nil {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
 	}
 	if media.StoragePath == "" {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
 	}
 	data, err := u.cfg.MediaStorage.ReadMedia(ctx, media.StoragePath)
 	if err != nil {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
 	}
 	media.Data = data
 	return media, nil
@@ -191,10 +191,10 @@ func (u UseCase) getOwnedMedia(ctx context.Context, account *models.Account, id 
 	}
 	media, err := u.cfg.MediaRepo.GetMediaAttachmentByID(ctx, nil, id)
 	if err != nil {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
 	}
 	if media.LocalAccountID != account.ID {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "media not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
 	}
 	return media, nil
 }

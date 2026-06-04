@@ -217,13 +217,13 @@ func (u UseCase) statusUpdateActivity(account models.Account, note models.Note, 
 	applyMediaAttachments(noteDoc, u.cfg.Host, media)
 
 	raw, err := json.Marshal(map[string]any{
-		"@context": "https://www.w3.org/ns/activitystreams",
-		"id":       account.URI + "/updates/" + activityID,
-		"type":     "Update",
-		"actor":    account.URI,
-		"to":       noteDoc["to"],
-		"cc":       noteDoc["cc"],
-		"object":   noteDoc,
+		activityStreamsContextKey: activityStreamsContextURI,
+		"id":                      account.URI + "/updates/" + activityID,
+		"type":                    "Update",
+		"actor":                   account.URI,
+		"to":                      noteDoc["to"],
+		"cc":                      noteDoc["cc"],
+		"object":                  noteDoc,
 	})
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)

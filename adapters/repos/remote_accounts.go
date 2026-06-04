@@ -25,7 +25,7 @@ func (r *RemoteAccountsRepo) resolveDB(tx *dbPorts.Tx) (bun.IDB, error) {
 	}
 	adapted, ok := (*tx).(dbAdapters.BunTx)
 	if !ok {
-		return nil, errors.New("internal error: unexpected tx implementation provided")
+		return nil, errors.New(unexpectedTxImplementationError)
 	}
 	return adapted.Unwrap(), nil
 }

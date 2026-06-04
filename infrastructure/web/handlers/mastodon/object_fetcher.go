@@ -28,7 +28,7 @@ func (f RemoteObjectFetcher) FetchObject(ctx context.Context, objectURI string, 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/activity+json")
+	req.Header.Set("Accept", contentTypeActivityJSON)
 	if signer != nil {
 		signFederatedGet(req, *signer)
 	}

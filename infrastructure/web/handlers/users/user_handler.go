@@ -175,7 +175,7 @@ func (h *UsersWebHandler) SetupUserProfileHandler(app *fiber.App) {
 		if derr != nil {
 			return web.HandleDomainError(c, derr)
 		}
-		c.Set(fiber.HeaderContentType, "application/activity+json")
+		c.Set(fiber.HeaderContentType, contentTypeActivityJSON)
 		return c.SendString(profile)
 	})
 
@@ -215,7 +215,7 @@ func (h *UsersWebHandler) outboxCollection(c *fiber.Ctx) error {
 	}
 	typeName := collectionType(c)
 	return sendActivityJSON(c, orderedCollectionResponse{
-		Context:      "https://www.w3.org/ns/activitystreams",
+		Context:      activityStreamsContextURI,
 		ID:           collectionID(c, id),
 		Type:         typeName,
 		TotalItems:   res.Total,
@@ -243,7 +243,7 @@ func (h *UsersWebHandler) featuredCollection(c *fiber.Ctx) error {
 		id = res.Account.URI + "/collections/featured"
 	}
 	return sendActivityJSON(c, orderedCollectionResponse{
-		Context:      "https://www.w3.org/ns/activitystreams",
+		Context:      activityStreamsContextURI,
 		ID:           id,
 		Type:         "OrderedCollection",
 		TotalItems:   len(items),
@@ -261,7 +261,7 @@ func (h *UsersWebHandler) followingCollection(c *fiber.Ctx) error {
 		items = append(items, json.RawMessage(fmt.Sprintf("%q", follow.RemoteActor)))
 	}
 	return sendActivityJSON(c, orderedCollectionResponse{
-		Context:      "https://www.w3.org/ns/activitystreams",
+		Context:      activityStreamsContextURI,
 		ID:           res.Account.FollowingURI,
 		Type:         "OrderedCollection",
 		TotalItems:   len(items),
@@ -283,7 +283,7 @@ func (h *UsersWebHandler) followersCollection(c *fiber.Ctx) error {
 
 	typeName := collectionType(c)
 	return sendActivityJSON(c, orderedCollectionResponse{
-		Context:      "https://www.w3.org/ns/activitystreams",
+		Context:      activityStreamsContextURI,
 		ID:           collectionID(c, res.Account.FollowersURI),
 		Type:         typeName,
 		TotalItems:   res.Total,
@@ -374,6 +374,6 @@ func sendActivityJSON(c *fiber.Ctx, v any) error {
 	if err != nil {
 		return web.HandleDomainError(c, domainerrors.NewErr(domainerrors.ErrInternal, err))
 	}
-	c.Set(fiber.HeaderContentType, "application/activity+json")
+	c.Set(fiber.HeaderContentType, contentTypeActivityJSON)
 	return c.Send(body)
 }
