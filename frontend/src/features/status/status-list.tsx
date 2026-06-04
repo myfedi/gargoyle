@@ -55,14 +55,18 @@ export function StatusList({
   const [mediaPreview, setMediaPreview] = useState<MastodonMediaAttachment | null>(null);
 
   if (statuses.length === 0) {
-    return <EmptyState title={emptyTitle} description={emptyDescription} />;
+    return (
+      <div className="mx-auto w-full max-w-2xl">
+        <EmptyState title={emptyTitle} description={emptyDescription} />
+      </div>
+    );
   }
 
   const isDeleting = Boolean(statusPendingDeletion && deletingStatusId === statusPendingDeletion.id);
 
   return (
     <>
-      <div className="divide-y divide-border">
+      <div className="mx-auto w-full max-w-2xl divide-y divide-border">
         {statuses.map((status) => {
           const displayedStatus = status.reblog ?? status;
           const canOwn = Boolean(currentAccountId && displayedStatus.account.id === currentAccountId);

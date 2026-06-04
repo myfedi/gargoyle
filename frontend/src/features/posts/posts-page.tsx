@@ -223,7 +223,7 @@ export function PostsPage() {
   }
 
   return (
-    <section className="space-y-5">
+    <section className="mx-auto max-w-2xl space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={activeTimeline} onValueChange={setActiveTimeline} items={[...timelineTabs]} />
         <Button variant="outline" size="sm" onClick={() => void loadTimeline(activeTimeline)} disabled={isLoading}>

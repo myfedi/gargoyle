@@ -231,7 +231,7 @@ export function MyProfilePage() {
         {isLoading && !account ? <ProfileSkeleton /> : account ? renderProfileDetails(account) : <EmptyState title="No account" description="Could not load account." />}
       </div>
 
-      <Panel title={activeTab === "bookmarks" ? "Bookmarks" : "Activity"}>
+      <Panel title={activeTab === "bookmarks" ? "Bookmarks" : "Activity"} className="mx-auto max-w-2xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} items={[...profileTabs]} />
 
         {error ? <p className="mt-5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{error}</p> : null}
