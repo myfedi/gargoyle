@@ -191,7 +191,7 @@ export function AccountPage({ route }: AccountPageProps) {
                     type="button"
                     className="size-16 overflow-hidden rounded-full border border-border object-cover transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     onClick={() => setIsAvatarPreviewOpen(true)}
-                    aria-label={`View ${(account.display_name || account.username)} profile picture`}
+                    aria-label={`View ${(account.display_name || account.username)} avatar`}
                   >
                     <img className="h-full w-full object-cover" src={account.avatar} alt="Profile avatar" />
                   </button>
@@ -234,7 +234,7 @@ export function AccountPage({ route }: AccountPageProps) {
           </DialogHeader>
           {account?.avatar ? (
             <div className="flex justify-center rounded-md bg-background p-2">
-              <img className="max-h-[75vh] max-w-full rounded-md object-contain" src={account.avatar} alt={`${account.display_name || account.username} profile picture`} />
+              <img className="max-h-[75vh] max-w-full rounded-md object-contain" src={account.avatar} alt={`${account.display_name || account.username} avatar`} />
             </div>
           ) : null}
         </DialogContent>

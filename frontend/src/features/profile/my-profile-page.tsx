@@ -266,7 +266,7 @@ export function MyProfilePage() {
           </DialogHeader>
           {account?.avatar ? (
             <div className="flex justify-center rounded-md bg-background p-2">
-              <img className="max-h-[75vh] max-w-full rounded-md object-contain" src={account.avatar} alt={`${account.display_name || account.username} profile picture`} />
+              <img className="max-h-[75vh] max-w-full rounded-md object-contain" src={account.avatar} alt={`${account.display_name || account.username} avatar`} />
             </div>
           ) : null}
         </DialogContent>
@@ -351,7 +351,7 @@ export function MyProfilePage() {
                 type="button"
                 className="h-full w-full transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 onClick={() => setIsAvatarPreviewOpen(true)}
-                aria-label={`View ${(currentAccount.display_name || currentAccount.username)} profile picture`}
+                aria-label={`View ${(currentAccount.display_name || currentAccount.username)} avatar`}
               >
                 <img className="h-full w-full object-cover" src={currentAccount.avatar} alt="Profile avatar" />
               </button>
