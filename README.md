@@ -53,6 +53,14 @@ To run the server, run:
 go run cmd/web/server.go ./config.yml
 ```
 
+The repository also includes a first-party React/Vite Mastodon-compatible client in `frontend/`. For local UI development, configure `frontend/.env.local` from `frontend/.env.example` and run:
+
+```bash
+cd frontend
+bun install
+bun run dev
+```
+
 Before opening a pull request, run the same core checks as CI:
 
 ```bash
@@ -92,27 +100,27 @@ go test ./...
     -   [x] generated stable ULID-based activity/object IDs
     -   [x] persistent delivery queue
     -   [x] auth/user-facing posting API via Mastodon-compatible endpoints
-    -   [x] C2S-style `POST /users/:username/outbox` exists in code but is disabled in normal server mode unless explicitly enabled
 -   [x] followers/following
     -   [x] followers collection
     -   [x] inbound follow acceptance
     -   [x] outbound follow flow via Mastodon-compatible endpoints
     -   [x] following collection with accepted follows
-    -   [x] C2S-style `POST /users/:username/following` exists in code but is disabled in normal server mode unless explicitly enabled
 
 Implemented ActivityPub endpoints:
 
+-   `GET /@:username` redirects to the canonical actor URL.
 -   `GET /users/:username` returns an ActivityPub actor.
 -   `POST /users/:username/inbox` accepts signed inbound activities and currently handles `Follow`, `Undo Follow`, `Create`, `Delete`, `Update`, `Accept`, `Reject`, `Like`, and `Announce`.
 -   `GET /users/:username/outbox` returns stored outbox activities.
 -   `GET /users/:username/followers` returns accepted followers.
 -   `GET /users/:username/following` returns accepted outbound follows.
+-   `GET /users/:username/collections/featured` returns the actor's featured collection.
 
-C2S-style mutation routes, `POST /users/:username/outbox` and `POST /users/:username/following`, are implemented for controlled/test configurations but are not enabled by the normal server wiring. Local posting and following should use the authenticated Mastodon-compatible API unless these routes are explicitly enabled with an authorization story.
+ActivityPub C2S mutation routes are intentionally not exposed. Local posting, following, profile updates, and media management use authenticated Mastodon-compatible API endpoints.
 
 ## Federation
 
-The server now has the basic pieces for federation and Mastodon-compatible clients: actor discovery, signed inbox requirement, follow acceptance, durable signed delivery jobs, stored local/remote notes, reply threads, OAuth/PKCE login, account search, follow/unfollow, timelines, account profiles, status detail/delete, and followers/following collections.
+The server now has the basic pieces for federation and Mastodon-compatible clients: actor discovery, signed inbox requirement, follow acceptance, durable signed delivery jobs, fetch jobs, stored local/remote notes, reply threads, OAuth/PKCE login, account search, follow/unfollow, timelines, account profiles, profile updates, status create/detail/edit/delete, favourites, bookmarks, boosts, conversations, notifications, media uploads/serving, and followers/following collections.
 
 Compatibility notes:
 
@@ -152,7 +160,16 @@ activitypub:
 
 Do not allow private remote fetching for untrusted production hosts.
 
-Implemented Mastodon-compatible client endpoints include OAuth app registration and authorization-code PKCE, account verification/search/follow/unfollow/relationships/followers/following/profile/statuses, status create/detail/delete/context, media upload/serving, notifications, favourites, boosts, and home/public timelines with local/remote filters.
+Implemented Mastodon-compatible client endpoints include:
+
+-   OAuth app registration, authorization-code PKCE, token issuing, and account verification.
+-   Instance metadata, account search, profile lookup/update, account statuses, relationships, follow/unfollow, followers, and following.
+-   Status create/detail/edit/delete/source/history/context, favourites, bookmarks, pins, boosts, replies, and visibility handling.
+-   Media upload, metadata update/delete, attachment lookup, and public media serving.
+-   Notifications list/clear/dismiss/delete.
+-   Conversations list/read/delete.
+-   Favourites/bookmarks lists, preferences, custom emojis, trends/lists/filters compatibility responses, and home/public timelines with local/remote filters.
+-   A first-party React/Vite frontend that uses this Mastodon-compatible API for login, timelines, compose/reply/edit/delete, media, search, follows, notifications, conversations, and profile management.
 
 The GoToSocial integration suite can be run with:
 
