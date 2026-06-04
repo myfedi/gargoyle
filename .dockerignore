@@ -1,0 +1,41 @@
+# VCS and local tooling
+.git
+.github
+.vscode
+.idea
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+config.yml
+**/config.yml
+
+# Local databases and runtime data
+*.db
+*.db-shm
+*.db-wal
+compat/gts-data/
+media/
+
+# OS/editor noise
+.DS_Store
+*.swp
+*.swo
+
+# Frontend dependency/build/cache output
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Go/build/test artifacts
+bin/
+dist/
+coverage.out
+*.test
+
+# Local planning notes
+PLAN.md
+plan*.md
