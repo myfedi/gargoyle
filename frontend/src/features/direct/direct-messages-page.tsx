@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DirectMessageForm } from "@/features/direct/direct-message-form";
 import { EmptyState, Panel } from "@/features/shared";
-import { StatusContent } from "@/features/status/status-content";
+import { StatusBody } from "@/features/status/status-body";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime } from "@/lib/text";
@@ -178,7 +178,7 @@ function ConversationRow({ conversation, isBusy, onMarkRead, onDelete }: Convers
               </div>
             </div>
           </div>
-          <StatusContent html={lastStatus.content} mentions={lastStatus.mentions} />
+          <StatusBody html={lastStatus.content} mentions={lastStatus.mentions} spoilerText={lastStatus.spoiler_text} />
         </div>
       ) : null}
     </article>

@@ -14,7 +14,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/features/shared";
 import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
-import { StatusContent } from "@/features/status/status-content";
+import { StatusBody } from "@/features/status/status-body";
 import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime, htmlToPlainText } from "@/lib/text";
 import type { MastodonMediaAttachment, MastodonStatus } from "@/types/mastodon";
@@ -97,12 +97,10 @@ export function StatusList({
                       <time dateTime={displayedStatus.created_at}>{formatDateTime(displayedStatus.created_at)}</time>
                     </a>
                   </div>
-                  {displayedStatus.spoiler_text ? <p className="mt-2 text-sm font-medium">{displayedStatus.spoiler_text}</p> : null}
-                  <div className="mt-2">
-                    <StatusContent html={displayedStatus.content} mentions={displayedStatus.mentions} />
-                  </div>
+                  <StatusBody html={displayedStatus.content} mentions={displayedStatus.mentions} spoilerText={displayedStatus.spoiler_text}>
+                    <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
+                  </StatusBody>
                   <StatusStats status={displayedStatus} />
-                  <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
                 </div>
                 {canDelete || canEdit || canReply || canForward || canInteract ? (
                   <DropdownMenu>
