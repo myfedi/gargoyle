@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,6 +43,7 @@ export function MyProfilePage() {
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isAvatarPreviewOpen, setIsAvatarPreviewOpen] = useState(false);
   const [profileForm, setProfileForm] = useState<{ displayName: string; note: string; avatar: File | null; header: File | null }>({ displayName: "", note: "", avatar: null, header: null });
   const [error, setError] = useState<string | null>(null);
 
@@ -231,6 +233,19 @@ export function MyProfilePage() {
         {isLoading && !account ? <ProfileSkeleton /> : account ? renderProfileDetails(account) : <EmptyState title="No account" description="Could not load account." />}
       </div>
 
+      <Dialog open={isAvatarPreviewOpen} onOpenChange={setIsAvatarPreviewOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Profile picture</DialogTitle>
+          </DialogHeader>
+          {account?.avatar ? (
+            <div className="flex justify-center rounded-md bg-background p-2">
+              <img className="max-h-[75vh] max-w-full rounded-md object-contain" src={account.avatar} alt={`${account.display_name || account.username} profile picture`} />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       <Panel title={activeTab === "bookmarks" ? "Bookmarks" : "Activity"} className="mx-auto max-w-2xl">
         <Tabs value={activeTab} onValueChange={setActiveTab} items={[...profileTabs]} />
 
@@ -263,7 +278,7 @@ export function MyProfilePage() {
               <Input id="profile-avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={isSavingProfile} onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.files?.[0] ?? null }))} />
             </div>
             <div className="grid gap-2">
-              <label className="text-sm font-medium" htmlFor="profile-header">Header</label>
+              <label className="text-sm font-medium" htmlFor="profile-header">Header (598:145)</label>
               <Input id="profile-header" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={isSavingProfile} onChange={(event) => setProfileForm((current) => ({ ...current, header: event.target.files?.[0] ?? null }))} />
             </div>
           </div>
@@ -288,11 +303,18 @@ export function MyProfilePage() {
 
     return (
       <div>
-        <div className="relative h-48 bg-[linear-gradient(135deg,hsl(var(--secondary)),hsl(var(--muted)))] sm:h-60">
+        <div className="relative aspect-[598/145] bg-[linear-gradient(135deg,hsl(var(--secondary)),hsl(var(--muted)))]">
           {currentAccount.header ? <img className="h-full w-full object-cover" src={currentAccount.header} alt="Profile header" /> : null}
           <div className="absolute bottom-0 left-5 size-28 translate-y-1/2 overflow-hidden rounded-full border-4 border-card bg-background shadow-sm sm:size-32">
             {currentAccount.avatar ? (
-              <img className="h-full w-full object-cover" src={currentAccount.avatar} alt="Profile avatar" />
+              <button
+                type="button"
+                className="h-full w-full transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                onClick={() => setIsAvatarPreviewOpen(true)}
+                aria-label={`View ${(currentAccount.display_name || currentAccount.username)} profile picture`}
+              >
+                <img className="h-full w-full object-cover" src={currentAccount.avatar} alt="Profile avatar" />
+              </button>
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-secondary text-3xl font-semibold text-secondary-foreground">{profileInitials(currentAccount)}</div>
             )}
@@ -439,7 +461,7 @@ function replaceAccountInStatuses(statuses: MastodonStatus[], account: MastodonA
 }
 
 function ProfileSkeleton() {
-  return <div className="h-72 animate-pulse bg-secondary" />;
+  return <div className="aspect-[598/145] animate-pulse bg-secondary" />;
 }
 
 function LoadingRows() {

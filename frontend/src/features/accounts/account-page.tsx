@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FieldRow, Panel } from "@/features/shared";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
@@ -27,6 +28,7 @@ export function AccountPage({ route }: AccountPageProps) {
   const [isUpdatingFollow, setIsUpdatingFollow] = useState(false);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
+  const [isAvatarPreviewOpen, setIsAvatarPreviewOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
@@ -174,15 +176,26 @@ export function AccountPage({ route }: AccountPageProps) {
 
       {isLoading ? (
         <Panel title="Account">
-          <div className="h-28 animate-pulse rounded-md bg-secondary" />
+          <div className="aspect-[598/145] animate-pulse rounded-md bg-secondary" />
         </Panel>
       ) : account ? (
         <Panel title="Profile">
           <div className="mb-4 space-y-4">
-            {account.header ? <img className="h-32 w-full rounded-lg border border-border object-cover" src={account.header} alt="Profile header" /> : null}
+            <div className="aspect-[598/145] overflow-hidden rounded-lg border border-border bg-[linear-gradient(135deg,hsl(var(--secondary)),hsl(var(--muted)))]">
+              {account.header ? <img className="h-full w-full object-cover" src={account.header} alt="Profile header" /> : null}
+            </div>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                {account.avatar ? <img className="size-16 rounded-full border border-border object-cover" src={account.avatar} alt="Profile avatar" /> : null}
+                {account.avatar ? (
+                  <button
+                    type="button"
+                    className="size-16 overflow-hidden rounded-full border border-border object-cover transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    onClick={() => setIsAvatarPreviewOpen(true)}
+                    aria-label={`View ${(account.display_name || account.username)} profile picture`}
+                  >
+                    <img className="h-full w-full object-cover" src={account.avatar} alt="Profile avatar" />
+                  </button>
+                ) : null}
                 <div>
                   <p className="font-semibold">{account.display_name || account.username}</p>
                   <p className="text-sm text-muted-foreground">@{account.acct}</p>
@@ -213,6 +226,19 @@ export function AccountPage({ route }: AccountPageProps) {
           />
         </Panel>
       ) : null}
+
+      <Dialog open={isAvatarPreviewOpen} onOpenChange={setIsAvatarPreviewOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Profile picture</DialogTitle>
+          </DialogHeader>
+          {account?.avatar ? (
+            <div className="flex justify-center rounded-md bg-background p-2">
+              <img className="max-h-[75vh] max-w-full rounded-md object-contain" src={account.avatar} alt={`${account.display_name || account.username} profile picture`} />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Panel title="Posts" className="mx-auto max-w-2xl">
         {isLoading ? (
