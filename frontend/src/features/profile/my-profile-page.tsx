@@ -319,8 +319,9 @@ export function MyProfilePage() {
             />
             <p className="text-xs text-muted-foreground">Your updated profile is federated to followers after it is saved.</p>
           </div>
-          <label className="flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm">
+          <label className="flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm" htmlFor="profile-locked">
             <input
+              id="profile-locked"
               className="mt-1 size-4 accent-primary"
               type="checkbox"
               checked={profileForm.locked}

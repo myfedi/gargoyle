@@ -309,7 +309,7 @@ export function ComposeForm({
 
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <input type="checkbox" checked={sensitive} onChange={(event) => setSensitive(event.target.checked)} />
-                Mark as sensitive
+                <span>Mark as sensitive</span>
               </label>
             </div>
           ) : null}
