@@ -40,6 +40,10 @@ type MediaConfig struct {
 	UnattachedTTL   time.Duration `mapstructure:"unattached_ttl"`
 }
 
+type OAuthConfig struct {
+	AllowPasswordGrant bool `mapstructure:"allow_password_grant"`
+}
+
 type Config struct {
 	Debug       bool              `mapstructure:"debug"`
 	Domain      string            `mapstructure:"domain"`
@@ -50,6 +54,7 @@ type Config struct {
 	ActivityPub ActivityPubConfig `mapstructure:"activitypub"`
 	Web         WebConfig         `mapstructure:"web"`
 	Media       MediaConfig       `mapstructure:"media"`
+	OAuth       OAuthConfig       `mapstructure:"oauth"`
 }
 
 func (c Config) Host() string {
@@ -107,6 +112,7 @@ func NewConfig(configFile string) (*Config, error) {
 	viper.SetDefault("media.storage_dir", "./media")
 	viper.SetDefault("media.cleanup_interval", "1h")
 	viper.SetDefault("media.unattached_ttl", "24h")
+	viper.SetDefault("oauth.allow_password_grant", false)
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err

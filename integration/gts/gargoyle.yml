@@ -7,6 +7,8 @@ sqlite:
   uri: /data/gargoyle.db
 media:
   storage_dir: /media
+oauth:
+  allow_password_grant: true
 activitypub:
   body_limit_bytes: 1048576
   remote_url_exceptions:

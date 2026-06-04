@@ -6,7 +6,12 @@ domain: example.org
 port: 80
 tls: true
 sqlite:
-  uri: "file::memory:?cache=shared"
+  uri: "file:./local.db?_pragma=foreign_keys(1)"
+
+oauth:
+  # Disabled by default. Enable only for trusted compatibility setups that need
+  # Mastodon password-grant login.
+  allow_password_grant: false
 
 media:
   # Uploaded media bytes are stored on disk; only metadata is kept in SQLite.

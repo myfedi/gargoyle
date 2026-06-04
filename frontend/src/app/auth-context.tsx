@@ -21,7 +21,7 @@ const oauthExchangePromises = new Map<string, Promise<AuthSession>>();
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(() => readAuthSession());
-  const [status, setStatus] = useState<AuthStatus>(() => (readAuthSession() ? "authenticated" : "checking"));
+  const [status, setStatus] = useState<AuthStatus>(() => (session ? "authenticated" : "checking"));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -98,6 +98,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [session]);
 
+  useEffect(() => {
+    if (!session?.createdAt || !session.expiresIn) {
+      return;
+    }
+
+    const expiresAtMs = (session.createdAt + session.expiresIn) * 1000;
+    const timeout = window.setTimeout(() => {
+      if (Date.now() < expiresAtMs) {
+        return;
+      }
+      clearAuthSession();
+      setSession(null);
+      setStatus("unauthenticated");
+      setError("Your session expired. Sign in again.");
+    }, sessionExpiryCheckDelay(expiresAtMs));
+
+    return () => window.clearTimeout(timeout);
+  }, [session]);
+
   const signIn = useCallback(async () => {
     const config = getOAuthConfig();
     if (!config) {
@@ -123,6 +142,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+function sessionExpiryCheckDelay(expiresAtMs: number) {
+  const maxSafeBrowserDelay = 24 * 60 * 60 * 1000;
+  return Math.min(Math.max(0, expiresAtMs - Date.now()), maxSafeBrowserDelay);
 }
 
 function getOAuthExchangePromise(code: string, exchange: () => Promise<AuthSession>) {

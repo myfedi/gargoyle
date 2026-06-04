@@ -27,11 +27,11 @@ To run it locally, clone the repository, install the Go dependencies, and copy t
 cp config.example.yml config.yml
 ```
 
-For local development, change the SQLite URI in `config.yml` to a persistent file before running migrations or creating users. The example config uses an in-memory database, which is useful for tests but will not persist across separate CLI/server processes.
+For local development, keep the SQLite URI in `config.yml` pointed at a persistent file before running migrations or creating users. In-memory databases are useful for tests, but will not persist across separate CLI/server processes.
 
 ```yaml
 sqlite:
-  uri: "file:gargoyle.db?cache=shared"
+  uri: "file:./local.db?_pragma=foreign_keys(1)"
 ```
 
 To init or migrate the database, you can use the db cli tool:

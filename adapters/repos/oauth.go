@@ -3,6 +3,7 @@ package repos
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
@@ -126,6 +127,16 @@ func (r *OAuthRepo) MarkAuthorizationCodeUsed(ctx context.Context, tx *dbPorts.T
 	if err != nil {
 		return err
 	}
-	_, err = db.NewUpdate().Model((*dbModels.OAuthAuthorizationCode)(nil)).Set("used_at = ?", usedAt).Set("updated_at = ?", usedAt).Where("id = ?", id).Exec(ctx)
-	return err
+	res, err := db.NewUpdate().Model((*dbModels.OAuthAuthorizationCode)(nil)).Set("used_at = ?", usedAt).Set("updated_at = ?", usedAt).Where("id = ?", id).Where("used_at IS NULL").Exec(ctx)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fmt.Errorf("authorization code is already used or missing")
+	}
+	return nil
 }

@@ -163,10 +163,12 @@ func main() {
 
 	// set up Mastodon-compatible OAuth/client API foundation.
 	oauthUC := oauth.NewUseCase(oauth.Config{
-		OAuthRepo:    oauthRepo,
-		UsersRepo:    usersRepo,
-		AccountsRepo: accountsRepo,
-		PasswordHash: passwordAdapters.NewBCryptPasswordHasher(),
+		OAuthRepo:          oauthRepo,
+		UsersRepo:          usersRepo,
+		AccountsRepo:       accountsRepo,
+		PasswordHash:       passwordAdapters.NewBCryptPasswordHasher(),
+		TxProvider:         txProvider,
+		AllowPasswordGrant: config.OAuth.AllowPasswordGrant,
 	})
 	mastodon.NewOAuthHandler(oauthUC).Setup(app)
 	mastodonFlowCfg := apUsecases.ActivityPubFlowConfig{

@@ -10,7 +10,7 @@ export function readAuthSession(): AuthSession | null {
 
   try {
     const session = JSON.parse(rawSession) as Partial<AuthSession>;
-    if (!session.accessToken || !session.tokenType) {
+    if (!session.accessToken || !session.tokenType || isExpired(session)) {
       clearAuthSession();
       return null;
     }
@@ -27,4 +27,13 @@ export function writeAuthSession(session: AuthSession) {
 
 export function clearAuthSession() {
   sessionStorage.removeItem(authSessionKey);
+}
+
+function isExpired(session: Partial<AuthSession>) {
+  if (!session.createdAt || !session.expiresIn) {
+    return false;
+  }
+
+  const expiresAtMs = (session.createdAt + session.expiresIn) * 1000;
+  return Date.now() >= expiresAtMs;
 }

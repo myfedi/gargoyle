@@ -15,17 +15,51 @@ import (
 	"github.com/myfedi/gargoyle/domain/models"
 	derrors "github.com/myfedi/gargoyle/domain/models/domainerrors"
 	"github.com/myfedi/gargoyle/domain/ports"
+	"github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 )
 
 type Config struct {
-	OAuthRepo    repos.OAuthRepository
-	UsersRepo    repos.UsersRepository
-	AccountsRepo repos.AccountsRepo
-	PasswordHash ports.PasswordHashProvider
+	OAuthRepo          repos.OAuthRepository
+	UsersRepo          repos.UsersRepository
+	AccountsRepo       repos.AccountsRepo
+	PasswordHash       ports.PasswordHashProvider
+	TxProvider         db.TxProvider
+	AllowPasswordGrant bool
 }
 
 const accessTokenTTL = 30 * 24 * time.Hour
+const defaultScopes = "read write follow"
+
+var supportedScopes = map[string]bool{
+	"read":                true,
+	"read:accounts":       true,
+	"read:blocks":         true,
+	"read:bookmarks":      true,
+	"read:favourites":     true,
+	"read:filters":        true,
+	"read:follows":        true,
+	"read:lists":          true,
+	"read:mutes":          true,
+	"read:notifications":  true,
+	"read:search":         true,
+	"read:statuses":       true,
+	"write":               true,
+	"write:accounts":      true,
+	"write:blocks":        true,
+	"write:bookmarks":     true,
+	"write:conversations": true,
+	"write:favourites":    true,
+	"write:filters":       true,
+	"write:follows":       true,
+	"write:lists":         true,
+	"write:media":         true,
+	"write:mutes":         true,
+	"write:notifications": true,
+	"write:reports":       true,
+	"write:statuses":      true,
+	"follow":              true,
+}
 
 type UseCase struct{ cfg Config }
 
@@ -46,6 +80,19 @@ type AuthorizeInput struct {
 	Password            string
 	CodeChallenge       string
 	CodeChallengeMethod string
+}
+
+type AuthorizationDetailsInput struct {
+	ClientID     string
+	RedirectURI  string
+	ResponseType string
+	Scope        string
+}
+
+type AuthorizationDetails struct {
+	ApplicationName string
+	RedirectURI     string
+	Scopes          []string
 }
 
 type IssueTokenInput struct {
@@ -87,6 +134,9 @@ func NewUseCase(cfg Config) UseCase {
 	if cfg.PasswordHash == nil {
 		panic("oauth use case requires PasswordHashProvider")
 	}
+	if cfg.TxProvider == nil {
+		panic("oauth use case requires TxProvider")
+	}
 	return UseCase{cfg: cfg}
 }
 
@@ -94,9 +144,9 @@ func (u UseCase) RegisterApplication(ctx context.Context, input RegisterApplicat
 	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.RedirectURI) == "" {
 		return nil, derrors.New(derrors.ErrBadRequest, "client_name and redirect_uris are required")
 	}
-	scopes := strings.TrimSpace(input.Scopes)
-	if scopes == "" {
-		scopes = "read write follow"
+	scopes, derr := normalizeRequestedScopes(input.Scopes, defaultScopes)
+	if derr != nil {
+		return nil, derr
 	}
 	clientID, err := randomToken(32)
 	if err != nil {
@@ -113,6 +163,24 @@ func (u UseCase) RegisterApplication(ctx context.Context, input RegisterApplicat
 	return app, nil
 }
 
+func (u UseCase) AuthorizationDetails(ctx context.Context, input AuthorizationDetailsInput) (*AuthorizationDetails, *derrors.DomainError) {
+	if input.ResponseType != "" && input.ResponseType != "code" {
+		return nil, derrors.New(derrors.ErrBadRequest, "unsupported response_type")
+	}
+	app, derr := u.validatedApplication(ctx, input.ClientID, input.RedirectURI)
+	if derr != nil {
+		return nil, derr
+	}
+	scope, derr := normalizeRequestedScopes(input.Scope, app.Scopes)
+	if derr != nil {
+		return nil, derr
+	}
+	if derr := ensureScopesAllowed(scope, app.Scopes); derr != nil {
+		return nil, derr
+	}
+	return &AuthorizationDetails{ApplicationName: app.Name, RedirectURI: input.RedirectURI, Scopes: strings.Fields(scope)}, nil
+}
+
 func (u UseCase) Authorize(ctx context.Context, input AuthorizeInput) (string, *derrors.DomainError) {
 	if input.ResponseType != "code" {
 		return "", derrors.New(derrors.ErrBadRequest, "unsupported response_type")
@@ -125,9 +193,12 @@ func (u UseCase) Authorize(ctx context.Context, input AuthorizeInput) (string, *
 	if err != nil || u.cfg.PasswordHash.CompareHashAndPassword(user.PasswordHash, input.Password) != nil {
 		return "", derrors.New(derrors.ErrUnauthorized, "invalid credentials")
 	}
-	scope := strings.TrimSpace(input.Scope)
-	if scope == "" {
-		scope = app.Scopes
+	scope, derr := normalizeRequestedScopes(input.Scope, app.Scopes)
+	if derr != nil {
+		return "", derr
+	}
+	if derr := ensureScopesAllowed(scope, app.Scopes); derr != nil {
+		return "", derr
 	}
 	code, err := randomToken(32)
 	if err != nil {
@@ -156,6 +227,9 @@ func (u UseCase) IssueToken(ctx context.Context, input IssueTokenInput) (*Issued
 		return nil, derrors.New(derrors.ErrUnauthorized, "invalid client_id")
 	}
 	if input.GrantType == "password" {
+		if !u.cfg.AllowPasswordGrant {
+			return nil, derrors.New(derrors.ErrBadRequest, "password grant is disabled")
+		}
 		if !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
 			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
 		}
@@ -179,40 +253,69 @@ func (u UseCase) issuePasswordToken(ctx context.Context, app *models.OAuthApplic
 	if err := u.cfg.PasswordHash.CompareHashAndPassword(user.PasswordHash, input.Password); err != nil {
 		return nil, derrors.New(derrors.ErrUnauthorized, "invalid resource owner credentials")
 	}
-	scope := strings.TrimSpace(input.Scope)
-	if scope == "" {
-		scope = app.Scopes
+	scope, derr := normalizeRequestedScopes(input.Scope, app.Scopes)
+	if derr != nil {
+		return nil, derr
 	}
-	return u.issueAccessToken(ctx, app.ID, user.ID, scope)
+	if derr := ensureScopesAllowed(scope, app.Scopes); derr != nil {
+		return nil, derr
+	}
+	return u.issueAccessToken(ctx, nil, app.ID, user.ID, scope)
 }
 
 func (u UseCase) issueAuthorizationCodeToken(ctx context.Context, app *models.OAuthApplication, input IssueTokenInput, clientSecretProvided bool) (*IssuedToken, *derrors.DomainError) {
-	code, err := u.cfg.OAuthRepo.GetAuthorizationCodeByHash(ctx, nil, TokenHash(input.Code))
-	if err != nil || code.ApplicationID != app.ID || code.RedirectURI != input.RedirectURI || code.UsedAt != nil || time.Now().After(code.ExpiresAt) {
-		return nil, derrors.New(derrors.ErrUnauthorized, "invalid authorization code")
-	}
-	if !clientSecretProvided && code.CodeChallenge == "" {
-		return nil, derrors.New(derrors.ErrUnauthorized, "public clients must use PKCE")
-	}
-	if !validPKCE(code.CodeChallenge, code.CodeChallengeMethod, input.CodeVerifier) {
-		return nil, derrors.New(derrors.ErrUnauthorized, "invalid code verifier")
-	}
-	if err := u.cfg.OAuthRepo.MarkAuthorizationCodeUsed(ctx, nil, code.ID, time.Now()); err != nil {
-		return nil, derrors.NewErr(derrors.ErrInternal, err)
-	}
-	return u.issueAccessToken(ctx, app.ID, code.UserID, code.Scopes)
-}
-
-func (u UseCase) issueAccessToken(ctx context.Context, applicationID string, userID string, scope string) (*IssuedToken, *derrors.DomainError) {
 	plain, err := randomToken(48)
 	if err != nil {
 		return nil, derrors.NewErr(derrors.ErrInternal, err)
 	}
-	expiresAt := time.Now().UTC().Add(accessTokenTTL)
-	if _, err := u.cfg.OAuthRepo.CreateAccessToken(ctx, nil, repos.CreateOAuthAccessTokenInput{ApplicationID: applicationID, UserID: userID, TokenHash: TokenHash(plain), Scopes: scope, ExpiresAt: &expiresAt}); err != nil {
+	issuedAt := time.Now().UTC()
+	expiresAt := issuedAt.Add(accessTokenTTL)
+	var issued *IssuedToken
+	err = u.cfg.TxProvider.RunInTx(ctx, nil, func(ctx context.Context, tx db.Tx) error {
+		txPtr := &tx
+		code, err := u.cfg.OAuthRepo.GetAuthorizationCodeByHash(ctx, txPtr, TokenHash(input.Code))
+		if err != nil || code.ApplicationID != app.ID || code.RedirectURI != input.RedirectURI || code.UsedAt != nil || time.Now().After(code.ExpiresAt) {
+			return derrors.New(derrors.ErrUnauthorized, "invalid authorization code")
+		}
+		if !clientSecretProvided && code.CodeChallenge == "" {
+			return derrors.New(derrors.ErrUnauthorized, "public clients must use PKCE")
+		}
+		if !validPKCE(code.CodeChallenge, code.CodeChallengeMethod, input.CodeVerifier) {
+			return derrors.New(derrors.ErrUnauthorized, "invalid code verifier")
+		}
+		if err := u.cfg.OAuthRepo.MarkAuthorizationCodeUsed(ctx, txPtr, code.ID, time.Now().UTC()); err != nil {
+			return derrors.New(derrors.ErrUnauthorized, "invalid authorization code")
+		}
+		if _, err := u.cfg.OAuthRepo.CreateAccessToken(ctx, txPtr, repos.CreateOAuthAccessTokenInput{ApplicationID: app.ID, UserID: code.UserID, TokenHash: TokenHash(plain), Scopes: code.Scopes, ExpiresAt: &expiresAt}); err != nil {
+			return derrors.NewErr(derrors.ErrInternal, err)
+		}
+		issued = issuedTokenResponse(plain, code.Scopes, issuedAt)
+		return nil
+	})
+	if err != nil {
+		if derr, ok := err.(*derrors.DomainError); ok {
+			return nil, derr
+		}
 		return nil, derrors.NewErr(derrors.ErrInternal, err)
 	}
-	return &IssuedToken{AccessToken: plain, TokenType: "Bearer", Scope: scope, CreatedAt: time.Now().Unix(), ExpiresIn: int64(accessTokenTTL.Seconds())}, nil
+	return issued, nil
+}
+
+func (u UseCase) issueAccessToken(ctx context.Context, tx *db.Tx, applicationID string, userID string, scope string) (*IssuedToken, *derrors.DomainError) {
+	plain, err := randomToken(48)
+	if err != nil {
+		return nil, derrors.NewErr(derrors.ErrInternal, err)
+	}
+	issuedAt := time.Now().UTC()
+	expiresAt := issuedAt.Add(accessTokenTTL)
+	if _, err := u.cfg.OAuthRepo.CreateAccessToken(ctx, tx, repos.CreateOAuthAccessTokenInput{ApplicationID: applicationID, UserID: userID, TokenHash: TokenHash(plain), Scopes: scope, ExpiresAt: &expiresAt}); err != nil {
+		return nil, derrors.NewErr(derrors.ErrInternal, err)
+	}
+	return issuedTokenResponse(plain, scope, issuedAt), nil
+}
+
+func issuedTokenResponse(plain string, scope string, issuedAt time.Time) *IssuedToken {
+	return &IssuedToken{AccessToken: plain, TokenType: "Bearer", Scope: scope, CreatedAt: issuedAt.Unix(), ExpiresIn: int64(accessTokenTTL.Seconds())}
 }
 
 func (u UseCase) AuthenticateBearer(ctx context.Context, bearer string) (*AuthenticatedUser, *derrors.DomainError) {
@@ -264,6 +367,48 @@ func redirectURIMatches(registered string, requested string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeRequestedScopes(requested string, fallback string) (string, *derrors.DomainError) {
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		requested = fallback
+	}
+	seen := map[string]bool{}
+	scopes := []string{}
+	for _, scope := range strings.Fields(requested) {
+		if !supportedScopes[scope] {
+			return "", derrors.New(derrors.ErrBadRequest, "unsupported OAuth scope")
+		}
+		if seen[scope] {
+			continue
+		}
+		seen[scope] = true
+		scopes = append(scopes, scope)
+	}
+	if len(scopes) == 0 {
+		return "", derrors.New(derrors.ErrBadRequest, "at least one OAuth scope is required")
+	}
+	return strings.Join(scopes, " "), nil
+}
+
+func ensureScopesAllowed(requested string, allowed string) *derrors.DomainError {
+	allowedSet := map[string]bool{}
+	for _, scope := range strings.Fields(allowed) {
+		allowedSet[scope] = true
+	}
+	for _, scope := range strings.Fields(requested) {
+		if allowedSet[scope] || parentScopeAllowed(scope, allowedSet) {
+			continue
+		}
+		return derrors.New(derrors.ErrBadRequest, "requested OAuth scope is not registered for this application")
+	}
+	return nil
+}
+
+func parentScopeAllowed(scope string, allowedSet map[string]bool) bool {
+	parent, _, ok := strings.Cut(scope, ":")
+	return ok && allowedSet[parent]
 }
 
 func constantTimeStringEqual(a string, b string) bool {
