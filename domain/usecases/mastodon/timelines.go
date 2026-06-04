@@ -17,7 +17,16 @@ func (u UseCase) HomeTimeline(ctx context.Context, account *models.Account, opts
 		return nil, derr
 	}
 	opts = normalizeTimelineOptions(opts)
-	notes, err := u.cfg.NotesRepo.ListLocalNotesPaged(ctx, nil, account.ID, opts.Limit, opts.MaxID)
+	following, err := u.cfg.FollowsRepo.ListFollowing(ctx, nil, account.ID)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	actors := make([]string, 0, len(following)+1)
+	actors = append(actors, account.URI)
+	for _, follow := range following {
+		actors = append(actors, follow.RemoteActor)
+	}
+	notes, err := u.cfg.NotesRepo.ListHomeTimelineNotesPaged(ctx, nil, account.ID, actors, opts.Limit, opts.MaxID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
@@ -33,6 +42,11 @@ func (u UseCase) HomeTimeline(ctx context.Context, account *models.Account, opts
 	if derr != nil {
 		return nil, derr
 	}
+	actorSet := make(map[string]bool, len(actors))
+	for _, actor := range actors {
+		actorSet[actor] = true
+	}
+	boostItems = filterTimelineItemsByActor(boostItems, actorSet)
 	return mergeTimelineItems(items, boostItems, opts.Limit), nil
 }
 
@@ -161,6 +175,16 @@ func (u UseCase) accountForActor(ctx context.Context, localAccount *models.Accou
 		return nil, domainerrors.NewErr(domainerrors.ErrNotFound, err)
 	}
 	return remote, nil
+}
+
+func filterTimelineItemsByActor(items []TimelineItem, actors map[string]bool) []TimelineItem {
+	filtered := make([]TimelineItem, 0, len(items))
+	for _, item := range items {
+		if actors[item.Account.URI] {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func mergeTimelineItems(a []TimelineItem, b []TimelineItem, limit int) []TimelineItem {

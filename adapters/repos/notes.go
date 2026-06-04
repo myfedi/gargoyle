@@ -273,6 +273,10 @@ func (r *NotesRepo) ListLocalNotesPaged(ctx context.Context, tx *dbPorts.Tx, loc
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, limit: limit, maxID: maxID})
 }
 
+func (r *NotesRepo) ListHomeTimelineNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actorURIs []string, limit int, maxID string) ([]models.Note, error) {
+	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, attributedToAny: actorURIs, limit: limit, maxID: maxID})
+}
+
 func (r *NotesRepo) ListDirectNotesPaged(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, maxID string) ([]models.Note, error) {
 	return r.listNotes(ctx, tx, noteListFilter{localAccountID: localAccountID, visibility: "direct", limit: limit, maxID: maxID})
 }
@@ -296,6 +300,7 @@ func (r *NotesRepo) ListAttributedNotesPaged(ctx context.Context, tx *dbPorts.Tx
 type noteListFilter struct {
 	localAccountID   string
 	attributedTo     string
+	attributedToAny  []string
 	localActorPrefix string
 	localOnly        bool
 	remoteOnly       bool
@@ -349,6 +354,9 @@ func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, filter noteLi
 	if filter.attributedTo != "" {
 		query = query.Where("attributed_to = ?", filter.attributedTo)
 	}
+	if len(filter.attributedToAny) > 0 {
+		query = query.Where("attributed_to IN (?)", bun.In(filter.attributedToAny))
+	}
 	if filter.localOnly {
 		query = query.Where("attributed_to LIKE ?", filter.localActorPrefix+"%")
 	}
@@ -362,7 +370,14 @@ func (r *NotesRepo) listNotes(ctx context.Context, tx *dbPorts.Tx, filter noteLi
 		query = query.Where("visibility = ?", filter.visibility)
 	}
 	if filter.maxID != "" {
-		query = query.Where("id < ?", filter.maxID)
+		var cursor dbModels.Note
+		if err := db.NewSelect().Model(&cursor).Where("id = ?", filter.maxID).Limit(1).Scan(ctx); err == nil {
+			query = query.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+				return q.Where("published_at < ?", cursor.PublishedAt).WhereOr("published_at = ? AND id < ?", cursor.PublishedAt, filter.maxID)
+			})
+		} else {
+			query = query.Where("id < ?", filter.maxID)
+		}
 	}
 	if filter.limit > 0 {
 		query = query.Limit(filter.limit)
