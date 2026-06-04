@@ -2,7 +2,6 @@ package utils
 
 import (
 	"html"
-	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 )
@@ -14,7 +13,7 @@ var (
 
 // SanitizeHTML sanitizes user-provided HTML while preserving safe formatting.
 func SanitizeHTML(text string) string {
-	return strings.TrimSpace(ugcPolicy.Sanitize(text))
+	return ugcPolicy.Sanitize(text)
 }
 
 // StripHTMLFromText splits all HTML tags from text and leaves only plain text
@@ -28,5 +27,5 @@ func StripHTMLFromText(text string) string {
 
 	// Unescape again to return plaintext.
 	content = html.UnescapeString(content)
-	return strings.TrimSpace(content)
+	return content
 }
