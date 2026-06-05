@@ -36,7 +36,9 @@ type ActivityPubFlowConfig struct {
 	BoostsRepo         repos.BoostsRepository
 	PollsRepo          repos.PollsRepository
 	MediaRepo          repos.MediaRepository
+	MentionsRepo       repos.MentionsRepository
 	ActorFetcher       apPorts.ActorFetcher
+	ActorSerializer    apPorts.ActorSerializer
 	ContentSanitizer   ports.ContentSanitizer
 	Host               string
 }
@@ -59,8 +61,32 @@ type GetDereferenceUseCase struct{ cfg ActivityPubFlowConfig }
 // CreateFollowingUseCase creates a local Follow activity and following record atomically.
 type CreateFollowingUseCase struct{ cfg ActivityPubFlowConfig }
 
+// UndoFollowingUseCase creates a local Undo Follow activity and removes the following record atomically.
+type UndoFollowingUseCase struct{ cfg ActivityPubFlowConfig }
+
 // CreateOutboxActivityUseCase normalizes and stores a local outbox activity atomically.
 type CreateOutboxActivityUseCase struct{ cfg ActivityPubFlowConfig }
+
+// CreateInteractionUseCase creates local Like/Announce activities and derived local state atomically.
+type CreateInteractionUseCase struct{ cfg ActivityPubFlowConfig }
+
+// UndoInteractionUseCase creates local Undo Like/Announce activities and removes derived local state atomically.
+type UndoInteractionUseCase struct{ cfg ActivityPubFlowConfig }
+
+// DeleteObjectUseCase creates a local Delete activity and removes the local object atomically.
+type DeleteObjectUseCase struct{ cfg ActivityPubFlowConfig }
+
+// UpdateObjectUseCase creates a local Update activity and updates derived local object state atomically.
+type UpdateObjectUseCase struct{ cfg ActivityPubFlowConfig }
+
+// UpdateActorUseCase creates a local Update activity and updates local actor profile state atomically.
+type UpdateActorUseCase struct{ cfg ActivityPubFlowConfig }
+
+// FollowRequestDecisionUseCase accepts or rejects pending inbound Follow activities.
+type FollowRequestDecisionUseCase struct{ cfg ActivityPubFlowConfig }
+
+// VotePollUseCase stores local votes on ActivityPub Questions and prepares vote deliveries.
+type VotePollUseCase struct{ cfg ActivityPubFlowConfig }
 
 // HandleInboxActivityUseCase stores an inbound activity and applies its derived local state atomically.
 type HandleInboxActivityUseCase struct{ cfg ActivityPubFlowConfig }
@@ -105,6 +131,13 @@ func NewCreateFollowingUseCase(cfg ActivityPubFlowConfig) CreateFollowingUseCase
 	requireFollowsRepo(cfg)
 	return CreateFollowingUseCase{cfg: cfg}
 }
+func NewUndoFollowingUseCase(cfg ActivityPubFlowConfig) UndoFollowingUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireFollowsRepo(cfg)
+	return UndoFollowingUseCase{cfg: cfg}
+}
 func NewCreateOutboxActivityUseCase(cfg ActivityPubFlowConfig) CreateOutboxActivityUseCase {
 	requireTxProvider(cfg)
 	requireAccountsRepo(cfg)
@@ -112,6 +145,63 @@ func NewCreateOutboxActivityUseCase(cfg ActivityPubFlowConfig) CreateOutboxActiv
 	requireFollowsRepo(cfg)
 	requireContentSanitizer(cfg)
 	return CreateOutboxActivityUseCase{cfg: cfg}
+}
+func NewCreateInteractionUseCase(cfg ActivityPubFlowConfig) CreateInteractionUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireSocialRepo(cfg)
+	return CreateInteractionUseCase{cfg: cfg}
+}
+func NewUndoInteractionUseCase(cfg ActivityPubFlowConfig) UndoInteractionUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireSocialRepo(cfg)
+	return UndoInteractionUseCase{cfg: cfg}
+}
+func NewDeleteObjectUseCase(cfg ActivityPubFlowConfig) DeleteObjectUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireFollowsRepo(cfg)
+	requireNotesRepo(cfg)
+	requireMediaRepo(cfg)
+	return DeleteObjectUseCase{cfg: cfg}
+}
+func NewUpdateObjectUseCase(cfg ActivityPubFlowConfig) UpdateObjectUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireFollowsRepo(cfg)
+	requireNotesRepo(cfg)
+	requireMediaRepo(cfg)
+	requirePollsRepo(cfg)
+	requireMentionsRepo(cfg)
+	return UpdateObjectUseCase{cfg: cfg}
+}
+func NewUpdateActorUseCase(cfg ActivityPubFlowConfig) UpdateActorUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireFollowsRepo(cfg)
+	requireActorSerializer(cfg)
+	return UpdateActorUseCase{cfg: cfg}
+}
+func NewFollowRequestDecisionUseCase(cfg ActivityPubFlowConfig) FollowRequestDecisionUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireActivitiesRepo(cfg)
+	requireFollowsRepo(cfg)
+	requireSocialRepo(cfg)
+	return FollowRequestDecisionUseCase{cfg: cfg}
+}
+func NewVotePollUseCase(cfg ActivityPubFlowConfig) VotePollUseCase {
+	requireTxProvider(cfg)
+	requireAccountsRepo(cfg)
+	requireNotesRepo(cfg)
+	requirePollsRepo(cfg)
+	return VotePollUseCase{cfg: cfg}
 }
 func NewHandleInboxActivityUseCase(cfg ActivityPubFlowConfig) HandleInboxActivityUseCase {
 	requireTxProvider(cfg)
@@ -149,6 +239,42 @@ func requireFollowsRepo(cfg ActivityPubFlowConfig) {
 func requireContentSanitizer(cfg ActivityPubFlowConfig) {
 	if cfg.ContentSanitizer == nil {
 		panic("activitypub use case requires ContentSanitizer")
+	}
+}
+
+func requireNotesRepo(cfg ActivityPubFlowConfig) {
+	if cfg.NotesRepo == nil {
+		panic("activitypub use case requires NotesRepo")
+	}
+}
+
+func requireMediaRepo(cfg ActivityPubFlowConfig) {
+	if cfg.MediaRepo == nil {
+		panic("activitypub use case requires MediaRepo")
+	}
+}
+
+func requirePollsRepo(cfg ActivityPubFlowConfig) {
+	if cfg.PollsRepo == nil {
+		panic("activitypub use case requires PollsRepo")
+	}
+}
+
+func requireMentionsRepo(cfg ActivityPubFlowConfig) {
+	if cfg.MentionsRepo == nil {
+		panic("activitypub use case requires MentionsRepo")
+	}
+}
+
+func requireActorSerializer(cfg ActivityPubFlowConfig) {
+	if cfg.ActorSerializer == nil {
+		panic("activitypub use case requires ActorSerializer")
+	}
+}
+
+func requireSocialRepo(cfg ActivityPubFlowConfig) {
+	if cfg.SocialRepo == nil {
+		panic("activitypub use case requires SocialRepo")
 	}
 }
 

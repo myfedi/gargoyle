@@ -10,12 +10,12 @@ import (
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/ports"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
-	mastodonUC "github.com/myfedi/gargoyle/domain/usecases/mastodon"
+	clientapiUC "github.com/myfedi/gargoyle/domain/usecases/clientapi"
 )
 
 type ModerationWorkerConfig struct {
 	JobsRepo     repos.ModerationJobsRepository
-	API          mastodonUC.UseCase
+	API          clientapiUC.Moderation
 	MediaStorage ports.MediaStorage
 	Logger       *log.Logger
 	Interval     time.Duration
@@ -84,7 +84,7 @@ func (w *ModerationWorker) ProcessOnce(ctx context.Context) {
 func (w *ModerationWorker) processJob(ctx context.Context, job models.ModerationJob) error {
 	switch job.Kind {
 	case models.ModerationJobKindPurgeDomain:
-		var payload mastodonUC.PurgeDomainPayload
+		var payload clientapiUC.PurgeDomainPayload
 		if err := json.Unmarshal([]byte(job.Payload), &payload); err != nil {
 			return err
 		}

@@ -44,6 +44,10 @@ type OAuthConfig struct {
 	AllowPasswordGrant bool `mapstructure:"allow_password_grant"`
 }
 
+type ClientAPIConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 type Config struct {
 	Debug       bool              `mapstructure:"debug"`
 	Domain      string            `mapstructure:"domain"`
@@ -55,6 +59,7 @@ type Config struct {
 	Web         WebConfig         `mapstructure:"web"`
 	Media       MediaConfig       `mapstructure:"media"`
 	OAuth       OAuthConfig       `mapstructure:"oauth"`
+	ClientAPI   ClientAPIConfig   `mapstructure:"client_api"`
 }
 
 func (c Config) Host() string {
@@ -113,6 +118,7 @@ func NewConfig(configFile string) (*Config, error) {
 	viper.SetDefault("media.cleanup_interval", "1h")
 	viper.SetDefault("media.unattached_ttl", "24h")
 	viper.SetDefault("oauth.allow_password_grant", false)
+	viper.SetDefault("client_api.enabled", true)
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err

@@ -8,6 +8,7 @@ import (
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/ports"
+	"github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 )
 
@@ -15,6 +16,7 @@ import (
 // objects, primarily reply parents discovered through inReplyTo links.
 type HydrateRemoteObjectUseCase struct {
 	fetcher    ports.RemoteObjectFetcher
+	txProvider db.TxProvider
 	activities repos.ActivitiesRepository
 	notes      repos.NotesRepository
 	sanitizer  ports.ContentSanitizer
@@ -22,6 +24,7 @@ type HydrateRemoteObjectUseCase struct {
 
 type HydrateRemoteObjectConfig struct {
 	Fetcher        ports.RemoteObjectFetcher
+	TxProvider     db.TxProvider
 	ActivitiesRepo repos.ActivitiesRepository
 	NotesRepo      repos.NotesRepository
 	Sanitizer      ports.ContentSanitizer
@@ -40,7 +43,7 @@ func NewHydrateRemoteObjectUseCase(cfg HydrateRemoteObjectConfig) HydrateRemoteO
 	if cfg.Sanitizer == nil {
 		panic("hydrate remote object use case requires Sanitizer")
 	}
-	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, sanitizer: cfg.Sanitizer}
+	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, sanitizer: cfg.Sanitizer}
 }
 
 func (u HydrateRemoteObjectUseCase) HydrateRemoteObject(ctx context.Context, account models.Account, objectURI string) error {
@@ -51,26 +54,50 @@ func (u HydrateRemoteObjectUseCase) HydrateRemoteObject(ctx context.Context, acc
 	if err != nil {
 		return err
 	}
+	return u.HydrateRawObject(ctx, account, raw, "")
+}
+
+// HydrateRawObject persists a fetched ActivityPub Create/Note document. If expectedActor
+// is set, the extracted note must be attributed to that actor.
+func (u HydrateRemoteObjectUseCase) HydrateRawObject(ctx context.Context, account models.Account, raw []byte, expectedActor string) error {
 	note, ok := extractFetchedNote(raw)
-	if !ok {
+	if !ok || note.URI == "" || note.Visibility == "direct" {
 		return nil
 	}
-	if _, err := u.notes.GetNoteByURI(ctx, nil, note.URI); err == nil {
+	if expectedActor != "" && note.AttributedTo != expectedActor {
 		return nil
-	} else if err != sql.ErrNoRows {
+	}
+	persist := func(ctx context.Context, tx *db.Tx) error {
+		if _, err := u.notes.GetNoteByURI(ctx, tx, note.URI); err == nil {
+			return nil
+		} else if err != sql.ErrNoRows {
+			return err
+		}
+		activity, err := u.activities.CreateActivity(ctx, tx, repos.CreateActivityInput{LocalAccountID: account.ID, Direction: models.ActivityDirectionInbox, Type: "Create", Actor: note.AttributedTo, Object: note.URI, RawJSON: string(raw)})
+		if err != nil {
+			return err
+		}
+		replyID, replyURI := replyIDs(ctx, u.notes, tx, note)
+		publishedAt := note.PublishedAt
+		if publishedAt.IsZero() {
+			publishedAt = time.Now().UTC()
+		}
+		_, err = u.notes.CreateNote(ctx, tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: activity.ID, URI: note.URI, Content: u.sanitizer.SanitizeHTML(note.Content), PlainText: u.sanitizer.StripHTMLFromText(note.Content), ObjectType: note.Type, PollMultiple: note.PollMultiple, PollExpiresAt: note.PollExpiresAt, Hashtags: note.Hashtags, Emojis: note.Emojis, Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: publishedAt})
 		return err
 	}
-	activity, err := u.activities.CreateActivity(ctx, nil, repos.CreateActivityInput{LocalAccountID: account.ID, Direction: models.ActivityDirectionInbox, Type: "Create", Actor: note.AttributedTo, Object: note.URI, RawJSON: string(raw)})
-	if err != nil {
-		return err
+	if u.txProvider == nil {
+		return persist(ctx, nil)
 	}
-	replyID, replyURI := replyIDs(ctx, u.notes, nil, note)
-	_, err = u.notes.CreateNote(ctx, nil, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: activity.ID, URI: note.URI, Content: u.sanitizer.SanitizeHTML(note.Content), PlainText: u.sanitizer.StripHTMLFromText(note.Content), ObjectType: note.Type, PollMultiple: note.PollMultiple, PollExpiresAt: note.PollExpiresAt, Hashtags: note.Hashtags, Emojis: note.Emojis, Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: note.PublishedAt})
-	return err
+	return u.txProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
+		return persist(ctx, &tx)
+	})
 }
 
 func extractFetchedNote(raw []byte) (ExtractedNote, bool) {
 	if note, ok := ExtractNote(raw); ok {
+		return note, true
+	}
+	if note, ok := ExtractStandaloneNote(raw); ok {
 		return note, true
 	}
 	var doc struct {
@@ -88,5 +115,5 @@ func extractFetchedNote(raw []byte) (ExtractedNote, bool) {
 	if err != nil {
 		publishedAt = time.Now().UTC()
 	}
-	return ExtractedNote{URI: doc.ID, Content: doc.Content, AttributedTo: doc.AttributedTo, InReplyToURI: doc.InReplyTo, PublishedAt: publishedAt}, true
+	return ExtractedNote{URI: doc.ID, Type: doc.Type, Content: doc.Content, AttributedTo: doc.AttributedTo, InReplyToURI: doc.InReplyTo, PublishedAt: publishedAt}, true
 }

@@ -6,6 +6,8 @@ This project tries to provide a hackable, open to as much federation as possible
 
 Get started with the [documentation](https://github.com/myfedi/gargoyle/tree/main/docs) to get an overview.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the ActivityPub core / client API boundary and composition rules.
+
 ## Development
 
 ### Prerequisites
@@ -53,7 +55,7 @@ To run the server, run:
 go run cmd/web/server.go ./config.yml
 ```
 
-The repository also includes a first-party React/Vite Mastodon-compatible client in `frontend/`. For local UI development, configure `frontend/.env.local` from `frontend/.env.example` and run:
+The repository also includes a first-party React/Vite client in `frontend/`. It uses the optional local client API surface (`client_api.enabled: true`), which exposes OAuth and Mastodon-compatible `/api` routes for first-party and third-party clients. For local UI development, configure `frontend/.env.local` from `frontend/.env.example` and run:
 
 ```bash
 cd frontend

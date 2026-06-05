@@ -13,6 +13,11 @@ oauth:
   # Mastodon password-grant login.
   allow_password_grant: false
 
+# Optional local client API surface. This mounts OAuth and Mastodon-compatible
+# /api routes used by the first-party UI and third-party Mastodon clients.
+client_api:
+  enabled: true
+
 media:
   # Uploaded media bytes are stored on disk; only metadata is kept in SQLite.
   storage_dir: "./media"

@@ -3,6 +3,7 @@ package activitypub
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -16,6 +17,8 @@ type CreateOutboxActivityInput struct {
 	RawJSON    []byte
 	ActivityID string
 	ObjectID   string
+	Media      []models.MediaAttachment
+	Mentions   []models.Account
 }
 
 // CreateOutboxActivityResult contains committed local state plus delivery targets
@@ -23,7 +26,10 @@ type CreateOutboxActivityInput struct {
 type CreateOutboxActivityResult struct {
 	Account         models.Account
 	RawJSON         []byte
+	Note            *models.Note
+	Mentions        []models.Mention
 	FollowerInboxes []string
+	MentionInboxes  []string
 }
 
 // CreateOutboxActivity normalizes and persists a local outbox activity, creating
@@ -50,8 +56,13 @@ func (u *CreateOutboxActivityUseCase) CreateOutboxActivity(ctx context.Context, 
 
 	// The use case owns the transaction boundary for local state. Network fan-out
 	// is returned to infrastructure after commit through FollowerInboxes.
+	var createdNote *models.Note
+	var storedMentions []models.Mention
 	err := u.cfg.TxProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
-		return u.persistOutboxActivity(ctx, &tx, *account, activity, raw)
+		note, mentions, err := u.persistOutboxActivity(ctx, &tx, *account, activity, raw, input.Media, input.Mentions)
+		createdNote = note
+		storedMentions = mentions
+		return err
 	})
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -61,7 +72,7 @@ func (u *CreateOutboxActivityUseCase) CreateOutboxActivity(ctx context.Context, 
 	if derr != nil {
 		return nil, derr
 	}
-	return &CreateOutboxActivityResult{Account: *account, RawJSON: raw, FollowerInboxes: inboxes}, nil
+	return &CreateOutboxActivityResult{Account: *account, RawJSON: raw, Note: createdNote, Mentions: storedMentions, FollowerInboxes: inboxes, MentionInboxes: mentionInboxes(input.Mentions)}, nil
 }
 
 // persistOutboxActivity writes the activity and any derived Note inside the
@@ -73,7 +84,9 @@ func (u *CreateOutboxActivityUseCase) persistOutboxActivity(
 	account models.Account,
 	activity ParsedActivity,
 	raw []byte,
-) error {
+	media []models.MediaAttachment,
+	mentions []models.Account,
+) (*models.Note, []models.Mention, error) {
 	stored, err := u.cfg.ActivitiesRepo.CreateActivity(ctx, tx, repos.CreateActivityInput{
 		LocalAccountID: account.ID,
 		Direction:      models.ActivityDirectionOutbox,
@@ -83,21 +96,21 @@ func (u *CreateOutboxActivityUseCase) persistOutboxActivity(
 		RawJSON:        string(raw),
 	})
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if u.cfg.NotesRepo == nil {
-		return nil
+		return nil, nil, nil
 	}
 
 	note, ok := ExtractNote(raw)
 	if !ok {
-		return nil
+		return nil, nil, nil
 	}
 	// Replies may point at remote objects we do not have yet. Enqueueing a fetch
 	// records that dependency without performing network I/O inside the transaction.
 	replyID, replyURI := replyIDs(ctx, u.cfg.NotesRepo, tx, note)
 	if err := enqueueMissingReplyFetch(ctx, u.cfg.FetchJobsRepo, tx, account.ID, note, replyID); err != nil {
-		return err
+		return nil, nil, err
 	}
 	created, err := u.cfg.NotesRepo.CreateNote(ctx, tx, repos.CreateNoteInput{
 		LocalAccountID: account.ID,
@@ -115,13 +128,82 @@ func (u *CreateOutboxActivityUseCase) persistOutboxActivity(
 		PublishedAt:    note.PublishedAt,
 	})
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	return u.createPollOptions(ctx, tx, created.ID, note)
+	if err := u.createPollOptions(ctx, tx, created.ID, note); err != nil {
+		return nil, nil, err
+	}
+	storedMentions, err := u.attachObjectMetadata(ctx, tx, account, created.ID, media, mentions)
+	if err != nil {
+		return nil, nil, err
+	}
+	return created, storedMentions, nil
 }
 
 // followerInboxes returns delivery targets after commit. Delivery itself stays
 // in infrastructure so domain code never performs network side effects.
+func (u *CreateOutboxActivityUseCase) attachObjectMetadata(ctx context.Context, tx *db.Tx, account models.Account, noteID string, media []models.MediaAttachment, mentions []models.Account) ([]models.Mention, error) {
+	if u.cfg.MediaRepo != nil {
+		for _, item := range media {
+			if err := u.cfg.MediaRepo.AttachMediaToNote(ctx, tx, noteID, item.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if u.cfg.MentionsRepo != nil {
+		for _, mention := range mentions {
+			input := repos.CreateMentionInput{LocalAccountID: account.ID, NoteID: noteID, AccountID: mention.ID, Username: mention.Username, Acct: mentionAcct(mention), URL: mentionURL(mention, u.cfg.Host)}
+			if _, err := u.cfg.MentionsRepo.CreateMention(ctx, tx, input); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if u.cfg.SocialRepo != nil {
+		for _, mention := range mentions {
+			if mention.Domain != nil || mention.ID == account.ID {
+				continue
+			}
+			if _, err := u.cfg.SocialRepo.CreateNotification(ctx, tx, mention.ID, account.URI, "mention", &noteID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if u.cfg.MentionsRepo == nil {
+		return nil, nil
+	}
+	return u.cfg.MentionsRepo.ListMentionsForNote(ctx, tx, noteID)
+}
+
+func mentionAcct(account models.Account) string {
+	if account.Domain != nil && *account.Domain != "" {
+		return account.Username + "@" + *account.Domain
+	}
+	return account.Username
+}
+
+func mentionURL(account models.Account, host string) string {
+	if account.URL != nil && *account.URL != "" {
+		return *account.URL
+	}
+	if account.Domain == nil {
+		return strings.TrimRight(host, "/") + "/@" + account.Username
+	}
+	return account.URI
+}
+
+func mentionInboxes(mentions []models.Account) []string {
+	inboxes := make([]string, 0, len(mentions))
+	seen := map[string]bool{}
+	for _, mention := range mentions {
+		if mention.Domain == nil || mention.InboxURI == "" || seen[mention.InboxURI] {
+			continue
+		}
+		seen[mention.InboxURI] = true
+		inboxes = append(inboxes, mention.InboxURI)
+	}
+	return inboxes
+}
+
 func (u *CreateOutboxActivityUseCase) followerInboxes(ctx context.Context, accountID string) ([]string, *domainerrors.DomainError) {
 	if u.cfg.FollowsRepo == nil {
 		return nil, nil

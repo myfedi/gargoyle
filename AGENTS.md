@@ -108,13 +108,15 @@ Known limitations should be documented in `LIMITATIONS.md` rather than hidden in
 - Validate actor ownership for inbound mutation activities like `Create`, `Update`, and `Delete`.
 - Validate `Accept`/`Reject` Follow objects against the original follow relationship.
 
-## Mastodon-compatible API rules
+## Client API / Mastodon-compatible API rules
 
-Mastodon client API compatibility is separate from federation.
+Mastodon compatibility is a client API wire-format concern, separate from federation and not the domain model.
 
 - OAuth workflows live in `domain/usecases/oauth`.
-- Mastodon client API workflows live in `domain/usecases/mastodon`.
-- HTTP routes and JSON response shapes live in `infrastructure/web/handlers/mastodon`.
+- Local client/product workflows live in `domain/usecases/clientapi`.
+- Mastodon-compatible HTTP routes and JSON response shapes live in `infrastructure/web/handlers/clientapi`.
+- Runtime composition for client API workflows lives in infrastructure, not in domain.
+- Do not reintroduce a broad client API facade/use case, a single exported mega config, or a hidden shared dependency bag.
 - Reuse ActivityPub use cases for actions that affect federation, e.g. creating a status should go through the outbox workflow.
 - Add only the Mastodon API surface required by tested clients, but keep response shapes compatible enough for real UIs.
 

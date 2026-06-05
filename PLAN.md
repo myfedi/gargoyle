@@ -43,16 +43,18 @@ This is the working roadmap for making Gargoyle usable with a Mastodon-compatibl
 - [x] HTTP clients have timeouts.
 - [x] Body limits are configured.
 
-## Priority 1: split Mastodon use cases before adding more
+## Priority 1: separate ActivityPub core from client API workflows
 
-The current `domain/usecases/mastodon.UseCase` is becoming too broad. Split it before implementing more client API workflows.
+The old `domain/usecases/mastodon.UseCase` facade has been replaced by a clearer split:
+ActivityPub/federation workflows live in `domain/usecases/activitypub`, while local product/client workflows live in `domain/usecases/clientapi`.
 
-- [x] Split implementation across focused files for instance/status/timeline/account/relationship workflows.
-- [x] Keep HTTP response shape mapping in `infrastructure/web/handlers/mastodon`.
-- [x] Keep ActivityPub federation side effects routed through ActivityPub use cases.
-- [ ] Optionally split the facade into separate exported use case structs if this package grows further.
+- [x] Rename Mastodon-domain package/surfaces to client API naming where the logic is product/client workflow rather than federation core.
+- [x] Keep Mastodon-compatible response shape mapping in `infrastructure/web/handlers/clientapi`.
+- [x] Move ActivityPub federation side effects into focused ActivityPub use cases.
+- [x] Split the old broad facade into separate exported workflow structs: instance, accounts, statuses, timelines, interactions, notifications, conversations, media, profile, and moderation.
+- [x] Remove internal fake workflow/facade adapters and use explicit helper structs for shared client API assembly logic.
 
-## Priority 2: missing Mastodon follow/account endpoints
+## Priority 2: missing Mastodon-compatible follow/account endpoints
 
 Needed for real UI social graph flows.
 
@@ -60,7 +62,7 @@ Needed for real UI social graph flows.
   - [x] Delete outbound following row.
   - [x] Return signed Undo for delivery after commit.
 - [x] `GET /api/v1/accounts/:id/followers`.
-  - [x] Return local account followers in Mastodon account JSON.
+  - [x] Return local account followers in Mastodon-compatible account JSON.
   - [x] Prefer cached remote account profiles and refresh when missing.
 - [x] `GET /api/v1/accounts/:id/following`.
   - [x] Return accepted outbound follows.
@@ -84,7 +86,8 @@ Current follow/search can resolve remote actors, but follows mostly store actor 
 - [x] Add repository port for remote account lookup/upsert.
 - [x] Make search/follow cache resolved remote accounts.
 - [x] Update followers/following endpoints to prefer cached profile data.
-- [ ] Add stale-cache refresh policy instead of only refresh-on-miss.
+- [x] Add stale-cache refresh for timeline/rendered actors and poll vote delivery inbox resolution.
+- [ ] Expand stale-cache refresh policy to every remote-account read path if needed.
 
 ## Priority 4: real home timeline
 
@@ -172,12 +175,12 @@ Useful for search, actor refresh, missing referenced objects, and remote status 
 - [ ] Improve authorize page copy/UX.
 - [ ] Label login as email or username.
 - [ ] Add browser session cookie so repeated `/oauth/authorize` does not require password entry.
-- [ ] Add token revocation endpoint.
+- [x] Add token revocation endpoint.
 - [ ] Consider refresh tokens if the UI needs long-lived sessions.
 
 ## Priority 9: compatibility test loop
 
-- [ ] Test current search/follow/post flows against local GoToSocial again.
+- [x] Test current search/follow/post/federation flows against local GoToSocial again.
 - [ ] Test against Mastodon.
 - [ ] Test against Akkoma/Pleroma.
 - [ ] Record client/UI missing endpoints from actual logs rather than guessing.
