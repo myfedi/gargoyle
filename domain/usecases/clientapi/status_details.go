@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -99,6 +100,7 @@ func (u Statuses) statusDescendants(ctx context.Context, localAccount *models.Ac
 	if depth >= 40 {
 		return []TimelineItem{}, nil
 	}
+	u.cacheRemoteReplies(ctx, localAccount, note)
 	replies, err := u.deps.NotesRepo.ListReplies(ctx, nil, localAccount.ID, note.ID, note.URI)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -209,4 +211,11 @@ func (u Statuses) parentNote(ctx context.Context, localAccount *models.Account, 
 
 func (u Statuses) cacheRemoteContextNote(ctx context.Context, localAccount *models.Account, objectURI string) error {
 	return u.deps.HydrateRemoteObjectUC.HydrateRemoteObject(ctx, *localAccount, objectURI)
+}
+
+func (u Statuses) cacheRemoteReplies(ctx context.Context, localAccount *models.Account, note models.Note) {
+	if note.URI == "" || note.AttributedTo == localAccount.URI || !(strings.HasPrefix(note.URI, "https://") || strings.HasPrefix(note.URI, "http://")) {
+		return
+	}
+	_ = u.deps.HydrateRemoteObjectUC.HydrateRemoteReplies(ctx, *localAccount, note.URI)
 }

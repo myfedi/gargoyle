@@ -204,6 +204,21 @@ export function StatusPage({ route }: StatusPageProps) {
     [ancestors, descendants, status],
   );
 
+  const replyTargets = useMemo(() => {
+    const statusesById = new Map(fullThread.map((threadStatus) => [threadStatus.id, threadStatus]));
+    const targets = new Map<string, MastodonStatus>();
+    for (const threadStatus of fullThread) {
+      if (!threadStatus.in_reply_to_id) {
+        continue;
+      }
+      const target = statusesById.get(threadStatus.in_reply_to_id);
+      if (target) {
+        targets.set(threadStatus.id, target);
+      }
+    }
+    return targets;
+  }, [fullThread]);
+
   return (
     <section className="mx-auto max-w-2xl space-y-5">
       <Panel title="Thread">
@@ -227,6 +242,7 @@ export function StatusPage({ route }: StatusPageProps) {
         ) : fullThread.length > 0 ? (
           <StatusList
             statuses={fullThread}
+            replyTargets={replyTargets}
             currentAccountId={currentAccount?.id}
             emptyTitle="Post not found"
             emptyDescription="No post to show."

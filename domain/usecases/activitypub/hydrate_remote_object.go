@@ -3,7 +3,12 @@ package activitypub
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -19,15 +24,19 @@ type HydrateRemoteObjectUseCase struct {
 	txProvider db.TxProvider
 	activities repos.ActivitiesRepository
 	notes      repos.NotesRepository
+	media      repos.MediaRepository
+	remotes    repos.RemoteAccountsRepository
 	sanitizer  ports.ContentSanitizer
 }
 
 type HydrateRemoteObjectConfig struct {
-	Fetcher        ports.RemoteObjectFetcher
-	TxProvider     db.TxProvider
-	ActivitiesRepo repos.ActivitiesRepository
-	NotesRepo      repos.NotesRepository
-	Sanitizer      ports.ContentSanitizer
+	Fetcher            ports.RemoteObjectFetcher
+	TxProvider         db.TxProvider
+	ActivitiesRepo     repos.ActivitiesRepository
+	NotesRepo          repos.NotesRepository
+	MediaRepo          repos.MediaRepository
+	RemoteAccountsRepo repos.RemoteAccountsRepository
+	Sanitizer          ports.ContentSanitizer
 }
 
 func NewHydrateRemoteObjectUseCase(cfg HydrateRemoteObjectConfig) HydrateRemoteObjectUseCase {
@@ -43,7 +52,7 @@ func NewHydrateRemoteObjectUseCase(cfg HydrateRemoteObjectConfig) HydrateRemoteO
 	if cfg.Sanitizer == nil {
 		panic("hydrate remote object use case requires Sanitizer")
 	}
-	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, sanitizer: cfg.Sanitizer}
+	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer}
 }
 
 func (u HydrateRemoteObjectUseCase) HydrateRemoteObject(ctx context.Context, account models.Account, objectURI string) error {
@@ -53,6 +62,100 @@ func (u HydrateRemoteObjectUseCase) HydrateRemoteObject(ctx context.Context, acc
 	raw, err := u.fetcher.FetchObject(ctx, objectURI, &account)
 	if err != nil {
 		return err
+	}
+	return u.HydrateRawObject(ctx, account, raw, "")
+}
+
+func (u HydrateRemoteObjectUseCase) HydrateRemoteReplies(ctx context.Context, account models.Account, objectURI string) error {
+	raw, err := u.fetcher.FetchObject(ctx, objectURI, &account)
+	if err != nil {
+		return err
+	}
+	return u.hydrateReplyCollection(ctx, account, objectURI, raw, 0, map[string]bool{objectURI: true})
+}
+
+func (u HydrateRemoteObjectUseCase) hydrateReplyCollection(ctx context.Context, account models.Account, parentURI string, raw []byte, depth int, seen map[string]bool) error {
+	if depth >= 4 {
+		return nil
+	}
+	items, links := extractReplyCollection(raw)
+	u.hydrateReplyItems(ctx, account, parentURI, items)
+	pages := u.fetchReplyPages(ctx, account, links, seen)
+	for _, page := range pages {
+		if err := u.hydrateReplyCollection(ctx, account, parentURI, page, depth+1, seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (u HydrateRemoteObjectUseCase) hydrateReplyItems(ctx context.Context, account models.Account, parentURI string, items []json.RawMessage) {
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for _, item := range items {
+		item := item
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return
+			}
+			_ = u.hydrateReplyItem(ctx, account, parentURI, item)
+		}()
+	}
+	wg.Wait()
+}
+
+func (u HydrateRemoteObjectUseCase) fetchReplyPages(ctx context.Context, account models.Account, links []string, seen map[string]bool) [][]byte {
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	pages := make([][]byte, 0, len(links))
+	for _, link := range links {
+		if link == "" || seen[link] {
+			continue
+		}
+		seen[link] = true
+		link := link
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return
+			}
+			page, err := u.fetcher.FetchObject(ctx, link, &account)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			pages = append(pages, page)
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	return pages
+}
+
+func (u HydrateRemoteObjectUseCase) hydrateReplyItem(ctx context.Context, account models.Account, parentURI string, item json.RawMessage) error {
+	if fetchedNoteRepliesTo(item, parentURI) {
+		return u.HydrateRawObject(ctx, account, item, "")
+	}
+	uri := replyItemURI(item)
+	if uri == "" {
+		return nil
+	}
+	raw, err := u.fetcher.FetchObject(ctx, uri, &account)
+	if err != nil {
+		return err
+	}
+	if !fetchedNoteRepliesTo(raw, parentURI) {
+		return nil
 	}
 	return u.HydrateRawObject(ctx, account, raw, "")
 }
@@ -67,10 +170,17 @@ func (u HydrateRemoteObjectUseCase) HydrateRawObject(ctx context.Context, accoun
 	if expectedActor != "" && note.AttributedTo != expectedActor {
 		return nil
 	}
+	author := u.fetchRemoteAuthor(ctx, account, note.AttributedTo)
 	persist := func(ctx context.Context, tx *db.Tx) error {
-		if _, err := u.notes.GetNoteByURI(ctx, tx, note.URI); err == nil {
-			return nil
+		if existing, err := u.notes.GetNoteByURI(ctx, tx, note.URI); err == nil {
+			if err := u.ensureFetchedNoteAuthor(ctx, tx, author); err != nil {
+				return err
+			}
+			return u.ensureFetchedNoteMedia(ctx, tx, account, existing.ID, note.Media)
 		} else if err != sql.ErrNoRows {
+			return err
+		}
+		if err := u.ensureFetchedNoteAuthor(ctx, tx, author); err != nil {
 			return err
 		}
 		activity, err := u.activities.CreateActivity(ctx, tx, repos.CreateActivityInput{LocalAccountID: account.ID, Direction: models.ActivityDirectionInbox, Type: "Create", Actor: note.AttributedTo, Object: note.URI, RawJSON: string(raw)})
@@ -82,8 +192,11 @@ func (u HydrateRemoteObjectUseCase) HydrateRawObject(ctx context.Context, accoun
 		if publishedAt.IsZero() {
 			publishedAt = time.Now().UTC()
 		}
-		_, err = u.notes.CreateNote(ctx, tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: activity.ID, URI: note.URI, Content: u.sanitizer.SanitizeHTML(note.Content), PlainText: u.sanitizer.StripHTMLFromText(note.Content), ObjectType: note.Type, PollMultiple: note.PollMultiple, PollExpiresAt: note.PollExpiresAt, Hashtags: note.Hashtags, Emojis: note.Emojis, Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: publishedAt})
-		return err
+		created, err := u.notes.CreateNote(ctx, tx, repos.CreateNoteInput{LocalAccountID: account.ID, ActivityID: activity.ID, URI: note.URI, Content: u.sanitizer.SanitizeHTML(note.Content), PlainText: u.sanitizer.StripHTMLFromText(note.Content), ObjectType: note.Type, PollMultiple: note.PollMultiple, PollExpiresAt: note.PollExpiresAt, Hashtags: note.Hashtags, Emojis: note.Emojis, Visibility: note.Visibility, Sensitive: note.Sensitive, SpoilerText: note.SpoilerText, AttributedTo: note.AttributedTo, InReplyToID: replyID, InReplyToURI: replyURI, PublishedAt: publishedAt})
+		if err != nil {
+			return err
+		}
+		return u.ensureFetchedNoteMedia(ctx, tx, account, created.ID, note.Media)
 	}
 	if u.txProvider == nil {
 		return persist(ctx, nil)
@@ -91,6 +204,229 @@ func (u HydrateRemoteObjectUseCase) HydrateRawObject(ctx context.Context, accoun
 	return u.txProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
 		return persist(ctx, &tx)
 	})
+}
+
+func (u HydrateRemoteObjectUseCase) fetchRemoteAuthor(ctx context.Context, signer models.Account, actorURI string) *models.Account {
+	if u.remotes == nil || actorURI == "" {
+		return nil
+	}
+	if existing, err := u.remotes.GetRemoteAccountByURI(ctx, nil, actorURI); err == nil && existing.AvatarURL != nil && *existing.AvatarURL != "" {
+		return nil
+	}
+	raw, err := u.fetcher.FetchObject(ctx, actorURI, &signer)
+	if err != nil {
+		return nil
+	}
+	author, ok := extractRemoteActor(raw)
+	if !ok || author.URI != actorURI {
+		return nil
+	}
+	return &author
+}
+
+func (u HydrateRemoteObjectUseCase) ensureFetchedNoteAuthor(ctx context.Context, tx *db.Tx, author *models.Account) error {
+	if u.remotes == nil || author == nil {
+		return nil
+	}
+	_, err := u.remotes.UpsertRemoteAccount(ctx, tx, *author)
+	return err
+}
+
+func extractRemoteActor(raw []byte) (models.Account, bool) {
+	var doc struct {
+		ID                string          `json:"id"`
+		Type              string          `json:"type"`
+		PreferredUsername string          `json:"preferredUsername"`
+		Name              string          `json:"name"`
+		Summary           string          `json:"summary"`
+		URL               json.RawMessage `json:"url"`
+		Icon              json.RawMessage `json:"icon"`
+		Image             json.RawMessage `json:"image"`
+		Inbox             string          `json:"inbox"`
+		Outbox            string          `json:"outbox"`
+		Followers         string          `json:"followers"`
+		Following         string          `json:"following"`
+		Locked            bool            `json:"manuallyApprovesFollowers"`
+		PublicKey         struct {
+			PublicKeyPem string `json:"publicKeyPem"`
+		} `json:"publicKey"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil || doc.ID == "" || doc.PreferredUsername == "" {
+		return models.Account{}, false
+	}
+	domain := ""
+	if parsed, err := url.Parse(doc.ID); err == nil {
+		domain = parsed.Host
+	}
+	actorURL := remoteActorURL(doc.URL)
+	return models.Account{ID: remoteActorID(doc.ID), Username: doc.PreferredUsername, Domain: stringPtr(domain), DisplayName: stringPtr(firstNonEmpty(doc.Name, doc.PreferredUsername)), Summary: stringPtr(doc.Summary), URI: doc.ID, URL: stringPtr(firstNonEmpty(actorURL, doc.ID)), AvatarURL: stringPtr(remoteActorURL(doc.Icon)), HeaderURL: stringPtr(remoteActorURL(doc.Image)), InboxURI: doc.Inbox, OutboxURI: stringPtr(doc.Outbox), FollowingURI: doc.Following, FollowersURI: doc.Followers, PublicKey: doc.PublicKey.PublicKeyPem, ActorType: models.ActorTypePerson, Locked: doc.Locked}, true
+}
+
+func remoteActorID(actor string) string {
+	return "remote:" + base64.RawURLEncoding.EncodeToString([]byte(actor))
+}
+
+func remoteActorURL(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value
+	}
+	var object struct {
+		URL  string `json:"url"`
+		Href string `json:"href"`
+	}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return ""
+	}
+	if object.URL != "" {
+		return object.URL
+	}
+	return object.Href
+}
+
+func (u HydrateRemoteObjectUseCase) ensureFetchedNoteMedia(ctx context.Context, tx *db.Tx, account models.Account, noteID string, attachments []ExtractedMediaAttachment) error {
+	if u.media == nil || len(attachments) == 0 {
+		return nil
+	}
+	existing, err := u.media.ListMediaForNote(ctx, tx, noteID)
+	if err != nil {
+		return err
+	}
+	if len(existing) > 0 {
+		return nil
+	}
+	for _, attachment := range attachments {
+		if attachment.URL == "" || !(strings.HasPrefix(attachment.URL, "https://") || strings.HasPrefix(attachment.URL, "http://")) {
+			continue
+		}
+		media, err := u.media.CreateMediaAttachment(ctx, tx, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: remoteMediaFileName(attachment.URL), ContentType: remoteMediaContentType(attachment), StoragePath: attachment.URL, Description: attachment.Description})
+		if err != nil {
+			return err
+		}
+		if err := u.media.AttachMediaToNote(ctx, tx, noteID, media.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func remoteMediaFileName(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "remote-media"
+	}
+	name := filepath.Base(parsed.Path)
+	if name == "." || name == "/" || name == "" {
+		return "remote-media"
+	}
+	return name
+}
+
+func remoteMediaContentType(attachment ExtractedMediaAttachment) string {
+	if attachment.MediaType != "" {
+		return attachment.MediaType
+	}
+	ext := strings.ToLower(filepath.Ext(remoteMediaFileName(attachment.URL)))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".mp4":
+		return "video/mp4"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".ogg", ".oga":
+		return "audio/ogg"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func replyItemURI(raw json.RawMessage) string {
+	var uri string
+	if err := json.Unmarshal(raw, &uri); err == nil {
+		return uri
+	}
+	var link struct {
+		ID   string `json:"id"`
+		Href string `json:"href"`
+	}
+	if err := json.Unmarshal(raw, &link); err != nil {
+		return ""
+	}
+	if link.ID != "" {
+		return link.ID
+	}
+	return link.Href
+}
+
+func extractReplyCollection(raw []byte) ([]json.RawMessage, []string) {
+	var doc struct {
+		Replies json.RawMessage `json:"replies"`
+		Items   json.RawMessage `json:"items"`
+		Ordered json.RawMessage `json:"orderedItems"`
+		First   json.RawMessage `json:"first"`
+		Next    json.RawMessage `json:"next"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, nil
+	}
+	items := append(rawItems(doc.Items), rawItems(doc.Ordered)...)
+	links := []string{}
+	for _, child := range []json.RawMessage{doc.Replies, doc.First, doc.Next} {
+		childItems, childLinks := rawCollection(child)
+		items = append(items, childItems...)
+		links = append(links, childLinks...)
+	}
+	return items, uniqueStrings(links)
+}
+
+func rawItems(raw json.RawMessage) []json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err == nil {
+		return items
+	}
+	return nil
+}
+
+func rawCollection(raw json.RawMessage) ([]json.RawMessage, []string) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var link string
+	if err := json.Unmarshal(raw, &link); err == nil && link != "" {
+		return nil, []string{link}
+	}
+	return extractReplyCollection(raw)
+}
+
+func uniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	res := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		res = append(res, value)
+	}
+	return res
+}
+
+func fetchedNoteRepliesTo(raw []byte, parentURI string) bool {
+	note, ok := extractFetchedNote(raw)
+	return ok && note.InReplyToURI != nil && *note.InReplyToURI == parentURI
 }
 
 func extractFetchedNote(raw []byte) (ExtractedNote, bool) {

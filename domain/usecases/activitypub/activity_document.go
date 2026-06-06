@@ -180,6 +180,14 @@ type ExtractedNote struct {
 	PollExpiresAt *time.Time
 	Hashtags      []string
 	Emojis        []models.CustomEmoji
+	Media         []ExtractedMediaAttachment
+}
+
+type ExtractedMediaAttachment struct {
+	URL         string
+	MediaType   string
+	Name        string
+	Description string
 }
 
 type extractedNoteJSON struct {
@@ -195,6 +203,7 @@ type extractedNoteJSON struct {
 	To           json.RawMessage `json:"to"`
 	CC           json.RawMessage `json:"cc"`
 	Tag          json.RawMessage `json:"tag"`
+	Attachment   json.RawMessage `json:"attachment"`
 	Published    string          `json:"published"`
 	EndTime      string          `json:"endTime"`
 	OneOf        json.RawMessage `json:"oneOf"`
@@ -280,7 +289,7 @@ func extractedNoteFromJSON(note extractedNoteJSON) ExtractedNote {
 		expiresAt = &parsed
 	}
 	pollOptions, multiple := extractPollOptions(note.OneOf, note.AnyOf)
-	return ExtractedNote{URI: note.ID, Type: normalizedObjectType(note.Type), Content: content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: extractStringList(note.To), CC: extractStringList(note.CC), PublishedAt: publishedAt, PollOptions: pollOptions, PollMultiple: multiple, PollExpiresAt: expiresAt, Hashtags: extractHashtags(note.Tag), Emojis: extractEmojis(note.Tag)}
+	return ExtractedNote{URI: note.ID, Type: normalizedObjectType(note.Type), Content: content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: extractStringList(note.To), CC: extractStringList(note.CC), PublishedAt: publishedAt, PollOptions: pollOptions, PollMultiple: multiple, PollExpiresAt: expiresAt, Hashtags: extractHashtags(note.Tag), Emojis: extractEmojis(note.Tag), Media: extractMediaAttachments(note.Attachment)}
 }
 
 // ExtractLocalRecipientUsernames returns local actor usernames referenced by an
@@ -379,6 +388,46 @@ func extractStringList(raw json.RawMessage) []string {
 
 func extractHashtags(raw json.RawMessage) []string {
 	return extractTagNames(raw, "Hashtag")
+}
+
+func extractMediaAttachments(raw json.RawMessage) []ExtractedMediaAttachment {
+	if len(raw) == 0 {
+		return nil
+	}
+	var attachments []struct {
+		Type      string `json:"type"`
+		URL       string `json:"url"`
+		Href      string `json:"href"`
+		MediaType string `json:"mediaType"`
+		Name      string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &attachments); err != nil {
+		var attachment struct {
+			Type      string `json:"type"`
+			URL       string `json:"url"`
+			Href      string `json:"href"`
+			MediaType string `json:"mediaType"`
+			Name      string `json:"name"`
+		}
+		if err := json.Unmarshal(raw, &attachment); err != nil {
+			return nil
+		}
+		attachments = append(attachments, attachment)
+	}
+	seen := map[string]bool{}
+	res := make([]ExtractedMediaAttachment, 0, len(attachments))
+	for _, attachment := range attachments {
+		url := strings.TrimSpace(attachment.URL)
+		if url == "" {
+			url = strings.TrimSpace(attachment.Href)
+		}
+		if url == "" || seen[url] || attachment.Type == "Link" {
+			continue
+		}
+		seen[url] = true
+		res = append(res, ExtractedMediaAttachment{URL: url, MediaType: strings.TrimSpace(attachment.MediaType), Name: strings.TrimSpace(attachment.Name), Description: strings.TrimSpace(attachment.Name)})
+	}
+	return res
 }
 
 func extractTagNames(raw json.RawMessage, typ string) []string {

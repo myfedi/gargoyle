@@ -23,6 +23,7 @@ export type StatusAction = "bookmark" | "unbookmark" | "pin" | "unpin" | "favour
 
 type StatusListProps = {
   statuses: MastodonStatus[];
+  replyTargets?: Map<string, MastodonStatus>;
   currentAccountId?: string;
   emptyTitle: string;
   emptyDescription: string;
@@ -39,6 +40,7 @@ type StatusListProps = {
 
 export function StatusList({
   statuses,
+  replyTargets,
   currentAccountId,
   emptyTitle,
   emptyDescription,
@@ -70,8 +72,8 @@ export function StatusList({
 
   return (
     <>
-      <div className="mx-auto w-full max-w-2xl divide-y divide-border">
-        {statuses.map((status) => {
+      <div className="mx-auto w-full max-w-2xl">
+        {statuses.map((status, index) => {
           const displayedStatus = status.reblog ?? status;
           const canOwn = Boolean(currentAccountId && displayedStatus.account.id === currentAccountId);
           const canDelete = Boolean(onDelete && canOwn);
@@ -82,15 +84,24 @@ export function StatusList({
           const canInteract = Boolean(onAction);
           const isActing = actingStatusId === displayedStatus.id;
           const afterStatus = renderAfterStatus?.(displayedStatus) ?? null;
+          const replyTarget = replyTargets?.get(displayedStatus.id);
+          const previousStatus = statuses[index - 1]?.reblog ?? statuses[index - 1];
+          const nextStatus = statuses[index + 1]?.reblog ?? statuses[index + 1];
+          const continuesFromPrevious = Boolean(previousStatus && displayedStatus.in_reply_to_id === previousStatus.id);
+          const continuesToNext = Boolean(nextStatus && nextStatus.in_reply_to_id === displayedStatus.id);
           return (
             <article key={status.id} data-status-id={(status.reblog ?? status).id} className="py-4 first:pt-0 last:pb-0">
+              {index > 0 && !continuesFromPrevious ? <div className="mb-4 border-t border-border" aria-hidden="true" /> : null}
               {status.reblog ? (
                 <p className="mb-2 text-xs text-muted-foreground">
                   {status.account.display_name || status.account.username} boosted
                 </p>
               ) : null}
-              <div className="flex items-start gap-3">
-                {displayedStatus.account.avatar ? <img className="size-10 rounded-full border border-border object-cover" src={displayedStatus.account.avatar} alt="" aria-hidden="true" /> : null}
+              <div className="relative flex items-start gap-3">
+                {continuesToNext ? <div className="absolute bottom-[-1rem] left-5 top-12 w-px bg-border" aria-hidden="true" /> : null}
+                <div className="relative z-10 flex shrink-0 flex-col items-center self-stretch">
+                  {displayedStatus.account.avatar ? <img className="size-10 rounded-full border border-border object-cover" src={displayedStatus.account.avatar} alt="" aria-hidden="true" /> : <div className="size-10 rounded-full border border-border bg-secondary" aria-hidden="true" />}
+                </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <a className="text-sm font-semibold hover:underline" href={accountHref(displayedStatus.account.id)}>
@@ -103,6 +114,7 @@ export function StatusList({
                       <time dateTime={displayedStatus.created_at}>{formatDateTime(displayedStatus.created_at)}</time>
                     </a>
                   </div>
+                  {replyTarget ? <ReplyTarget status={replyTarget} /> : null}
                   <StatusBody html={displayedStatus.content} mentions={displayedStatus.mentions} tags={displayedStatus.tags} emojis={displayedStatus.emojis} spoilerText={displayedStatus.spoiler_text}>
                     <StatusPoll status={displayedStatus} onVote={onVotePoll ? (choices) => onVotePoll(displayedStatus, choices) : undefined} />
                     <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
@@ -248,6 +260,19 @@ export function StatusList({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function ReplyTarget({ status }: { status: MastodonStatus }) {
+  const displayName = status.account.display_name || status.account.username;
+  return (
+    <p className="mt-1 text-xs text-muted-foreground">
+      Replying to{" "}
+      <a className="font-medium text-foreground hover:underline" href={statusHref(status.id)}>
+        {displayName}
+      </a>
+      <span className="ml-1">@{status.account.acct}</span>
+    </p>
   );
 }
 
