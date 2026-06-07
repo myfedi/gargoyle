@@ -94,6 +94,12 @@ func (u Media) GetMedia(ctx context.Context, id string) (*models.MediaAttachment
 		}
 	}
 	data, err := u.deps.MediaStorage.ReadMedia(ctx, media.StoragePath)
+	if err != nil && media.RemoteURL != nil && *media.RemoteURL != "" {
+		if derr := u.recacheRemoteMedia(ctx, media); derr != nil {
+			return nil, derr
+		}
+		data, err = u.deps.MediaStorage.ReadMedia(ctx, media.StoragePath)
+	}
 	if err != nil {
 		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
 	}
