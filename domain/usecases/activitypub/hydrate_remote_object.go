@@ -305,12 +305,18 @@ func (u HydrateRemoteObjectUseCase) ensureFetchedNoteMedia(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if len(existing) > 0 {
-		return nil
+	existingRemoteURLs := map[string]bool{}
+	for _, media := range existing {
+		if media.RemoteURL != nil && *media.RemoteURL != "" {
+			existingRemoteURLs[*media.RemoteURL] = true
+		}
 	}
 	now := time.Now().UTC()
 	for _, attachment := range attachments {
 		if attachment.URL == "" || !(strings.HasPrefix(attachment.URL, "https://") || strings.HasPrefix(attachment.URL, "http://")) {
+			continue
+		}
+		if existingRemoteURLs[attachment.URL] {
 			continue
 		}
 		if existing, err := u.media.GetMediaAttachmentByRemoteURL(ctx, tx, attachment.URL); err == nil {
