@@ -228,6 +228,9 @@ func (u HydrateRemoteObjectUseCase) ensureFetchedNoteAuthor(ctx context.Context,
 	if u.remotes == nil || author == nil {
 		return nil
 	}
+	if existing, err := u.remotes.GetRemoteAccountByURI(ctx, tx, author.URI); err == nil && existing.AvatarURL != nil && *existing.AvatarURL != "" {
+		return nil
+	}
 	_, err := u.remotes.UpsertRemoteAccount(ctx, tx, *author)
 	return err
 }
