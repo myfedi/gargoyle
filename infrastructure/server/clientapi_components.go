@@ -55,6 +55,7 @@ type clientAPIWorkflowContext struct {
 	idGenerator           ports.IDGenerator
 	remoteResolver        clientapiUsecases.RemoteAccountResolver
 	remoteObjectFetcher   clientapiHandlers.RemoteObjectFetcher
+	remoteMediaFetcher    clientapiHandlers.RemoteMediaFetcher
 	hydrateRemoteObjectUC apUsecases.HydrateRemoteObjectUseCase
 	createOutboxUC        apUsecases.CreateOutboxActivityUseCase
 	createFollowingUC     apUsecases.CreateFollowingUseCase
@@ -126,18 +127,22 @@ func buildClientAPIComponents(in clientAPIWorkflowInputs) clientAPIComponents {
 
 func newClientAPIWorkflowContext(in clientAPIWorkflowInputs) clientAPIWorkflowContext {
 	remoteObjectFetcher := clientapiHandlers.NewRemoteObjectFetcher(nil, in.URLExceptions)
+	remoteMediaFetcher := clientapiHandlers.NewRemoteMediaFetcher(nil, in.URLExceptions)
 	return clientAPIWorkflowContext{
 		in:                  in,
 		common:              clientapiUsecases.CommonConfig{Host: in.Host, Domain: in.Domain, ServerVersion: in.ServerVersion},
 		idGenerator:         adapters.NewULIDGenerator(),
 		remoteResolver:      clientapiHandlers.NewRemoteAccountResolver(nil, in.URLExceptions),
 		remoteObjectFetcher: remoteObjectFetcher,
+		remoteMediaFetcher:  remoteMediaFetcher,
 		hydrateRemoteObjectUC: apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{
 			TxProvider:         in.TxProvider,
 			Fetcher:            remoteObjectFetcher,
 			ActivitiesRepo:     in.ActivitiesRepo,
 			NotesRepo:          in.NotesRepo,
 			MediaRepo:          in.MediaRepo,
+			MediaStorage:       in.MediaStorage,
+			RemoteMediaFetcher: remoteMediaFetcher,
 			RemoteAccountsRepo: in.RemoteAccountsRepo,
 			Sanitizer:          in.ContentSanitizer,
 		}),
@@ -281,9 +286,10 @@ func buildConversationsWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.
 
 func buildMediaWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.Media {
 	return clientapiUsecases.NewMedia(clientapiUsecases.MediaConfig{
-		MediaRepo:    ctx.in.MediaRepo,
-		MediaStorage: ctx.in.MediaStorage,
-		IDGenerator:  ctx.idGenerator,
+		MediaRepo:          ctx.in.MediaRepo,
+		MediaStorage:       ctx.in.MediaStorage,
+		RemoteMediaFetcher: ctx.remoteMediaFetcher,
+		IDGenerator:        ctx.idGenerator,
 	})
 }
 

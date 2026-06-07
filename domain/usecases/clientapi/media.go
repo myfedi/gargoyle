@@ -2,6 +2,8 @@ package clientapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"strings"
 	"time"
@@ -51,7 +53,7 @@ func (u Media) UploadMedia(ctx context.Context, account *models.Account, input U
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	media, err := u.deps.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: input.FileName, ContentType: contentType, StoragePath: storagePath, Description: input.Description})
+	media, err := u.deps.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: input.FileName, ContentType: contentType, StoragePath: storagePath, FileSize: int64(len(input.Data)), Description: input.Description})
 	if err != nil {
 		_ = u.deps.MediaStorage.DeleteMedia(ctx, storagePath)
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -87,14 +89,58 @@ func (u Media) GetMedia(ctx context.Context, id string) (*models.MediaAttachment
 		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
 	}
 	if media.StoragePath == "" {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
+		if derr := u.recacheRemoteMedia(ctx, media); derr != nil {
+			return nil, derr
+		}
 	}
 	data, err := u.deps.MediaStorage.ReadMedia(ctx, media.StoragePath)
 	if err != nil {
 		return nil, domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
 	}
+	if media.RemoteURL != nil && *media.RemoteURL != "" {
+		_ = u.deps.MediaRepo.MarkMediaAccessed(ctx, nil, media.ID, time.Now().UTC())
+	}
 	media.Data = data
 	return media, nil
+}
+
+func (u Media) recacheRemoteMedia(ctx context.Context, media *models.MediaAttachment) *domainerrors.DomainError {
+	if media.RemoteURL == nil || *media.RemoteURL == "" || u.deps.RemoteMediaFetcher == nil {
+		return domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
+	}
+	fetched, err := u.deps.RemoteMediaFetcher.FetchMedia(ctx, *media.RemoteURL, MaxMediaUploadBytes)
+	if err != nil {
+		return domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
+	}
+	contentType, derr := safeMediaContentType(fetched.ContentType, fetched.Data)
+	if derr != nil {
+		return domainerrors.New(domainerrors.ErrNotFound, mediaNotFoundMessage)
+	}
+	fileName := strings.TrimSpace(fetched.FileName)
+	if fileName == "" || fileName == "." || fileName == "/" {
+		fileName = media.FileName
+	}
+	storagePath, err := u.deps.MediaStorage.SaveMedia(ctx, remoteMediaCacheKey(*media.RemoteURL), fileName, fetched.Data)
+	if err != nil {
+		return domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	now := time.Now().UTC()
+	if err := u.deps.MediaRepo.UpdateMediaStorage(ctx, nil, media.ID, storagePath, contentType, fileName, int64(len(fetched.Data)), now); err != nil {
+		_ = u.deps.MediaStorage.DeleteMedia(ctx, storagePath)
+		return domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	media.StoragePath = storagePath
+	media.ContentType = contentType
+	media.FileName = fileName
+	media.FileSize = int64(len(fetched.Data))
+	media.RemoteFetchedAt = &now
+	media.RemoteLastAccessedAt = &now
+	return nil
+}
+
+func remoteMediaCacheKey(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return "remote-" + hex.EncodeToString(sum[:])
 }
 
 func (u Media) UpdateMedia(ctx context.Context, account *models.Account, id string, input UpdateMediaInput) (*models.MediaAttachment, *domainerrors.DomainError) {

@@ -110,7 +110,7 @@ func mediaResponses(media []models.MediaAttachment) []mediaAttachmentResponse {
 
 func mediaResponse(media models.MediaAttachment) mediaAttachmentResponse {
 	url := "/media/" + media.ID
-	if strings.HasPrefix(media.StoragePath, "https://") || strings.HasPrefix(media.StoragePath, "http://") {
+	if media.RemoteURL == nil && (strings.HasPrefix(media.StoragePath, "https://") || strings.HasPrefix(media.StoragePath, "http://")) {
 		url = media.StoragePath
 	}
 	return mediaAttachmentResponse{ID: media.ID, Type: mediaType(media.ContentType), URL: url, PreviewURL: url, Description: media.Description}

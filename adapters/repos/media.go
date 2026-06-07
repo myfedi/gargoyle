@@ -40,7 +40,7 @@ func (r *MediaRepo) CreateMediaAttachment(ctx context.Context, tx *dbPorts.Tx, i
 	if err != nil {
 		return nil, err
 	}
-	row := &dbModels.MediaAttachment{ID: id, LocalAccountID: input.LocalAccountID, FileName: input.FileName, ContentType: input.ContentType, StoragePath: input.StoragePath, Description: input.Description}
+	row := &dbModels.MediaAttachment{ID: id, LocalAccountID: input.LocalAccountID, FileName: input.FileName, ContentType: input.ContentType, StoragePath: input.StoragePath, RemoteURL: input.RemoteURL, RemoteFetchedAt: input.RemoteFetchedAt, RemoteLastAccessedAt: input.RemoteLastAccessedAt, FileSize: input.FileSize, Description: input.Description}
 	if _, err := db.NewInsert().Model(row).Exec(ctx); err != nil {
 		return nil, err
 	}
@@ -61,6 +61,19 @@ func (r *MediaRepo) GetMediaAttachmentByID(ctx context.Context, tx *dbPorts.Tx, 
 	return &model, nil
 }
 
+func (r *MediaRepo) GetMediaAttachmentByRemoteURL(ctx context.Context, tx *dbPorts.Tx, remoteURL string) (*models.MediaAttachment, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	var row dbModels.MediaAttachment
+	if err := db.NewSelect().Model(&row).Where("remote_url = ?", remoteURL).Scan(ctx); err != nil { // NOSONAR
+		return nil, err
+	}
+	model := row.ToModel()
+	return &model, nil
+}
+
 func (r *MediaRepo) UpdateMediaAttachmentDescription(ctx context.Context, tx *dbPorts.Tx, id, description string) (*models.MediaAttachment, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
@@ -71,6 +84,33 @@ func (r *MediaRepo) UpdateMediaAttachmentDescription(ctx context.Context, tx *db
 		return nil, err
 	}
 	return r.GetMediaAttachmentByID(ctx, tx, id)
+}
+
+func (r *MediaRepo) MarkMediaAccessed(ctx context.Context, tx *dbPorts.Tx, id string, accessedAt time.Time) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewUpdate().Model((*dbModels.MediaAttachment)(nil)).Set("remote_last_accessed_at = ?", accessedAt).Set("updated_at = ?", time.Now().UTC()).Where("id = ?", id).Exec(ctx) // NOSONAR
+	return err
+}
+
+func (r *MediaRepo) UpdateMediaStorage(ctx context.Context, tx *dbPorts.Tx, id, storagePath, contentType, fileName string, fileSize int64, fetchedAt time.Time) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewUpdate().Model((*dbModels.MediaAttachment)(nil)).Set("storage_path = ?", storagePath).Set("content_type = ?", contentType).Set("file_name = ?", fileName).Set("file_size = ?", fileSize).Set("remote_fetched_at = ?", fetchedAt).Set("remote_last_accessed_at = ?", fetchedAt).Set("updated_at = ?", time.Now().UTC()).Where("id = ?", id).Exec(ctx) // NOSONAR
+	return err
+}
+
+func (r *MediaRepo) ClearMediaStorage(ctx context.Context, tx *dbPorts.Tx, id string) error {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return err
+	}
+	_, err = db.NewUpdate().Model((*dbModels.MediaAttachment)(nil)).Set("storage_path = ''").Set("file_size = 0").Set("updated_at = ?", time.Now().UTC()).Where("id = ?", id).Exec(ctx) // NOSONAR
+	return err
 }
 
 func (r *MediaRepo) DeleteMediaAttachment(ctx context.Context, tx *dbPorts.Tx, id string) error {
@@ -169,6 +209,7 @@ func (r *MediaRepo) ListMediaWithoutStorage(ctx context.Context, tx *dbPorts.Tx,
 	var rows []dbModels.MediaAttachment
 	if err := db.NewSelect().Model(&rows).
 		Where("storage_path = ''").
+		Where("remote_url IS NULL OR remote_url = ''").
 		Where("NOT EXISTS (SELECT 1 FROM accounts a WHERE a.avatar_media_id = media_attachment.id OR a.header_media_id = media_attachment.id)").
 		Order("created_at ASC").
 		Limit(limit).
@@ -176,6 +217,61 @@ func (r *MediaRepo) ListMediaWithoutStorage(ctx context.Context, tx *dbPorts.Tx,
 		return nil, err
 	}
 	return mediaRowsToModels(rows), nil
+}
+
+func (r *MediaRepo) ListRemoteCachedMediaOlderThan(ctx context.Context, tx *dbPorts.Tx, cutoff time.Time, limit int) ([]models.MediaAttachment, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	var rows []dbModels.MediaAttachment
+	err = db.NewSelect().Model(&rows).
+		Where("remote_url IS NOT NULL AND remote_url != ''").
+		Where("storage_path != ''").
+		Where("COALESCE(remote_last_accessed_at, remote_fetched_at, created_at) < ?", cutoff).
+		Order("COALESCE(remote_last_accessed_at, remote_fetched_at, created_at) ASC").
+		Limit(limit).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mediaRowsToModels(rows), nil
+}
+
+func (r *MediaRepo) ListRemoteCachedMediaByLastAccess(ctx context.Context, tx *dbPorts.Tx, limit int) ([]models.MediaAttachment, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	var rows []dbModels.MediaAttachment
+	err = db.NewSelect().Model(&rows).
+		Where("remote_url IS NOT NULL AND remote_url != ''").
+		Where("storage_path != ''").
+		Order("COALESCE(remote_last_accessed_at, remote_fetched_at, created_at) ASC").
+		Limit(limit).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mediaRowsToModels(rows), nil
+}
+
+func (r *MediaRepo) RemoteCachedMediaSize(ctx context.Context, tx *dbPorts.Tx) (int64, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	if err := db.NewSelect().Model((*dbModels.MediaAttachment)(nil)).ColumnExpr("COALESCE(SUM(file_size), 0)").Where("remote_url IS NOT NULL AND remote_url != ''").Where("storage_path != ''").Scan(ctx, &total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func mediaRowsToModels(rows []dbModels.MediaAttachment) []models.MediaAttachment {

@@ -101,7 +101,7 @@ func (u Profile) createProfileMedia(ctx context.Context, account *models.Account
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	media, err := u.deps.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: input.FileName, ContentType: contentType, StoragePath: storagePath, Description: input.Description})
+	media, err := u.deps.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: input.FileName, ContentType: contentType, StoragePath: storagePath, FileSize: int64(len(input.Data)), Description: input.Description})
 	if err != nil {
 		_ = u.deps.MediaStorage.DeleteMedia(ctx, storagePath)
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)

@@ -128,9 +128,10 @@ type ConversationsConfig struct {
 }
 
 type MediaConfig struct {
-	MediaRepo    repos.MediaRepository
-	MediaStorage ports.MediaStorage
-	IDGenerator  ports.IDGenerator
+	MediaRepo          repos.MediaRepository
+	MediaStorage       ports.MediaStorage
+	RemoteMediaFetcher ports.RemoteMediaFetcher
+	IDGenerator        ports.IDGenerator
 }
 
 type ProfileConfig struct {

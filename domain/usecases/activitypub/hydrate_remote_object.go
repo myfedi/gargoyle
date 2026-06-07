@@ -2,9 +2,12 @@ package activitypub
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -20,13 +23,15 @@ import (
 // HydrateRemoteObjectUseCase fetches and persists missing remote ActivityPub
 // objects, primarily reply parents discovered through inReplyTo links.
 type HydrateRemoteObjectUseCase struct {
-	fetcher    ports.RemoteObjectFetcher
-	txProvider db.TxProvider
-	activities repos.ActivitiesRepository
-	notes      repos.NotesRepository
-	media      repos.MediaRepository
-	remotes    repos.RemoteAccountsRepository
-	sanitizer  ports.ContentSanitizer
+	fetcher            ports.RemoteObjectFetcher
+	txProvider         db.TxProvider
+	activities         repos.ActivitiesRepository
+	notes              repos.NotesRepository
+	media              repos.MediaRepository
+	mediaStorage       ports.MediaStorage
+	remoteMediaFetcher ports.RemoteMediaFetcher
+	remotes            repos.RemoteAccountsRepository
+	sanitizer          ports.ContentSanitizer
 }
 
 type HydrateRemoteObjectConfig struct {
@@ -35,6 +40,8 @@ type HydrateRemoteObjectConfig struct {
 	ActivitiesRepo     repos.ActivitiesRepository
 	NotesRepo          repos.NotesRepository
 	MediaRepo          repos.MediaRepository
+	MediaStorage       ports.MediaStorage
+	RemoteMediaFetcher ports.RemoteMediaFetcher
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	Sanitizer          ports.ContentSanitizer
 }
@@ -52,7 +59,7 @@ func NewHydrateRemoteObjectUseCase(cfg HydrateRemoteObjectConfig) HydrateRemoteO
 	if cfg.Sanitizer == nil {
 		panic("hydrate remote object use case requires Sanitizer")
 	}
-	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer}
+	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, mediaStorage: cfg.MediaStorage, remoteMediaFetcher: cfg.RemoteMediaFetcher, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer}
 }
 
 func (u HydrateRemoteObjectUseCase) HydrateRemoteObject(ctx context.Context, account models.Account, objectURI string) error {
@@ -301,11 +308,39 @@ func (u HydrateRemoteObjectUseCase) ensureFetchedNoteMedia(ctx context.Context, 
 	if len(existing) > 0 {
 		return nil
 	}
+	now := time.Now().UTC()
 	for _, attachment := range attachments {
 		if attachment.URL == "" || !(strings.HasPrefix(attachment.URL, "https://") || strings.HasPrefix(attachment.URL, "http://")) {
 			continue
 		}
-		media, err := u.media.CreateMediaAttachment(ctx, tx, repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: remoteMediaFileName(attachment.URL), ContentType: remoteMediaContentType(attachment), StoragePath: attachment.URL, Description: attachment.Description})
+		if existing, err := u.media.GetMediaAttachmentByRemoteURL(ctx, tx, attachment.URL); err == nil {
+			if err := u.media.AttachMediaToNote(ctx, tx, noteID, existing.ID); err != nil {
+				return err
+			}
+			continue
+		}
+		input := repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: remoteMediaFileName(attachment.URL), ContentType: remoteMediaContentType(attachment), RemoteURL: &attachment.URL, RemoteFetchedAt: &now, RemoteLastAccessedAt: &now, Description: attachment.Description}
+		if u.mediaStorage != nil && u.remoteMediaFetcher != nil {
+			fetched, err := u.remoteMediaFetcher.FetchMedia(ctx, attachment.URL, 10<<20)
+			if err == nil {
+				contentType, ok := cachedRemoteMediaContentType(fetched)
+				if ok {
+					cacheKey := remoteMediaCacheKey(attachment.URL)
+					fileName := fetched.FileName
+					if strings.TrimSpace(fileName) == "" || fileName == "." || fileName == "/" {
+						fileName = input.FileName
+					}
+					storagePath, saveErr := u.mediaStorage.SaveMedia(ctx, cacheKey, fileName, fetched.Data)
+					if saveErr == nil {
+						input.FileName = fileName
+						input.ContentType = contentType
+						input.StoragePath = storagePath
+						input.FileSize = int64(len(fetched.Data))
+					}
+				}
+			}
+		}
+		media, err := u.media.CreateMediaAttachment(ctx, tx, input)
 		if err != nil {
 			return err
 		}
@@ -351,6 +386,24 @@ func remoteMediaContentType(attachment ExtractedMediaAttachment) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+func cachedRemoteMediaContentType(fetched ports.FetchedRemoteMedia) (string, bool) {
+	declared := strings.ToLower(strings.TrimSpace(strings.Split(fetched.ContentType, ";")[0]))
+	sniffed := strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(fetched.Data), ";")[0]))
+	allowed := map[string]bool{"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true, "video/mp4": true, "audio/mpeg": true, "audio/ogg": true, "audio/wav": true}
+	if allowed[sniffed] {
+		return sniffed, true
+	}
+	if allowed[declared] {
+		return declared, true
+	}
+	return "", false
+}
+
+func remoteMediaCacheKey(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return "remote-" + hex.EncodeToString(sum[:])
 }
 
 func replyItemURI(raw json.RawMessage) string {

@@ -74,7 +74,10 @@ type WorkerDeps struct {
 	MediaStorage         *adapters.LocalMediaStorage
 	MediaCleanupInterval time.Duration
 	MediaUnattachedTTL   time.Duration
+	RemoteCacheMaxBytes  int64
+	RemoteCacheTTL       time.Duration
 	RemoteObjectFetcher  clientapiHandlers.RemoteObjectFetcher
+	RemoteMediaFetcher   clientapiHandlers.RemoteMediaFetcher
 	ActivitiesRepo       *repos.ActivitiesRepo
 	NotesRepo            *repos.NotesRepo
 	ContentSanitizer     ports.ContentSanitizer
@@ -243,7 +246,10 @@ func BuildDeps(cfg *config.Config) *Deps {
 			MediaStorage:         mediaStorage,
 			MediaCleanupInterval: cfg.Media.CleanupInterval,
 			MediaUnattachedTTL:   cfg.Media.UnattachedTTL,
+			RemoteCacheMaxBytes:  cfg.Media.RemoteCacheMaxBytes,
+			RemoteCacheTTL:       cfg.Media.RemoteCacheTTL,
 			RemoteObjectFetcher:  clientAPIComponents.RemoteObjectFetcher,
+			RemoteMediaFetcher:   clientapiHandlers.NewRemoteMediaFetcher(nil, clientAPIURLExceptions),
 			ActivitiesRepo:       activitiesRepo,
 			NotesRepo:            notesRepo,
 			ContentSanitizer:     contentSanitizer,
@@ -270,9 +276,9 @@ func MountClientAPI(app *fiber.App, deps ClientAPIDeps) {
 
 func StartCoreWorkers(ctx context.Context, deps WorkerDeps) {
 	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: deps.JobsRepo, Accounts: deps.AccountsRepo, Deliverer: deps.ActivityPubHandler.ActivityDeliverer(), Blocks: deps.ModerationRepo}).Start(ctx)
-	hydrateRemoteObjectUC := apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{Fetcher: deps.RemoteObjectFetcher, ActivitiesRepo: deps.ActivitiesRepo, NotesRepo: deps.NotesRepo, MediaRepo: deps.MediaRepo, RemoteAccountsRepo: deps.RemoteAccountsRepo, Sanitizer: deps.ContentSanitizer})
+	hydrateRemoteObjectUC := apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{Fetcher: deps.RemoteObjectFetcher, ActivitiesRepo: deps.ActivitiesRepo, NotesRepo: deps.NotesRepo, MediaRepo: deps.MediaRepo, MediaStorage: deps.MediaStorage, RemoteMediaFetcher: deps.RemoteMediaFetcher, RemoteAccountsRepo: deps.RemoteAccountsRepo, Sanitizer: deps.ContentSanitizer})
 	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: deps.JobsRepo, Accounts: deps.AccountsRepo, Hydrater: hydrateRemoteObjectUC, Blocks: deps.ModerationRepo}).Start(ctx)
-	jobs.NewMediaCleanupWorker(jobs.MediaCleanupWorkerConfig{MediaRepo: deps.MediaRepo, Storage: deps.MediaStorage, Interval: deps.MediaCleanupInterval, UnattachedTTL: deps.MediaUnattachedTTL}).Start(ctx)
+	jobs.NewMediaCleanupWorker(jobs.MediaCleanupWorkerConfig{MediaRepo: deps.MediaRepo, Storage: deps.MediaStorage, Interval: deps.MediaCleanupInterval, UnattachedTTL: deps.MediaUnattachedTTL, RemoteCacheMaxBytes: deps.RemoteCacheMaxBytes, RemoteCacheTTL: deps.RemoteCacheTTL}).Start(ctx)
 	jobs.NewModerationWorker(jobs.ModerationWorkerConfig{JobsRepo: deps.ModerationRepo, API: deps.Moderation, MediaStorage: deps.MediaStorage}).Start(ctx)
 }
 

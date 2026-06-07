@@ -35,9 +35,11 @@ type WebConfig struct {
 }
 
 type MediaConfig struct {
-	StorageDir      string        `mapstructure:"storage_dir"`
-	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
-	UnattachedTTL   time.Duration `mapstructure:"unattached_ttl"`
+	StorageDir          string        `mapstructure:"storage_dir"`
+	CleanupInterval     time.Duration `mapstructure:"cleanup_interval"`
+	UnattachedTTL       time.Duration `mapstructure:"unattached_ttl"`
+	RemoteCacheMaxBytes int64         `mapstructure:"remote_cache_max_bytes"`
+	RemoteCacheTTL      time.Duration `mapstructure:"remote_cache_ttl"`
 }
 
 type OAuthConfig struct {
@@ -117,6 +119,8 @@ func NewConfig(configFile string) (*Config, error) {
 	viper.SetDefault("media.storage_dir", "./media")
 	viper.SetDefault("media.cleanup_interval", "1h")
 	viper.SetDefault("media.unattached_ttl", "24h")
+	viper.SetDefault("media.remote_cache_max_bytes", int64(1<<30))
+	viper.SetDefault("media.remote_cache_ttl", "720h")
 	viper.SetDefault("oauth.allow_password_grant", false)
 	viper.SetDefault("client_api.enabled", true)
 
@@ -247,6 +251,12 @@ func verifyMediaConfig(cfg MediaConfig) error {
 	}
 	if cfg.UnattachedTTL <= 0 {
 		return fmt.Errorf("media.unattached_ttl must be greater than 0")
+	}
+	if cfg.RemoteCacheMaxBytes < 0 {
+		return fmt.Errorf("media.remote_cache_max_bytes must be greater than or equal to 0")
+	}
+	if cfg.RemoteCacheTTL <= 0 {
+		return fmt.Errorf("media.remote_cache_ttl must be greater than 0")
 	}
 	return nil
 }
