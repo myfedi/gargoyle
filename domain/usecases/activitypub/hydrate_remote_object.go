@@ -30,9 +30,13 @@ type HydrateRemoteObjectUseCase struct {
 	media              repos.MediaRepository
 	mediaStorage       ports.MediaStorage
 	remoteMediaFetcher ports.RemoteMediaFetcher
+	boosts             repos.BoostsRepository
 	remotes            repos.RemoteAccountsRepository
 	sanitizer          ports.ContentSanitizer
+	hydrationLocks     *sync.Map
 }
+
+var remoteHydrationLocks sync.Map
 
 type HydrateRemoteObjectConfig struct {
 	Fetcher            ports.RemoteObjectFetcher
@@ -42,6 +46,7 @@ type HydrateRemoteObjectConfig struct {
 	MediaRepo          repos.MediaRepository
 	MediaStorage       ports.MediaStorage
 	RemoteMediaFetcher ports.RemoteMediaFetcher
+	BoostsRepo         repos.BoostsRepository
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	Sanitizer          ports.ContentSanitizer
 }
@@ -59,7 +64,7 @@ func NewHydrateRemoteObjectUseCase(cfg HydrateRemoteObjectConfig) HydrateRemoteO
 	if cfg.Sanitizer == nil {
 		panic("hydrate remote object use case requires Sanitizer")
 	}
-	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, mediaStorage: cfg.MediaStorage, remoteMediaFetcher: cfg.RemoteMediaFetcher, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer}
+	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, mediaStorage: cfg.MediaStorage, remoteMediaFetcher: cfg.RemoteMediaFetcher, boosts: cfg.BoostsRepo, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer, hydrationLocks: &remoteHydrationLocks}
 }
 
 func (u HydrateRemoteObjectUseCase) HydrateRemoteObject(ctx context.Context, account models.Account, objectURI string) error {
@@ -170,6 +175,10 @@ func (u HydrateRemoteObjectUseCase) hydrateReplyItem(ctx context.Context, accoun
 // HydrateRawObject persists a fetched ActivityPub Create/Note document. If expectedActor
 // is set, the extracted note must be attributed to that actor.
 func (u HydrateRemoteObjectUseCase) HydrateRawObject(ctx context.Context, account models.Account, raw []byte, expectedActor string) error {
+	return u.hydrateRawObject(ctx, account, raw, expectedActor, true)
+}
+
+func (u HydrateRemoteObjectUseCase) hydrateRawObject(ctx context.Context, account models.Account, raw []byte, expectedActor string, downloadRemoteMedia bool) error {
 	note, ok := extractFetchedNote(raw)
 	if !ok || note.URI == "" || note.Visibility == "direct" {
 		return nil
@@ -177,13 +186,15 @@ func (u HydrateRemoteObjectUseCase) HydrateRawObject(ctx context.Context, accoun
 	if expectedActor != "" && note.AttributedTo != expectedActor {
 		return nil
 	}
+	unlock := u.lockHydration(note.URI)
+	defer unlock()
 	author := u.fetchRemoteAuthor(ctx, account, note.AttributedTo)
 	persist := func(ctx context.Context, tx *db.Tx) error {
 		if existing, err := u.notes.GetNoteByURI(ctx, tx, note.URI); err == nil {
 			if err := u.ensureFetchedNoteAuthor(ctx, tx, author); err != nil {
 				return err
 			}
-			return u.ensureFetchedNoteMedia(ctx, tx, account, existing.ID, note.Media)
+			return u.ensureFetchedNoteMedia(ctx, tx, account, existing.ID, note.Media, downloadRemoteMedia)
 		} else if err != sql.ErrNoRows {
 			return err
 		}
@@ -203,7 +214,7 @@ func (u HydrateRemoteObjectUseCase) HydrateRawObject(ctx context.Context, accoun
 		if err != nil {
 			return err
 		}
-		return u.ensureFetchedNoteMedia(ctx, tx, account, created.ID, note.Media)
+		return u.ensureFetchedNoteMedia(ctx, tx, account, created.ID, note.Media, downloadRemoteMedia)
 	}
 	if u.txProvider == nil {
 		return persist(ctx, nil)
@@ -211,6 +222,20 @@ func (u HydrateRemoteObjectUseCase) HydrateRawObject(ctx context.Context, accoun
 	return u.txProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
 		return persist(ctx, &tx)
 	})
+}
+
+type hydrationLock struct {
+	mu sync.Mutex
+}
+
+func (u HydrateRemoteObjectUseCase) lockHydration(uri string) func() {
+	if u.hydrationLocks == nil || uri == "" {
+		return func() {}
+	}
+	value, _ := u.hydrationLocks.LoadOrStore(uri, &hydrationLock{})
+	lock := value.(*hydrationLock)
+	lock.mu.Lock()
+	return lock.mu.Unlock
 }
 
 func (u HydrateRemoteObjectUseCase) fetchRemoteAuthor(ctx context.Context, signer models.Account, actorURI string) *models.Account {
@@ -297,7 +322,7 @@ func remoteActorURL(raw json.RawMessage) string {
 	return object.Href
 }
 
-func (u HydrateRemoteObjectUseCase) ensureFetchedNoteMedia(ctx context.Context, tx *db.Tx, account models.Account, noteID string, attachments []ExtractedMediaAttachment) error {
+func (u HydrateRemoteObjectUseCase) ensureFetchedNoteMedia(ctx context.Context, tx *db.Tx, account models.Account, noteID string, attachments []ExtractedMediaAttachment, downloadRemoteMedia bool) error {
 	if u.media == nil || len(attachments) == 0 {
 		return nil
 	}
@@ -325,8 +350,12 @@ func (u HydrateRemoteObjectUseCase) ensureFetchedNoteMedia(ctx context.Context, 
 			}
 			continue
 		}
-		input := repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: remoteMediaFileName(attachment.URL), ContentType: remoteMediaContentType(attachment), RemoteURL: &attachment.URL, RemoteFetchedAt: &now, RemoteLastAccessedAt: &now, Description: attachment.Description}
-		if u.mediaStorage != nil && u.remoteMediaFetcher != nil {
+		input := repos.CreateMediaAttachmentInput{LocalAccountID: account.ID, FileName: remoteMediaFileName(attachment.URL), ContentType: remoteMediaContentType(attachment), RemoteURL: &attachment.URL, Description: attachment.Description}
+		if downloadRemoteMedia {
+			input.RemoteFetchedAt = &now
+			input.RemoteLastAccessedAt = &now
+		}
+		if downloadRemoteMedia && u.mediaStorage != nil && u.remoteMediaFetcher != nil {
 			fetched, err := u.remoteMediaFetcher.FetchMedia(ctx, attachment.URL, 10<<20)
 			if err == nil {
 				contentType, ok := cachedRemoteMediaContentType(fetched)

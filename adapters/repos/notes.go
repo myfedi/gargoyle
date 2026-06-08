@@ -431,10 +431,14 @@ func (r *NotesRepo) applyNoteListCursor(ctx context.Context, db bun.IDB, query *
 		return query
 	}
 	var cursor dbModels.Note
-	if err := db.NewSelect().Model(&cursor).Where("id = ?", filter.maxID).Limit(1).Scan(ctx); err != nil { // NOSONAR
-		return query.Where("id < ?", filter.maxID)
+	if err := db.NewSelect().Model(&cursor).Where("id = ?", filter.maxID).Limit(1).Scan(ctx); err == nil { // NOSONAR
+		return query.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("published_at < ?", cursor.PublishedAt).WhereOr("published_at = ? AND id < ?", cursor.PublishedAt, filter.maxID)
+		})
 	}
-	return query.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("published_at < ?", cursor.PublishedAt).WhereOr("published_at = ? AND id < ?", cursor.PublishedAt, filter.maxID)
-	})
+	var boostCursor dbModels.Boost
+	if err := db.NewSelect().Model(&boostCursor).Where("id = ?", filter.maxID).Limit(1).Scan(ctx); err == nil { // NOSONAR
+		return query.Where("published_at < ?", boostCursor.PublishedAt)
+	}
+	return query.Where("id < ?", filter.maxID)
 }

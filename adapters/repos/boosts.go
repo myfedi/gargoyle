@@ -81,7 +81,12 @@ func (r *BoostsRepo) listBoosts(ctx context.Context, tx *dbPorts.Tx, localAccoun
 				return q.Where("published_at < ?", cursor.PublishedAt).WhereOr("published_at = ? AND id < ?", cursor.PublishedAt, maxID)
 			})
 		} else {
-			q = q.Where("id < ?", maxID)
+			var noteCursor dbModels.Note
+			if err := db.NewSelect().Model(&noteCursor).Where("id = ?", maxID).Limit(1).Scan(ctx); err == nil {
+				q = q.Where("published_at < ?", noteCursor.PublishedAt)
+			} else {
+				q = q.Where("id < ?", maxID)
+			}
 		}
 	}
 	if err := q.Scan(ctx); err != nil {

@@ -70,6 +70,7 @@ type WorkerDeps struct {
 	AccountsRepo         *repos.AccountsRepo
 	ModerationRepo       *repos.ModerationRepo
 	MediaRepo            *repos.MediaRepo
+	BoostsRepo           *repos.BoostsRepo
 	RemoteAccountsRepo   *repos.RemoteAccountsRepo
 	MediaStorage         *adapters.LocalMediaStorage
 	MediaCleanupInterval time.Duration
@@ -242,6 +243,7 @@ func BuildDeps(cfg *config.Config) *Deps {
 			AccountsRepo:         accountsRepo,
 			ModerationRepo:       moderationRepo,
 			MediaRepo:            mediaRepo,
+			BoostsRepo:           boostsRepo,
 			RemoteAccountsRepo:   remoteAccountsRepo,
 			MediaStorage:         mediaStorage,
 			MediaCleanupInterval: cfg.Media.CleanupInterval,
@@ -276,7 +278,7 @@ func MountClientAPI(app *fiber.App, deps ClientAPIDeps) {
 
 func StartCoreWorkers(ctx context.Context, deps WorkerDeps) {
 	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: deps.JobsRepo, Accounts: deps.AccountsRepo, Deliverer: deps.ActivityPubHandler.ActivityDeliverer(), Blocks: deps.ModerationRepo}).Start(ctx)
-	hydrateRemoteObjectUC := apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{Fetcher: deps.RemoteObjectFetcher, ActivitiesRepo: deps.ActivitiesRepo, NotesRepo: deps.NotesRepo, MediaRepo: deps.MediaRepo, MediaStorage: deps.MediaStorage, RemoteMediaFetcher: deps.RemoteMediaFetcher, RemoteAccountsRepo: deps.RemoteAccountsRepo, Sanitizer: deps.ContentSanitizer})
+	hydrateRemoteObjectUC := apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{Fetcher: deps.RemoteObjectFetcher, ActivitiesRepo: deps.ActivitiesRepo, NotesRepo: deps.NotesRepo, MediaRepo: deps.MediaRepo, MediaStorage: deps.MediaStorage, RemoteMediaFetcher: deps.RemoteMediaFetcher, BoostsRepo: deps.BoostsRepo, RemoteAccountsRepo: deps.RemoteAccountsRepo, Sanitizer: deps.ContentSanitizer})
 	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: deps.JobsRepo, Accounts: deps.AccountsRepo, Hydrater: hydrateRemoteObjectUC, Blocks: deps.ModerationRepo}).Start(ctx)
 	jobs.NewMediaCleanupWorker(jobs.MediaCleanupWorkerConfig{MediaRepo: deps.MediaRepo, Storage: deps.MediaStorage, Interval: deps.MediaCleanupInterval, UnattachedTTL: deps.MediaUnattachedTTL, RemoteCacheMaxBytes: deps.RemoteCacheMaxBytes, RemoteCacheTTL: deps.RemoteCacheTTL}).Start(ctx)
 	jobs.NewModerationWorker(jobs.ModerationWorkerConfig{JobsRepo: deps.ModerationRepo, API: deps.Moderation, MediaStorage: deps.MediaStorage}).Start(ctx)

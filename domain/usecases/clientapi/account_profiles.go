@@ -73,8 +73,25 @@ func (u Accounts) accountStatusNotes(ctx context.Context, localAccount, account 
 	if account.ID == localAccount.ID {
 		return u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, localAccount.URI, limit, maxID)
 	}
-	if maxID == "" {
-		_ = u.cacheRemoteOutbox(ctx, localAccount, *account)
+	notes, err := u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+	if err != nil {
+		return notes, err
+	}
+	enough := func() (bool, error) {
+		notes, err = u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+		if err != nil {
+			return false, err
+		}
+		boosts, err := u.deps.BoostsRepo.ListActorBoosts(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+		return err == nil && len(notes)+len(boosts) >= limit, err
+	}
+	ok, err := enough()
+	if err != nil || ok {
+		return notes, err
+	}
+	derr := u.cacheRemoteOutboxUntil(ctx, localAccount, *account, enough)
+	if derr != nil {
+		return notes, nil
 	}
 	return u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
 }

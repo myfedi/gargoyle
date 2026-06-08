@@ -143,6 +143,7 @@ func newClientAPIWorkflowContext(in clientAPIWorkflowInputs) clientAPIWorkflowCo
 			MediaRepo:          in.MediaRepo,
 			MediaStorage:       in.MediaStorage,
 			RemoteMediaFetcher: remoteMediaFetcher,
+			BoostsRepo:         in.BoostsRepo,
 			RemoteAccountsRepo: in.RemoteAccountsRepo,
 			Sanitizer:          in.ContentSanitizer,
 		}),
