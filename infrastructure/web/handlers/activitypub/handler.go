@@ -376,8 +376,10 @@ func (h *Handler) handleSharedInboxActivity(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	usernames := apUsecases.ExtractLocalRecipientUsernames(raw, h.cfg.Host)
-	usernames = h.expandSharedInboxRecipients(c.UserContext(), usernames, activity.Actor)
+	usernames, derr := h.handleInboxActivityUC.ResolveSharedInboxRecipients(c.UserContext(), raw, activity.Actor)
+	if derr != nil {
+		return web.HandleDomainError(c, derr)
+	}
 	// Shared inboxes do not identify a local actor in the path, but some peers
 	// require signed actor-key fetches while verifying their signed POST. Use an
 	// addressed local recipient as the signer for that verification fetch; the
@@ -411,26 +413,6 @@ func (h *Handler) handleSharedInboxActivity(c *fiber.Ctx) error {
 		}
 	}
 	return c.SendStatus(fiber.StatusAccepted)
-}
-
-func (h *Handler) expandSharedInboxRecipients(ctx context.Context, usernames []string, actor string) []string {
-	seen := make(map[string]bool, len(usernames))
-	for _, username := range usernames {
-		seen[username] = true
-	}
-	follows, err := h.cfg.FollowsRepo.ListLocalFollowersOfRemoteActor(ctx, nil, actor)
-	if err != nil {
-		return usernames
-	}
-	for _, follow := range follows {
-		account, err := h.cfg.AccountsRepo.GetAccountByID(ctx, nil, follow.LocalAccountID)
-		if err != nil || account.Username == "" || seen[account.Username] {
-			continue
-		}
-		seen[account.Username] = true
-		usernames = append(usernames, account.Username)
-	}
-	return usernames
 }
 
 func (h *Handler) handleInboxActivity(c *fiber.Ctx) error {

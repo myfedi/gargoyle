@@ -31,6 +31,38 @@ type HandleInboxActivityResult struct {
 	AcceptInbox string
 }
 
+// ResolveSharedInboxRecipients determines which local actors should process a
+// shared-inbox activity. Explicit local recipients are included, and follower
+// delivery is expanded from Gargoyle's local follow state because remote servers
+// may deliver one followers-addressed activity to the shared inbox without
+// naming each local follower actor individually.
+func (u *HandleInboxActivityUseCase) ResolveSharedInboxRecipients(ctx context.Context, raw []byte, actor string) ([]string, *domainerrors.DomainError) {
+	usernames := ExtractLocalRecipientUsernames(raw, u.cfg.Host)
+	seen := make(map[string]bool, len(usernames))
+	for _, username := range usernames {
+		seen[username] = true
+	}
+	follows, err := u.cfg.FollowsRepo.ListLocalFollowersOfRemoteActor(ctx, nil, actor)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	for _, follow := range follows {
+		account, err := u.cfg.AccountsRepo.GetAccountByID(ctx, nil, follow.LocalAccountID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+		}
+		if account.Username == "" || seen[account.Username] {
+			continue
+		}
+		seen[account.Username] = true
+		usernames = append(usernames, account.Username)
+	}
+	return usernames, nil
+}
+
 // InspectInboxActivity loads the addressed local actor and parses the raw
 // activity before infrastructure performs authentication checks.
 func (u *HandleInboxActivityUseCase) InspectInboxActivity(ctx context.Context, username string, raw []byte) (*models.Account, ParsedActivity, *domainerrors.DomainError) {

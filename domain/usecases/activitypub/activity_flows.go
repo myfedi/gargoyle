@@ -209,6 +209,7 @@ func NewHandleInboxActivityUseCase(cfg ActivityPubFlowConfig) HandleInboxActivit
 	requireActivitiesRepo(cfg)
 	requireFollowsRepo(cfg)
 	requireContentSanitizer(cfg)
+	requireHost(cfg)
 	return HandleInboxActivityUseCase{cfg: cfg}
 }
 
@@ -275,6 +276,12 @@ func requireActorSerializer(cfg ActivityPubFlowConfig) {
 func requireSocialRepo(cfg ActivityPubFlowConfig) {
 	if cfg.SocialRepo == nil {
 		panic("activitypub use case requires SocialRepo")
+	}
+}
+
+func requireHost(cfg ActivityPubFlowConfig) {
+	if cfg.Host == "" {
+		panic("activitypub use case requires Host")
 	}
 }
 
