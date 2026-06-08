@@ -52,4 +52,5 @@ type FollowsRepository interface {
 	DeleteFollowingByActor(ctx context.Context, tx *db.Tx, localAccountID, remoteActor string) error
 	ListFollowing(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error)
 	ListFollowingIncludingPending(ctx context.Context, tx *db.Tx, localAccountID string) ([]models.Follow, error)
+	ListLocalFollowersOfRemoteActor(ctx context.Context, tx *db.Tx, remoteActor string) ([]models.Follow, error)
 }

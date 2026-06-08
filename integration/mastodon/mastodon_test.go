@@ -399,9 +399,7 @@ func TestMastodonNonLeakRetryHardeningAndFollowerDelivery(t *testing.T) {
 
 	normalMarker := fmt.Sprintf("mastodon-follower-normal-%d", time.Now().UnixNano())
 	postStatus(t, s.ctx, s.mastodon, s.mastodonToken, "normal follower delivery "+normalMarker, "public")
-	if !statusEventuallyInTimeline(s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/timelines/public?limit=100", normalMarker, 20*time.Second) {
-		t.Log("Mastodon did not deliver a normal non-mention public post to Gargoyle in this local setup; mention delivery is covered separately")
-	}
+	waitForStatus(t, s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/timelines/public?limit=100", normalMarker)
 
 	var search shared.SearchResponse
 	resp, _, err := s.gargoyle.GetJSON(s.ctx, "/api/v2/search?q="+url.QueryEscape("mallory@127.0.0.1")+"&type=accounts&resolve=true", s.gargoyleToken, &search)
@@ -469,9 +467,14 @@ func TestMastodonAdditionalDirectAndLockedFlows(t *testing.T) {
 	var account shared.Account
 	resp, body, err = s.mastodon.PatchForm(s.ctx, "/api/v1/accounts/update_credentials", s.mastodonToken, url.Values{"display_name": {"Bob " + profileMarker[:20]}, "note": {"bio " + profileMarker}, "locked": {"true"}}, &account)
 	shared.Require2xx(t, resp, body, err)
-	if !accountEventuallyContains(s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/accounts/"+url.PathEscape(s.bobOnGargoyle.ID), profileMarker, 15*time.Second) {
-		t.Log("Mastodon profile update did not federate to Gargoyle in this local setup; Gargoyle profile update federation is covered separately")
-	}
+	shared.WaitFor(s.ctx, "Mastodon profile update reaches Gargoyle", 2*time.Second, func(ctx context.Context) (struct{}, bool, error) {
+		var remote shared.Account
+		resp, _, err := s.gargoyle.GetJSON(ctx, "/api/v1/accounts/"+url.PathEscape(s.bobOnGargoyle.ID), s.gargoyleToken, &remote)
+		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return struct{}{}, false, err
+		}
+		return struct{}{}, strings.Contains(remote.DisplayName, profileMarker) || strings.Contains(remote.Note, profileMarker), nil
+	})
 }
 
 func TestMastodonDeleteProfileUpdateAndUnsignedInbox(t *testing.T) {
@@ -590,15 +593,8 @@ func ensureMastodonFollowsGargoyle(t testing.TB, s suite) {
 func ensureGargoyleFollowsMastodon(t testing.TB, s suite) {
 	t.Helper()
 	_, _, _ = s.gargoyle.PostForm(s.ctx, "/api/v1/accounts/"+url.PathEscape(s.bobOnGargoyle.ID)+"/follow", s.gargoyleToken, url.Values{}, nil)
-	shared.WaitFor(s.ctx, "Gargoyle outbound follow to Mastodon is tracked", 2*time.Second, func(ctx context.Context) (struct{}, bool, error) {
-		var relationships []struct {
-			ID        string `json:"id"`
-			Following bool   `json:"following"`
-			Requested bool   `json:"requested"`
-		}
-		resp, _, err := s.gargoyle.GetJSON(ctx, "/api/v1/accounts/relationships?id="+url.QueryEscape(s.bobOnGargoyle.ID), s.gargoyleToken, &relationships)
-		return struct{}{}, err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 && len(relationships) > 0 && (relationships[0].Following || relationships[0].Requested), nil
-	})
+	waitForRelationship(t, s.ctx, s.gargoyle, s.gargoyleToken, s.bobOnGargoyle.ID, func(rel relationship) bool { return rel.Following })
+	waitForAccountInList(t, s.ctx, s.mastodon, s.mastodonToken, "/api/v1/accounts/"+url.PathEscape(s.bob.ID)+"/followers", "alice@gargoyle.test")
 }
 
 func waitForAccountInList(t testing.TB, ctx context.Context, client shared.Client, token, path, acct string) shared.Account {

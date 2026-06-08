@@ -377,6 +377,28 @@ func (r *FollowsRepo) ListFollowingIncludingPending(ctx context.Context, tx *dbP
 	return r.listFollowing(ctx, tx, localAccountID, false)
 }
 
+func (r *FollowsRepo) ListLocalFollowersOfRemoteActor(ctx context.Context, tx *dbPorts.Tx, remoteActor string) ([]models.Follow, error) {
+	db, err := unwrapDB(r.db, tx)
+	if err != nil {
+		return nil, err
+	}
+	var follows []dbModels.Follow
+	err = db.NewSelect().Model(&follows).
+		Where("remote_actor = ?", remoteActor). // NOSONAR
+		Where("direction = ?", "following").    // NOSONAR
+		Where("accepted_at IS NOT NULL").       // NOSONAR
+		Order("created_at DESC").               // NOSONAR
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]models.Follow, 0, len(follows))
+	for _, follow := range follows {
+		res = append(res, follow.ToModel())
+	}
+	return res, nil
+}
+
 func (r *FollowsRepo) listFollowing(ctx context.Context, tx *dbPorts.Tx, localAccountID string, acceptedOnly bool) ([]models.Follow, error) {
 	db, err := unwrapDB(r.db, tx)
 	if err != nil {

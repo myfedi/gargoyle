@@ -371,6 +371,16 @@ func (f *fakeFollowsRepo) ListFollowingIncludingPending(ctx context.Context, tx 
 	return res, nil
 }
 
+func (f *fakeFollowsRepo) ListLocalFollowersOfRemoteActor(ctx context.Context, tx *db.Tx, remoteActor string) ([]models.Follow, error) {
+	res := []models.Follow{}
+	for _, follow := range f.followers {
+		if follow.RemoteActor == remoteActor && follow.Direction == "following" && follow.AcceptedAt != nil {
+			res = append(res, follow)
+		}
+	}
+	return res, nil
+}
+
 type fakeDomainBlocksRepo struct{}
 
 func (fakeDomainBlocksRepo) CreateDomainBlock(ctx context.Context, tx *db.Tx, input repos.CreateDomainBlockInput) (*models.DomainBlock, error) {
