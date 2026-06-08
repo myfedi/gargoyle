@@ -1,0 +1,126 @@
+name: gargoyle-integration-mastodon
+
+x-mastodon-env: &mastodon-env
+  RAILS_ENV: production
+  NODE_ENV: production
+  LOCAL_DOMAIN: mastodon.test
+  LOCAL_HTTPS: "false"
+  SECRET_KEY_BASE: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  OTP_SECRET: abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
+  ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY: 0123456789abcdef0123456789abcdef
+  ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT: abcdef0123456789abcdef0123456789
+  ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: fedcba9876543210fedcba9876543210
+  VAPID_PRIVATE_KEY: lEhkFouhTDEDKcdzmsrVgRA6zR84G5YkqADw-1_ej9I
+  VAPID_PUBLIC_KEY: BEl62iUYgUivxIkv69yViEuiBIa40HI80_Zll17fVa06eR3YzXkOiR1V3q5svA1js5ZSg4wAylU7W2gT_OM5nDc
+  DB_HOST: postgres
+  DB_USER: mastodon
+  DB_NAME: mastodon_production
+  DB_PASS: mastodon
+  REDIS_HOST: redis
+  SMTP_SERVER: localhost
+  SMTP_PORT: "25"
+  ES_ENABLED: "false"
+  AUTHORIZED_FETCH: "false"
+  LIMITED_FEDERATION_MODE: "false"
+  ALLOWED_PRIVATE_ADDRESSES: 0.0.0.0/0,::/0
+  IP_RETENTION_PERIOD: "0"
+  SESSION_RETENTION_PERIOD: "0"
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "18081:80"
+    networks:
+      default:
+        aliases:
+          - gargoyle.test
+          - mastodon.test
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://gargoyle.test/api/v1/instance >/dev/null && wget -qO- http://mastodon.test/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 90
+
+  gargoyle:
+    build:
+      context: ../..
+      dockerfile: integration/docker/gargoyle.Dockerfile
+    environment:
+      GARGOYLE_CONFIG: /config/config.yml
+      GARGOYLE_USERNAME: alice
+      GARGOYLE_EMAIL: alice@gargoyle.test
+      GARGOYLE_PASSWORD: Str0ngP@ssword!
+    volumes:
+      - ./gargoyle.yml:/config/config.yml:ro
+      - gargoyle-data:/data
+      - gargoyle-media:/media
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/v1/instance >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mastodon
+      POSTGRES_PASSWORD: mastodon
+      POSTGRES_DB: mastodon_production
+    volumes:
+      - mastodon-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mastodon -d mastodon_production"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - mastodon-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  mastodon-web:
+    image: ghcr.io/mastodon/mastodon:latest
+    user: root
+    environment:
+      <<: *mastodon-env
+    command: bash -lc "perl -0pi -e 's#\"https://#\"http://#g' app/lib/webfinger.rb && ruby -0777 -pi -e \"gsub(/https = Rails.env.production\\? \\|\\| ENV\\['LOCAL_HTTPS'\\] == 'true'/, %q(https = ENV['LOCAL_HTTPS'] == 'true')); gsub(/config.force_ssl = true/, 'config.force_ssl = false')\" config/initializers/1_hosts.rb config/environments/production.rb && su mastodon -s /bin/bash -c 'bundle exec rails db:prepare && rm -f tmp/pids/server.pid && bundle exec puma -C config/puma.rb'"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - mastodon-public:/mastodon/public/system
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 90
+
+  mastodon-sidekiq:
+    image: ghcr.io/mastodon/mastodon:latest
+    user: root
+    environment:
+      <<: *mastodon-env
+    command: bash -lc "perl -0pi -e 's#\"https://#\"http://#g' app/lib/webfinger.rb && ruby -0777 -pi -e \"gsub(/https = Rails.env.production\\? \\|\\| ENV\\['LOCAL_HTTPS'\\] == 'true'/, %q(https = ENV['LOCAL_HTTPS'] == 'true')); gsub(/config.force_ssl = true/, 'config.force_ssl = false')\" config/initializers/1_hosts.rb config/environments/production.rb && su mastodon -s /bin/bash -c 'bundle exec sidekiq'"
+    depends_on:
+      mastodon-web:
+        condition: service_healthy
+    volumes:
+      - mastodon-public:/mastodon/public/system
+
+volumes:
+  gargoyle-data:
+  gargoyle-media:
+  mastodon-postgres:
+  mastodon-redis:
+  mastodon-public:

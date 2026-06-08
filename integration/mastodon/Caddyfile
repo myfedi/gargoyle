@@ -1,0 +1,11 @@
+{
+	auto_https off
+}
+
+http://gargoyle.test {
+	reverse_proxy gargoyle:3000
+}
+
+http://mastodon.test {
+	reverse_proxy mastodon-web:3000
+}

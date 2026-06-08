@@ -1,0 +1,17 @@
+debug: true
+domain: gargoyle.test
+public_host: http://gargoyle.test
+port: 3000
+tls: false
+sqlite:
+  uri: /data/gargoyle.db
+media:
+  storage_dir: /media
+oauth:
+  allow_password_grant: true
+activitypub:
+  body_limit_bytes: 1048576
+  remote_url_exceptions:
+    - host: mastodon.test
+      allow_http: true
+      allow_private_ip: true

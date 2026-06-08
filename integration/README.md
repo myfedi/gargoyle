@@ -5,24 +5,25 @@ Disposable Docker Compose suites live under one folder per integration target. S
 ## Plan
 
 1. One folder per target:
-   - `gts/` — GoToSocial, implemented first.
-   - Future: `mastodon/`, `wanderer/`, Instagram bridge, book service.
+   - `gts/` — GoToSocial.
+   - `mastodon/` — Mastodon.
+   - Future: `wanderer/`, Instagram bridge, book service.
 2. Keep each target isolated with its own Compose project, volumes, config, and reverse proxy.
-3. Use internal Compose DNS/public hostnames for federation (`gargoyle.test`, `gts.test`) without requiring `/etc/hosts`.
+3. Use internal Compose DNS/public hostnames for federation (`gargoyle.test`, `gts.test`, `mastodon.test`) without requiring `/etc/hosts`.
 4. Use Go `testing` and API requests for assertions. Add Playwright only for flows that truly need a browser/OAuth UI.
 5. Tear down with `-v` to delete all throw-away state.
 
-## GoToSocial suite
+## Running a suite
 
-From `integration/gts/`:
+From `integration/gts/` or `integration/mastodon/`:
 
 ```sh
-docker compose up -d --build
 GARGOYLE_RUN_INTEGRATION=1 go test -v -count=1 .
-docker compose down -v --remove-orphans
 ```
 
-The Go test starts one Compose stack for the package when `GARGOYLE_RUN_INTEGRATION=1` is set, then tears it down at the end. Test data uses unique markers/accounts to avoid requiring expensive per-test Docker resets. GTS accounts are created/promoted by invoking `docker compose exec` against the running `gotosocial` service. Gargoyle creates its test account in its service entrypoint.
+The Go test starts one Compose stack for the package when `GARGOYLE_RUN_INTEGRATION=1` is set, then tears it down at the end. Test data uses unique markers/accounts to avoid requiring expensive per-test Docker resets. GTS accounts are created/promoted by invoking `docker compose exec` against the running `gotosocial` service. Mastodon accounts are created by invoking `rails runner` in the running Mastodon web service. Gargoyle creates its test account in its service entrypoint.
+
+## GoToSocial suite
 
 The suite currently validates:
 
@@ -56,3 +57,24 @@ Host access goes through the Caddy proxy on `http://127.0.0.1:18080` with Host h
 
 - `http://gargoyle.test`
 - `http://gts.test`
+
+## Mastodon suite
+
+The Mastodon suite mirrors the core GoToSocial coverage against a disposable Mastodon, PostgreSQL, Redis, and Sidekiq stack. It currently validates:
+
+- OAuth app/password-token setup against both servers.
+- Mastodon resolves Gargoyle via WebFinger/ActivityPub.
+- Gargoyle resolves Mastodon via WebFinger/ActivityPub.
+- Mastodon follows and unfollows Gargoyle.
+- Gargoyle creates/tracks an outbound follow to Mastodon.
+- Gargoyle delivers public, unlisted, private/followers-only, and direct-mention statuses to Mastodon.
+- Mastodon delivers a public mention status to Gargoyle.
+- Mastodon favourites and boosts a Gargoyle status.
+- Gargoyle deletes a status after Mastodon has received it and deletion propagates.
+- Unsigned Gargoyle inbox POST is rejected.
+- Profile update credentials persist locally and federate to Mastodon followers.
+
+Host access goes through the Mastodon suite Caddy proxy on `http://127.0.0.1:18081` with Host headers. Inside Docker, public federation hosts are:
+
+- `http://gargoyle.test`
+- `http://mastodon.test`
