@@ -75,17 +75,34 @@ sudo rsync -a --delete frontend/dist/ /srv/gargoyle/frontend/dist/
 
 For same-origin deployment, configure frontend OAuth/API URLs to point at the same public origin.
 
-Example `frontend/.env.production` before building:
+The first-party frontend also needs an OAuth client ID. Register one against the production backend and use the returned `client_id` when building the frontend:
+
+```sh
+curl -fsS -X POST https://example.org/api/v1/apps \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "client_name": "Gargoyle Web",
+    "redirect_uris": "https://example.org/oauth/callback",
+    "scopes": "read write follow",
+    "website": "https://example.org"
+  }'
+```
+
+Example `frontend/.env.production.local` before building:
 
 ```env
 VITE_GARGOYLE_API_BASE_URL=https://example.org
+VITE_GARGOYLE_OAUTH_CLIENT_ID=returned-client-id
 VITE_GARGOYLE_OAUTH_AUTHORIZE_URL=https://example.org/oauth/authorize
 VITE_GARGOYLE_OAUTH_TOKEN_URL=https://example.org/oauth/token
 VITE_GARGOYLE_OAUTH_REVOKE_URL=https://example.org/oauth/revoke
-VITE_GARGOYLE_OAUTH_REDIRECT_URI=https://example.org/
+VITE_GARGOYLE_OAUTH_REDIRECT_URI=https://example.org/oauth/callback
+VITE_GARGOYLE_OAUTH_SCOPES="read write follow"
 ```
 
-Do not put secrets in `VITE_*` variables. They are compiled into browser-visible JavaScript.
+Do not put secrets in `VITE_*` variables. They are compiled into browser-visible JavaScript. The OAuth `client_id` is public; do not put `client_secret` in frontend env.
+
+When building from a working tree used for local development, make sure local env files such as `frontend/.env.local` do not point production builds at development hosts like `gargoyle.test`. Prefer a clean checkout or pass the production `VITE_*` variables explicitly in the build environment.
 
 ## Caddy example
 
