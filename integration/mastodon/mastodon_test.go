@@ -283,9 +283,14 @@ func TestMastodonReplyContextMediaEditPolls(t *testing.T) {
 	var updated shared.Status
 	resp, body, err := s.gargoyle.PatchForm(s.ctx, "/api/v1/statuses/"+url.PathEscape(created.ID), s.gargoyleToken, url.Values{"status": {edited}, "visibility": {"public"}}, &updated)
 	shared.Require2xx(t, resp, body, err)
-	if !statusEventuallyContains(s.ctx, s.mastodon, s.mastodonToken, "/api/v1/statuses/"+url.PathEscape(remoteEdit.ID), edited, 10*time.Second) {
-		t.Log("Mastodon accepted the Update delivery but did not update the remote status content; keeping this as a compatibility observation")
-	}
+	shared.WaitFor(s.ctx, "status edit federates to Mastodon", 2*time.Second, func(ctx context.Context) (struct{}, bool, error) {
+		var status shared.Status
+		resp, _, err := s.mastodon.GetJSON(ctx, "/api/v1/statuses/"+url.PathEscape(remoteEdit.ID), s.mastodonToken, &status)
+		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return struct{}{}, false, err
+		}
+		return struct{}{}, strings.Contains(status.Content, edited), nil
+	})
 
 	pollMarker := fmt.Sprintf("mastodon-poll-%d", time.Now().UnixNano())
 	localPoll := postStatusForm(t, s.ctx, s.gargoyle, s.gargoyleToken, url.Values{"status": {"poll from gargoyle " + pollMarker}, "visibility": {"public"}, "activitypub_type": {"Question"}, "poll[options][]": {"red " + pollMarker, "blue " + pollMarker}, "poll[expires_in]": {"3600"}, "poll[multiple]": {"false"}})

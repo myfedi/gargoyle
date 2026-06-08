@@ -3,6 +3,7 @@ package clientapi
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -91,6 +92,8 @@ func (u Statuses) prepareStatusEdit(ctx context.Context, account *models.Account
 		pollExpiresAt = note.PollExpiresAt
 	}
 	editedNote := statusWithEdits(*note, input, visibility, u.deps.ContentSanitizer.SanitizeHTML(input.Content), u.deps.ContentSanitizer.StripHTMLFromText(input.Content))
+	editedAt := time.Now().UTC()
+	editedNote.EditedAt = &editedAt
 	if input.ObjectType == "Question" {
 		editedNote.PollMultiple = input.PollMultiple
 		editedNote.PollExpiresAt = pollExpiresAt

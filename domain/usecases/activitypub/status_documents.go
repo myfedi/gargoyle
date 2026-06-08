@@ -72,6 +72,9 @@ func StatusUpdateObject(account models.Account, note models.Note) map[string]any
 	if !note.PublishedAt.IsZero() {
 		doc["published"] = note.PublishedAt.UTC().Format(time.RFC3339)
 	}
+	if note.EditedAt != nil && !note.EditedAt.IsZero() {
+		doc["updated"] = note.EditedAt.UTC().Format(time.RFC3339)
+	}
 	if note.SpoilerText != "" {
 		doc["summary"] = note.SpoilerText
 	}
