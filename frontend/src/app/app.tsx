@@ -3,6 +3,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { Bell, LogOut, Menu, Search, Settings } from "lucide-react";
 
 import { AuthProvider, useAuth } from "@/app/auth-context";
+import { PoweredByFooter } from "@/components/powered-by-footer";
 import { Button } from "@/components/ui/button";
 import { DomainModerationPage } from "@/features/admin/domain-moderation-page";
 import { LoginPage } from "@/features/auth/login-page";
@@ -104,7 +105,7 @@ function AuthenticatedApp() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
@@ -205,9 +206,10 @@ function AuthenticatedApp() {
         ) : null}
       </header>
 
-      <main id="main-content" className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-8">
+      <main id="main-content" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-6 md:py-8">
         {page}
       </main>
+      <PoweredByFooter />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { LockKeyhole, ShieldCheck } from "lucide-react";
 
+import { PoweredByFooter } from "@/components/powered-by-footer";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/app/auth-context";
 import { getOAuthConfig } from "@/lib/config";
@@ -9,8 +10,9 @@ export function LoginPage() {
   const oauthConfig = getOAuthConfig();
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <section className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm" aria-labelledby="login-title">
+    <div className="flex min-h-screen flex-col bg-background">
+      <main className="flex flex-1 items-center justify-center px-4 py-10">
+        <section className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm" aria-labelledby="login-title">
         <div className="mb-7 flex items-start gap-4">
           <div className="rounded-lg bg-secondary p-3 text-secondary-foreground">
             <LockKeyhole className="size-5" aria-hidden="true" />
@@ -54,7 +56,9 @@ export function LoginPage() {
         <Button className="mt-6 w-full" onClick={() => void signIn()} disabled={!oauthConfig || status === "checking"}>
           Continue with Gargoyle
         </Button>
-      </section>
-    </main>
+        </section>
+      </main>
+      <PoweredByFooter />
+    </div>
   );
 }
