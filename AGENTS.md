@@ -33,7 +33,7 @@ Forbidden examples:
 - use cases importing HTTP/Fiber/database driver packages directly
 - handlers performing multi-step business workflows that belong in use cases
 
-Handlers should parse/serialize HTTP, authenticate, call use cases, and map errors. They should not own business rules.
+Handlers and API adapters are transport and wiring only. They may parse requests, serialize responses, authenticate/authorize at the transport boundary, enforce transport-level limits, call use cases, enqueue returned post-commit effects, and map domain errors to protocol responses. They must not own business rules, multi-step workflows, recipient/visibility decisions, state transitions, or compatibility semantics; put that logic in `domain/usecases` behind ports as needed.
 
 ## Transactions
 
