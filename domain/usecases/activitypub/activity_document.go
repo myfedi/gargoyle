@@ -202,6 +202,7 @@ type extractedNoteJSON struct {
 	InReplyTo    *string         `json:"inReplyTo"`
 	To           json.RawMessage `json:"to"`
 	CC           json.RawMessage `json:"cc"`
+	Audience     json.RawMessage `json:"audience"`
 	Tag          json.RawMessage `json:"tag"`
 	Attachment   json.RawMessage `json:"attachment"`
 	Published    string          `json:"published"`
@@ -210,13 +211,43 @@ type extractedNoteJSON struct {
 	AnyOf        json.RawMessage `json:"anyOf"`
 }
 
-func normalizedExtractedVisibility(visibility string) string {
+func normalizedExtractedVisibility(visibility string, attributedTo string, to, cc, audience []string) string {
 	switch visibility {
 	case "public", "unlisted", "private", "direct":
 		return visibility
-	default:
+	}
+	return inferVisibilityFromAudience(attributedTo, to, cc, audience)
+}
+
+func inferVisibilityFromAudience(attributedTo string, to, cc, audience []string) string {
+	if containsActivityStreamsPublic(to) {
 		return "public"
 	}
+	if containsActivityStreamsPublic(cc) || containsActivityStreamsPublic(audience) {
+		return "unlisted"
+	}
+	followersURI := strings.TrimRight(attributedTo, "/") + "/followers"
+	if containsAudienceURI(to, followersURI) || containsAudienceURI(cc, followersURI) || containsAudienceURI(audience, followersURI) {
+		return "private"
+	}
+	return "direct"
+}
+
+func containsActivityStreamsPublic(values []string) bool {
+	return containsAudienceURI(values, activityStreamsPublicURI) || containsAudienceURI(values, "as:Public") || containsAudienceURI(values, "Public")
+}
+
+func containsAudienceURI(values []string, target string) bool {
+	if target == "" {
+		return false
+	}
+	target = strings.TrimRight(target, "/")
+	for _, value := range values {
+		if strings.TrimRight(value, "/") == target {
+			return true
+		}
+	}
+	return false
 }
 
 // ExtractNote returns the Note embedded in a Create activity, when present.
@@ -289,7 +320,10 @@ func extractedNoteFromJSON(note extractedNoteJSON) ExtractedNote {
 		expiresAt = &parsed
 	}
 	pollOptions, multiple := extractPollOptions(note.OneOf, note.AnyOf)
-	return ExtractedNote{URI: note.ID, Type: normalizedObjectType(note.Type), Content: content, Visibility: normalizedExtractedVisibility(note.Visibility), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: extractStringList(note.To), CC: extractStringList(note.CC), PublishedAt: publishedAt, PollOptions: pollOptions, PollMultiple: multiple, PollExpiresAt: expiresAt, Hashtags: extractHashtags(note.Tag), Emojis: extractEmojis(note.Tag), Media: extractMediaAttachments(note.Attachment)}
+	to := extractStringList(note.To)
+	cc := extractStringList(note.CC)
+	audience := extractStringList(note.Audience)
+	return ExtractedNote{URI: note.ID, Type: normalizedObjectType(note.Type), Content: content, Visibility: normalizedExtractedVisibility(note.Visibility, note.AttributedTo, to, cc, audience), Sensitive: note.Sensitive, SpoilerText: note.Summary, AttributedTo: note.AttributedTo, InReplyToURI: note.InReplyTo, MentionURIs: extractMentionURIs(note.Tag), To: to, CC: cc, PublishedAt: publishedAt, PollOptions: pollOptions, PollMultiple: multiple, PollExpiresAt: expiresAt, Hashtags: extractHashtags(note.Tag), Emojis: extractEmojis(note.Tag), Media: extractMediaAttachments(note.Attachment)}
 }
 
 // ExtractLocalRecipientUsernames returns local actor usernames referenced by an

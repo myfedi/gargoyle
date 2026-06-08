@@ -181,7 +181,7 @@ func TestMastodonFollowRequests(t *testing.T) {
 
 	// Mastodon -> locked Gargoyle: request is pending until Gargoyle explicitly accepts.
 	_, _, _ = s.mastodon.PostForm(s.ctx, "/api/v1/accounts/"+url.PathEscape(s.aliceOnMastodon.ID)+"/unfollow", s.mastodonToken, url.Values{}, nil)
-	assertAccountAbsent(t, s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/accounts/"+url.PathEscape(s.alice.ID)+"/followers", "bob@mastodon.test", 6*time.Second)
+	waitForAccountAbsent(t, s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/accounts/"+url.PathEscape(s.alice.ID)+"/followers", "bob@mastodon.test")
 	var updated shared.Account
 	resp, body, err := s.gargoyle.PatchForm(s.ctx, "/api/v1/accounts/update_credentials", s.gargoyleToken, url.Values{"locked": {"true"}}, &updated)
 	shared.Require2xx(t, resp, body, err)
@@ -211,16 +211,20 @@ func TestMastodonFollowRequests(t *testing.T) {
 	assertAccountAbsent(t, s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/accounts/"+url.PathEscape(s.alice.ID)+"/followers", "charlie@mastodon.test", 3*time.Second)
 
 	// Gargoyle -> locked Mastodon: Gargoyle relationship is requested until Mastodon accepts.
-	setMastodonLocked(t, "bob", true)
-	defer setMastodonLocked(t, "bob", false)
-	_, _, _ = s.gargoyle.PostForm(s.ctx, "/api/v1/accounts/"+url.PathEscape(s.bobOnGargoyle.ID)+"/unfollow", s.gargoyleToken, url.Values{}, nil)
-	resp, body, err = s.gargoyle.PostForm(s.ctx, "/api/v1/accounts/"+url.PathEscape(s.bobOnGargoyle.ID)+"/follow", s.gargoyleToken, url.Values{}, nil)
+	lockedUser := fmt.Sprintf("locked%d", time.Now().UnixNano())
+	setupMastodonAccount(t, lockedUser, env("MASTODON_PASSWORD", "Str0ngP@ssword!"))
+	setMastodonLocked(t, lockedUser, true)
+	lockedApp, rerr := shared.RegisterApp(s.ctx, s.mastodon)
+	mustNoResponseError(t, rerr)
+	lockedToken := mastodonAccessToken(t, lockedUser, lockedApp)
+	lockedOnGargoyle := searchAccount(t, s.ctx, s.gargoyle, s.gargoyleToken, lockedUser+"@mastodon.test")
+	resp, body, err = s.gargoyle.PostForm(s.ctx, "/api/v1/accounts/"+url.PathEscape(lockedOnGargoyle.ID)+"/follow", s.gargoyleToken, url.Values{}, nil)
 	shared.Require2xx(t, resp, body, err)
-	waitForRelationship(t, s.ctx, s.gargoyle, s.gargoyleToken, s.bobOnGargoyle.ID, func(rel relationship) bool { return rel.Requested })
-	aliceReq := waitForAccountInList(t, s.ctx, s.mastodon, s.mastodonToken, "/api/v1/follow_requests", "alice@gargoyle.test")
-	resp, body, err = s.mastodon.PostForm(s.ctx, "/api/v1/follow_requests/"+url.PathEscape(aliceReq.ID)+"/authorize", s.mastodonToken, url.Values{}, nil)
+	waitForRelationship(t, s.ctx, s.gargoyle, s.gargoyleToken, lockedOnGargoyle.ID, func(rel relationship) bool { return rel.Requested })
+	aliceReq := waitForAccountInList(t, s.ctx, s.mastodon, lockedToken, "/api/v1/follow_requests", "alice@gargoyle.test")
+	resp, body, err = s.mastodon.PostForm(s.ctx, "/api/v1/follow_requests/"+url.PathEscape(aliceReq.ID)+"/authorize", lockedToken, url.Values{}, nil)
 	shared.Require2xx(t, resp, body, err)
-	waitForRelationship(t, s.ctx, s.gargoyle, s.gargoyleToken, s.bobOnGargoyle.ID, func(rel relationship) bool { return rel.Following })
+	waitForRelationship(t, s.ctx, s.gargoyle, s.gargoyleToken, lockedOnGargoyle.ID, func(rel relationship) bool { return rel.Following })
 }
 
 func TestMastodonDirectMessages(t *testing.T) {
@@ -382,21 +386,36 @@ func waitForAccountInList(t testing.TB, ctx context.Context, client shared.Clien
 	})
 }
 
+func waitForAccountAbsent(t testing.TB, ctx context.Context, client shared.Client, token, path, acct string) {
+	t.Helper()
+	shared.WaitFor(ctx, acct+" absent from "+path, 2*time.Second, func(ctx context.Context) (struct{}, bool, error) {
+		return struct{}{}, !accountPresent(ctx, client, token, path, acct), nil
+	})
+}
+
 func assertAccountAbsent(t testing.TB, ctx context.Context, client shared.Client, token, path, acct string, duration time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(duration)
 	for time.Now().Before(deadline) {
-		var accounts []shared.Account
-		resp, _, err := client.GetJSON(ctx, path, token, &accounts)
-		if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			for _, account := range accounts {
-				if account.Acct == acct || account.Username == strings.Split(acct, "@")[0] {
-					t.Fatalf("account %q unexpectedly present in %s: %+v", acct, path, account)
-				}
-			}
+		if accountPresent(ctx, client, token, path, acct) {
+			t.Fatalf("account %q unexpectedly present in %s", acct, path)
 		}
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func accountPresent(ctx context.Context, client shared.Client, token, path, acct string) bool {
+	var accounts []shared.Account
+	resp, _, err := client.GetJSON(ctx, path, token, &accounts)
+	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false
+	}
+	for _, account := range accounts {
+		if account.Acct == acct || account.Username == strings.Split(acct, "@")[0] {
+			return true
+		}
+	}
+	return false
 }
 
 type relationship struct {
