@@ -9,7 +9,7 @@ import { DirectMessageForm } from "@/features/direct/direct-message-form";
 import { Tabs } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Panel } from "@/features/shared";
-import type { ComposeValues } from "@/features/status/compose-form";
+import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
 import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
@@ -45,6 +45,9 @@ export function MyProfilePage() {
   const [busyAccountId, setBusyAccountId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MastodonStatus | null>(null);
   const [forwardingStatus, setForwardingStatus] = useState<MastodonStatus | null>(null);
   const [isReplying, setIsReplying] = useState(false);
@@ -59,6 +62,11 @@ export function MyProfilePage() {
   const oldestStatusId = statuses.at(-1)?.id;
   const pinnedIDs = new Set(pinnedStatuses.map((status) => status.id));
   const normalStatuses = statuses.filter((status) => !pinnedIDs.has(status.id));
+
+  const searchKnownAccounts = useCallback(async (query: string) => {
+    if (!api) return [];
+    return api.searchKnownAccounts(query);
+  }, [api]);
 
   const loadProfile = useCallback(async () => {
     if (!api) return;
@@ -79,6 +87,7 @@ export function MyProfilePage() {
         setPinnedStatuses(nextPinnedStatuses);
         setReplyingTo(null);
         setReplyError(null);
+        setPublishError(null);
         setForwardingStatus(null);
       } else if (activeTab === "bookmarks") {
         setStatuses(await api.bookmarks());
@@ -186,6 +195,30 @@ export function MyProfilePage() {
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not edit post.");
       return false;
+    }
+  }
+
+  async function submitPost(values: ComposeValues) {
+    if (!api) return;
+    setIsPosting(true);
+    setPublishError(null);
+
+    try {
+      const createdStatus = await api.createStatus({
+        status: values.status,
+        visibility: values.visibility,
+        sensitive: values.sensitive,
+        spoiler_text: values.spoilerText,
+        media_ids: values.mediaIds,
+        activitypub_type: values.objectType,
+        poll: values.objectType === "Question" ? { options: values.pollOptions, expires_in: values.pollExpiresIn, multiple: values.pollMultiple } : undefined,
+      });
+      setStatuses((current) => [createdStatus, ...current.filter((item) => item.id !== createdStatus.id)]);
+      setIsComposeOpen(false);
+    } catch (caughtError) {
+      setPublishError(caughtError instanceof Error ? caughtError.message : "Could not publish post.");
+    } finally {
+      setIsPosting(false);
     }
   }
 
@@ -499,7 +532,28 @@ export function MyProfilePage() {
             </section>
           ) : null}
           <section>
-            <h2 className="mb-3 text-sm font-semibold">Posts</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold">Posts</h2>
+              <Button size="sm" variant={isComposeOpen ? "outline" : "default"} onClick={() => { setIsComposeOpen((current) => !current); setPublishError(null); }}>
+                {isComposeOpen ? "Close composer" : "New post"}
+              </Button>
+            </div>
+            {isComposeOpen ? (
+              <div className="mb-5 rounded-lg border border-border bg-background p-4">
+                <ComposeForm
+                  submitLabel="Publish"
+                  submittingLabel="Publishing..."
+                  placeholder="Write a post"
+                  isSubmitting={isPosting}
+                  error={publishError}
+                  onSubmit={submitPost}
+                  onUploadMedia={api?.uploadMedia}
+                  onDeleteMedia={api?.deleteMedia}
+                  onUpdateMedia={api?.updateMedia}
+                  searchKnownAccounts={searchKnownAccounts}
+                />
+              </div>
+            ) : null}
             <StatusList
               statuses={normalStatuses}
               currentAccountId={account.id}
