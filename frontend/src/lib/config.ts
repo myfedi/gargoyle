@@ -13,6 +13,10 @@ export function getApiBaseUrl() {
   return import.meta.env.VITE_GARGOYLE_API_BASE_URL ?? defaultApiBaseUrl;
 }
 
+export function getVapidPublicKey() {
+  return import.meta.env.VITE_GARGOYLE_VAPID_PUBLIC_KEY ?? "";
+}
+
 export function getOAuthConfig(): OAuthClientConfig | null {
   const clientId = import.meta.env.VITE_GARGOYLE_OAUTH_CLIENT_ID;
   if (!clientId) {
@@ -27,7 +31,7 @@ export function getOAuthConfig(): OAuthClientConfig | null {
     tokenEndpoint: import.meta.env.VITE_GARGOYLE_OAUTH_TOKEN_URL ?? `${baseUrl}/oauth/token`,
     revocationEndpoint: import.meta.env.VITE_GARGOYLE_OAUTH_REVOKE_URL ?? `${baseUrl}/oauth/revoke`,
     redirectUri: import.meta.env.VITE_GARGOYLE_OAUTH_REDIRECT_URI ?? `${globalThis.location.origin}/oauth/callback`,
-    scopes: parseScopes(import.meta.env.VITE_GARGOYLE_OAUTH_SCOPES ?? "read write follow"),
+    scopes: parseScopes(import.meta.env.VITE_GARGOYLE_OAUTH_SCOPES ?? "read write follow push"),
   };
 }
 

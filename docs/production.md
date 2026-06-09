@@ -99,7 +99,7 @@ curl -fsS -X POST https://example.org/api/v1/apps \
   --data '{
     "client_name": "Gargoyle Web",
     "redirect_uris": "https://example.org/oauth/callback",
-    "scopes": "read write follow",
+    "scopes": "read write follow push",
     "website": "https://example.org"
   }'
 ```
@@ -113,7 +113,8 @@ VITE_GARGOYLE_OAUTH_AUTHORIZE_URL=https://example.org/oauth/authorize
 VITE_GARGOYLE_OAUTH_TOKEN_URL=https://example.org/oauth/token
 VITE_GARGOYLE_OAUTH_REVOKE_URL=https://example.org/oauth/revoke
 VITE_GARGOYLE_OAUTH_REDIRECT_URI=https://example.org/oauth/callback
-VITE_GARGOYLE_OAUTH_SCOPES="read write follow"
+VITE_GARGOYLE_OAUTH_SCOPES="read write follow push"
+VITE_GARGOYLE_VAPID_PUBLIC_KEY=generated-vapid-public-key
 ```
 
 Do not put secrets in `VITE_*` variables. They are compiled into browser-visible JavaScript. The OAuth `client_id` is public; do not put `client_secret` in frontend env.

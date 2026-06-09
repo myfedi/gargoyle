@@ -91,7 +91,7 @@ func (w *PushDeliveryWorker) processJob(ctx context.Context, job models.PushDeli
 		w.markFailed(ctx, job, err)
 		return
 	}
-	payload, err := json.Marshal(map[string]any{"access_token": sub.AccessTokenID, "notification_id": notification.ID, "notification_type": notification.Type, "title": pushTitle(notification.Type), "body": pushBody(notification.Type), "icon": "", "preferred_locale": "en"})
+	payload, err := json.Marshal(map[string]any{"access_token": sub.AccessTokenID, "notification_id": notification.ID, "notification_type": notification.Type, "status_id": notification.StatusID, "title": pushTitle(notification.Type), "body": pushBody(notification.Type), "icon": "", "preferred_locale": "en"})
 	if err != nil {
 		w.markFailed(ctx, job, err)
 		return

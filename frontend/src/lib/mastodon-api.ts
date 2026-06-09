@@ -1,5 +1,5 @@
 import { ApiClient } from "@/lib/api";
-import type { ActivityPubObjectType, DomainBlock, MastodonAccount, MastodonAccountField, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
+import type { ActivityPubObjectType, DomainBlock, MastodonAccount, MastodonAccountField, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonPushSubscription, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
@@ -179,6 +179,18 @@ export function createMastodonApi(accessToken: string) {
     },
     deleteNotification(id: string) {
       return client.request<Record<string, never>>(`/api/v1/notifications/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
+    pushSubscription() {
+      return client.request<MastodonPushSubscription>("/api/v1/push/subscription");
+    },
+    createPushSubscription(input: unknown) {
+      return client.request<MastodonPushSubscription>("/api/v1/push/subscription", { method: "POST", body: JSON.stringify(input) });
+    },
+    updatePushSubscription(input: unknown) {
+      return client.request<MastodonPushSubscription>("/api/v1/push/subscription", { method: "PUT", body: JSON.stringify(input) });
+    },
+    deletePushSubscription() {
+      return client.request<Record<string, never>>("/api/v1/push/subscription", { method: "DELETE" });
     },
     conversations(limit = 40) {
       return client.request<MastodonConversation[]>(`/api/v1/conversations?limit=${limit}`);

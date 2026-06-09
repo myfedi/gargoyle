@@ -38,6 +38,27 @@ func TestEnsureScopesAllowedAllowsRegisteredParentScope(t *testing.T) {
 	}
 }
 
+func TestIssueTokenSupportsClientCredentialsGrant(t *testing.T) {
+	repo := newTestOAuthRepo()
+	repo.app.Scopes = "read write push"
+	uc := UseCase{cfg: Config{OAuthRepo: repo}}
+
+	issued, derr := uc.IssueToken(context.Background(), IssueTokenInput{GrantType: "client_credentials", ClientID: "client", ClientSecret: "secret", Scope: "read push"})
+	if derr != nil {
+		t.Fatalf("issue client credentials token: %v", derr)
+	}
+	if issued.AccessToken == "" || issued.Scope != "read push" {
+		t.Fatalf("unexpected issued token: %+v", issued)
+	}
+	stored := repo.tokens[TokenHash(issued.AccessToken)]
+	if stored == nil {
+		t.Fatalf("expected token to be stored")
+	}
+	if stored.UserID != "" {
+		t.Fatalf("client credentials token should not be user-bound, got %q", stored.UserID)
+	}
+}
+
 func TestRevokeTokenDeletesTokenByHashAndIsIdempotent(t *testing.T) {
 	repo := newTestOAuthRepo()
 	uc := UseCase{cfg: Config{OAuthRepo: repo}}
@@ -115,8 +136,10 @@ func (r *testOAuthRepo) GetApplicationByClientID(_ context.Context, _ *db.Tx, cl
 	return r.app, nil
 }
 
-func (r *testOAuthRepo) CreateAccessToken(context.Context, *db.Tx, repos.CreateOAuthAccessTokenInput) (*models.OAuthAccessToken, error) {
-	return nil, errors.New("not implemented")
+func (r *testOAuthRepo) CreateAccessToken(_ context.Context, _ *db.Tx, input repos.CreateOAuthAccessTokenInput) (*models.OAuthAccessToken, error) {
+	token := &models.OAuthAccessToken{ID: "token", ApplicationID: input.ApplicationID, UserID: input.UserID, TokenHash: input.TokenHash, Scopes: input.Scopes, ExpiresAt: input.ExpiresAt}
+	r.tokens[input.TokenHash] = token
+	return token, nil
 }
 
 func (r *testOAuthRepo) GetAccessTokenByHash(_ context.Context, _ *db.Tx, tokenHash string) (*models.OAuthAccessToken, error) {

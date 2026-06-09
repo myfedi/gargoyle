@@ -32,7 +32,7 @@ type OAuthAccessToken struct {
 	CreatedAt     time.Time  `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 	UpdatedAt     time.Time  `bun:"type:timestamptz,nullzero,notnull,default:current_timestamp"`
 	ApplicationID string     `bun:"type:CHAR(26),nullzero,notnull"`
-	UserID        string     `bun:"type:CHAR(26),nullzero,notnull"`
+	UserID        string     `bun:"type:CHAR(26),nullzero"`
 	TokenHash     string     `bun:",nullzero,notnull,unique"`
 	Scopes        string     `bun:",nullzero,notnull"`
 	ExpiresAt     *time.Time `bun:"type:timestamptz"`

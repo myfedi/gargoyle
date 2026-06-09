@@ -265,6 +265,12 @@ func (u UseCase) IssueToken(ctx context.Context, input IssueTokenInput) (*Issued
 		}
 		return u.issueAuthorizationCodeToken(ctx, app, input, clientSecretProvided)
 	}
+	if input.GrantType == "client_credentials" {
+		if !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
+			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+		}
+		return u.issueClientCredentialsToken(ctx, app, input)
+	}
 	return nil, derrors.New(derrors.ErrBadRequest, "unsupported grant_type")
 }
 
@@ -306,6 +312,17 @@ func (u UseCase) issuePasswordToken(ctx context.Context, app *models.OAuthApplic
 		return nil, derr
 	}
 	return u.issueAccessToken(ctx, nil, app.ID, user.ID, scope)
+}
+
+func (u UseCase) issueClientCredentialsToken(ctx context.Context, app *models.OAuthApplication, input IssueTokenInput) (*IssuedToken, *derrors.DomainError) {
+	scope, derr := normalizeRequestedScopes(input.Scope, app.Scopes)
+	if derr != nil {
+		return nil, derr
+	}
+	if derr := ensureScopesAllowed(scope, app.Scopes); derr != nil {
+		return nil, derr
+	}
+	return u.issueAccessToken(ctx, nil, app.ID, "", scope)
 }
 
 func (u UseCase) issueAuthorizationCodeToken(ctx context.Context, app *models.OAuthApplication, input IssueTokenInput, clientSecretProvided bool) (*IssuedToken, *derrors.DomainError) {
@@ -385,6 +402,9 @@ func (u UseCase) AuthenticateBearer(ctx context.Context, bearer string) (*Authen
 	}
 	if token.ExpiresAt != nil && time.Now().UTC().After(*token.ExpiresAt) {
 		return nil, derrors.New(derrors.ErrUnauthorized, "expired bearer token")
+	}
+	if strings.TrimSpace(token.UserID) == "" {
+		return nil, derrors.New(derrors.ErrUnauthorized, "user token required")
 	}
 	user, err := u.cfg.UsersRepo.GetUserByID(ctx, nil, token.UserID)
 	if err != nil {

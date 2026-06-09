@@ -139,6 +139,14 @@ export type MastodonNotification = {
   status?: MastodonStatus;
 };
 
+export type MastodonPushSubscription = {
+  id: string;
+  endpoint: string;
+  server_key: string;
+  policy: string;
+  alerts: Partial<Record<"mention" | "status" | "reblog" | "follow" | "follow_request" | "favourite" | "poll" | "update", boolean>>;
+};
+
 export type MastodonConversation = {
   id: string;
   unread: boolean;

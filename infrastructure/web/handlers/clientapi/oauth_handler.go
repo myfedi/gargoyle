@@ -1,6 +1,7 @@
 package clientapi
 
 import (
+	"encoding/base64"
 	"strings"
 	"time"
 
@@ -125,6 +126,7 @@ func (h OAuthHandler) issueToken(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
+	applyBasicClientCredentials(c, &req.ClientID, &req.ClientSecret)
 	token, derr := h.uc.IssueToken(c.UserContext(), oauth.IssueTokenInput{GrantType: req.GrantType, ClientID: req.ClientID, ClientSecret: req.ClientSecret, Username: req.Username, Password: req.Password, Scope: req.Scope, Code: req.Code, RedirectURI: req.RedirectURI, CodeVerifier: req.CodeVerifier})
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
@@ -134,11 +136,33 @@ func (h OAuthHandler) issueToken(c *fiber.Ctx) error {
 	return c.JSON(tokenResponse{AccessToken: token.AccessToken, TokenType: token.TokenType, Scope: token.Scope, CreatedAt: token.CreatedAt, ExpiresIn: token.ExpiresIn})
 }
 
+func applyBasicClientCredentials(c *fiber.Ctx, clientID, clientSecret *string) {
+	if strings.TrimSpace(*clientID) != "" {
+		return
+	}
+	auth := c.Get(fiber.HeaderAuthorization)
+	encoded, ok := strings.CutPrefix(auth, "Basic ")
+	if !ok {
+		return
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return
+	}
+	id, secret, ok := strings.Cut(string(decoded), ":")
+	if !ok {
+		return
+	}
+	*clientID = id
+	*clientSecret = secret
+}
+
 func (h OAuthHandler) revokeToken(c *fiber.Ctx) error {
 	var req revokeTokenRequest
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
+	applyBasicClientCredentials(c, &req.ClientID, &req.ClientSecret)
 	if derr := h.uc.RevokeToken(c.UserContext(), oauth.RevokeTokenInput{ClientID: req.ClientID, ClientSecret: req.ClientSecret, Token: req.Token}); derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
