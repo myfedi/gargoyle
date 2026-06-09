@@ -2,10 +2,13 @@ package clientapi
 
 import (
 	"context"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
+	"github.com/myfedi/gargoyle/domain/ports/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
 )
 
@@ -130,7 +133,45 @@ func (u Accounts) resolveAndCacheRemoteAccount(ctx context.Context, query string
 	if derr := u.ensureRemoteDomainAllowed(ctx, remote.URI); derr != nil {
 		return nil, derr
 	}
+	u.cacheRemoteProfileImages(ctx, signer, remote)
 	return u.deps.RemoteAccountsRepo.UpsertRemoteAccount(ctx, nil, *remote)
+}
+
+func (u Accounts) cacheRemoteProfileImages(ctx context.Context, signer *models.Account, remote *models.Account) {
+	if signer == nil || remote == nil || signer.ID == "" {
+		return
+	}
+	remote.AvatarMediaID = u.cacheRemoteProfileImage(ctx, signer.ID, remote.AvatarURL)
+	remote.HeaderMediaID = u.cacheRemoteProfileImage(ctx, signer.ID, remote.HeaderURL)
+}
+
+func (u Accounts) cacheRemoteProfileImage(ctx context.Context, localAccountID string, rawURL *string) *string {
+	if rawURL == nil || *rawURL == "" {
+		return nil
+	}
+	if media, err := u.deps.MediaRepo.GetMediaAttachmentByRemoteURL(ctx, nil, *rawURL); err == nil {
+		_ = u.deps.MediaRepo.MarkMediaAccessed(ctx, nil, media.ID, time.Now().UTC())
+		return &media.ID
+	}
+	fetched, err := u.deps.RemoteMediaFetcher.FetchMedia(ctx, *rawURL, MaxMediaUploadBytes)
+	if err != nil || !strings.HasPrefix(fetched.ContentType, "image/") {
+		return nil
+	}
+	fileName := fetched.FileName
+	if fileName == "" {
+		fileName = path.Base(remoteMediaCacheKey(*rawURL))
+	}
+	now := time.Now().UTC()
+	storagePath, err := u.deps.MediaStorage.SaveMedia(ctx, remoteMediaCacheKey(*rawURL), fileName, fetched.Data)
+	if err != nil {
+		return nil
+	}
+	media, err := u.deps.MediaRepo.CreateMediaAttachment(ctx, nil, repos.CreateMediaAttachmentInput{LocalAccountID: localAccountID, FileName: fileName, ContentType: fetched.ContentType, StoragePath: storagePath, RemoteURL: rawURL, RemoteFetchedAt: &now, RemoteLastAccessedAt: &now, FileSize: int64(len(fetched.Data))})
+	if err != nil {
+		_ = u.deps.MediaStorage.DeleteMedia(ctx, storagePath)
+		return nil
+	}
+	return &media.ID
 }
 
 func (u Accounts) filterBlockedAccounts(ctx context.Context, accounts []models.Account) []models.Account {

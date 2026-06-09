@@ -30,6 +30,8 @@ type AccountsConfig struct {
 	NotesRepo             repos.NotesRepository
 	FollowsRepo           repos.FollowsRepository
 	MediaRepo             repos.MediaRepository
+	MediaStorage          ports.MediaStorage
+	RemoteMediaFetcher    ports.RemoteMediaFetcher
 	SocialRepo            repos.SocialRepository
 	BoostsRepo            repos.BoostsRepository
 	MentionsRepo          repos.MentionsRepository

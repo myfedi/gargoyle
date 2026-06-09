@@ -47,6 +47,8 @@ func (r *RemoteAccountsRepo) UpsertRemoteAccount(ctx context.Context, tx *dbPort
 		Set("display_name = EXCLUDED.display_name").
 		Set("summary = EXCLUDED.summary").
 		Set("url = EXCLUDED.url").
+		Set("avatar_media_id = COALESCE(EXCLUDED.avatar_media_id, remote_accounts.avatar_media_id)").
+		Set("header_media_id = COALESCE(EXCLUDED.header_media_id, remote_accounts.header_media_id)").
 		Set("avatar_url = EXCLUDED.avatar_url").
 		Set("header_url = EXCLUDED.header_url").
 		Set("inbox_uri = EXCLUDED.inbox_uri").

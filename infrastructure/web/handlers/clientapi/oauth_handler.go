@@ -1,7 +1,6 @@
 package clientapi
 
 import (
-	"net/url"
 	"strings"
 	"time"
 
@@ -190,31 +189,27 @@ func accountToResponseWithStats(account *models.Account, stats oauth.AccountStat
 }
 
 func accountAvatarURL(account *models.Account) string {
+	if account.AvatarMediaID != nil && *account.AvatarMediaID != "" {
+		return accountMediaURL(account.URI, *account.AvatarMediaID)
+	}
 	if account.AvatarURL != nil && *account.AvatarURL != "" {
 		return *account.AvatarURL
 	}
-	if account.AvatarMediaID == nil || *account.AvatarMediaID == "" {
-		return ""
-	}
-	return accountMediaURL(account.URI, *account.AvatarMediaID)
+	return ""
 }
 
 func accountHeaderURL(account *models.Account) string {
+	if account.HeaderMediaID != nil && *account.HeaderMediaID != "" {
+		return accountMediaURL(account.URI, *account.HeaderMediaID)
+	}
 	if account.HeaderURL != nil && *account.HeaderURL != "" {
 		return *account.HeaderURL
 	}
-	if account.HeaderMediaID == nil || *account.HeaderMediaID == "" {
-		return ""
-	}
-	return accountMediaURL(account.URI, *account.HeaderMediaID)
+	return ""
 }
 
-func accountMediaURL(actorURI, mediaID string) string {
-	parsed, err := url.Parse(actorURI)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return ""
-	}
-	return parsed.Scheme + "://" + parsed.Host + "/media/" + strings.TrimLeft(mediaID, "/")
+func accountMediaURL(_ string, mediaID string) string {
+	return "/media/" + strings.TrimLeft(mediaID, "/")
 }
 
 func firstNonEmpty(values ...string) string {

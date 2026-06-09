@@ -17,7 +17,9 @@ Serve the React frontend at `/`, and proxy Gargoyle backend routes on the same o
 - `/users/*`
 - `/@*`
 - `/api/*`
-- `/oauth*`
+- `/oauth/authorize`
+- `/oauth/token`
+- `/oauth/revoke`
 - `/media*`
 
 This keeps browser API calls same-origin and avoids CORS in production.
@@ -114,23 +116,27 @@ example.org {
 
 	root * /srv/gargoyle/frontend/dist
 
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-		X-Content-Type-Options "nosniff"
-		Referrer-Policy "no-referrer"
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+	@backend path /.well-known/* /nodeinfo* /users/* /@* /api/* /oauth/authorize /oauth/token /oauth/revoke /media* /inbox
+	handle @backend {
+		reverse_proxy 127.0.0.1:8080
 	}
 
-	@backend path /.well-known/* /nodeinfo* /users/* /@* /api/* /oauth* /media*
-	reverse_proxy @backend 127.0.0.1:8080
+	handle {
+		header {
+			Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "no-referrer"
+			Permissions-Policy "camera=(), microphone=(), geolocation=()"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'self'; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+		}
 
-	try_files {path} /index.html
-	file_server
+		try_files {path} /index.html
+		file_server
+	}
 }
 ```
 
-The `try_files` fallback is for the React single-page app. Backend routes must be matched before the SPA fallback.
+The `try_files` fallback is for the React single-page app. Backend routes must be handled before the SPA fallback; use `handle` blocks so routes such as `/oauth/authorize` are not rewritten to `/index.html`. Keep the static frontend CSP inside the static `handle` block so it does not override backend responses such as the OAuth authorization form. A standalone copy of this example is available at [`docs/Caddyfile.production.example`](Caddyfile.production.example).
 
 ## Run Gargoyle
 

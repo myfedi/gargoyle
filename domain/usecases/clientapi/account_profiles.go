@@ -2,6 +2,7 @@ package clientapi
 
 import (
 	"context"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -26,6 +27,9 @@ func (u Accounts) getAccount(ctx context.Context, localAccount *models.Account, 
 	if err == nil {
 		if derr := u.ensureRemoteDomainAllowed(ctx, remote.URI); derr != nil {
 			return nil, derr
+		}
+		if fresh := u.refreshRemoteAccountIfStale(ctx, localAccount, remote); fresh != nil {
+			return fresh, nil
 		}
 		return remote, nil
 	}
@@ -67,6 +71,19 @@ func (u Accounts) AccountStatuses(ctx context.Context, localAccount *models.Acco
 		return nil, derr
 	}
 	return mergeTimelineItems(items, boostItems, limit), nil
+}
+
+func (u Accounts) refreshRemoteAccountIfStale(ctx context.Context, signer *models.Account, cached *models.Account) *models.Account {
+	if cached == nil || cached.URI == "" || time.Since(cached.FetchedAt) < remoteAccountRefreshAfter {
+		return cached
+	}
+	refreshCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	fresh, err := u.resolveAndCacheRemoteAccount(refreshCtx, cached.URI, signer)
+	if err != nil || fresh == nil {
+		return cached
+	}
+	return fresh
 }
 
 func (u Accounts) accountStatusNotes(ctx context.Context, localAccount, account *models.Account, limit int, maxID string) ([]models.Note, error) {

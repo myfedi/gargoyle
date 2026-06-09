@@ -172,6 +172,8 @@ func buildAccountsWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.Accou
 		NotesRepo:             in.NotesRepo,
 		FollowsRepo:           in.FollowsRepo,
 		MediaRepo:             in.MediaRepo,
+		MediaStorage:          in.MediaStorage,
+		RemoteMediaFetcher:    ctx.remoteMediaFetcher,
 		SocialRepo:            in.SocialRepo,
 		BoostsRepo:            in.BoostsRepo,
 		MentionsRepo:          in.MentionsRepo,

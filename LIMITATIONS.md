@@ -31,3 +31,20 @@ A UI that needs to display pending state should query relationships for accounts
 ## ActivityPub signed GET dereferencing
 
 Signed GET dereferencing supports public/unlisted objects without a signature and followers-only objects for accepted followers with a valid HTTP signature. Direct-message object dereferencing remains disabled because direct recipient addressing is not yet persisted in a form that can be safely authorized.
+
+## Same-origin OAuth route split
+
+In same-origin deployments, OAuth routes are split between the backend and the frontend SPA:
+
+- backend: `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`
+- frontend SPA: `/oauth/callback`
+
+This requires reverse proxies to route only the backend OAuth endpoints to Gargoyle and let `/oauth/callback` fall through to the frontend. A broad matcher such as `/oauth*` will break the callback route; a broad SPA fallback can also accidentally rewrite `/oauth/authorize` to `/index.html`.
+
+Longer term, this should be made less fragile, either by serving the callback under an unambiguous frontend route, serving the first-party UI through backend-aware routing, or documenting/enforcing route ownership more explicitly.
+
+## Remote profile image cache scope
+
+Remote account avatars and headers are cached when a remote account is resolved, and stale profile visits refresh the remote actor document before updating the cached media IDs. The cache is keyed by the remote media URL and is pruned by the remote media cache cleanup policy.
+
+The refresh logic currently relies on the actor document changing its avatar/header URL. It does not perform conditional HTTP revalidation of unchanged media URLs with `ETag`, `Last-Modified`, or `Cache-Control` metadata. If a remote server replaces bytes at the same media URL, Gargoyle may continue serving the older cached copy until the remote media cache is pruned and fetched again.

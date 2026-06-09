@@ -1,0 +1,26 @@
+# Production same-origin Caddy config for Gargoyle.
+# Replace example.org with your public domain.
+
+example.org {
+	encode zstd gzip
+
+	root * /srv/gargoyle/frontend/dist
+
+	@backend path /.well-known/* /nodeinfo* /users/* /@* /api/* /oauth/authorize /oauth/token /oauth/revoke /media* /inbox
+	handle @backend {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle {
+		header {
+			Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "no-referrer"
+			Permissions-Policy "camera=(), microphone=(), geolocation=()"
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'self'; media-src 'self' https: blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+		}
+
+		try_files {path} /index.html
+		file_server
+	}
+}

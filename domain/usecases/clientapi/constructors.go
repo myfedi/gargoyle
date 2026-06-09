@@ -58,7 +58,7 @@ func validateCommon(cfg CommonConfig, name string) {
 
 func validateAccountsConfig(cfg AccountsConfig) {
 	validateCommon(cfg.CommonConfig, "accounts")
-	if cfg.AccountsRepo == nil || cfg.NotesRepo == nil || cfg.FollowsRepo == nil || cfg.MediaRepo == nil || cfg.SocialRepo == nil || cfg.BoostsRepo == nil || cfg.MentionsRepo == nil || cfg.PollsRepo == nil || cfg.RemoteAccountsRepo == nil || cfg.DomainBlocksRepo == nil || cfg.IDGenerator == nil || cfg.RemoteResolver == nil {
+	if cfg.AccountsRepo == nil || cfg.NotesRepo == nil || cfg.FollowsRepo == nil || cfg.MediaRepo == nil || cfg.MediaStorage == nil || cfg.RemoteMediaFetcher == nil || cfg.SocialRepo == nil || cfg.BoostsRepo == nil || cfg.MentionsRepo == nil || cfg.PollsRepo == nil || cfg.RemoteAccountsRepo == nil || cfg.DomainBlocksRepo == nil || cfg.IDGenerator == nil || cfg.RemoteResolver == nil {
 		panic("client API accounts workflow missing repository or resolver dependency")
 	}
 }

@@ -53,8 +53,8 @@ export function AccountPage({ route }: AccountPageProps) {
       const [nextCurrentAccount, nextAccount, nextStatuses, nextPinnedStatuses] = await Promise.all([
         api.verifyCredentials(),
         api.account(accountId),
-        api.accountStatuses(accountId),
-        api.accountStatuses(accountId, { pinned: true }),
+        api.accountStatuses(accountId, { limit: 5 }),
+        api.accountStatuses(accountId, { pinned: true, limit: 5 }),
       ]);
       const [nextRelationship] = nextAccount.id !== nextCurrentAccount.id ? await api.relationships([nextAccount.id]) : [];
       setCurrentAccount(nextCurrentAccount);
