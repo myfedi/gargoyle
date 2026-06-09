@@ -71,6 +71,13 @@ type Notification struct {
 	Status *Status `json:"status"`
 }
 
+type Conversation struct {
+	ID         string    `json:"id"`
+	Unread     bool      `json:"unread"`
+	Accounts   []Account `json:"accounts"`
+	LastStatus Status    `json:"last_status"`
+}
+
 type SearchResponse struct {
 	Accounts []Account `json:"accounts"`
 	Statuses []Status  `json:"statuses"`

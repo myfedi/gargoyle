@@ -418,6 +418,23 @@ func waitForStatus(t testing.TB, ctx context.Context, client shared.Client, toke
 	})
 }
 
+func waitForConversationStatus(t testing.TB, ctx context.Context, client shared.Client, token, marker string) shared.Status {
+	t.Helper()
+	return shared.WaitFor(ctx, marker+" in /api/v1/conversations", 2*time.Second, func(ctx context.Context) (shared.Status, bool, error) {
+		var conversations []shared.Conversation
+		resp, _, err := client.GetJSON(ctx, "/api/v1/conversations?limit=40", token, &conversations)
+		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return shared.Status{}, false, err
+		}
+		for _, conversation := range conversations {
+			if strings.Contains(conversation.LastStatus.Content, marker) {
+				return conversation.LastStatus, true, nil
+			}
+		}
+		return shared.Status{}, false, nil
+	})
+}
+
 func postStatus(t testing.TB, ctx context.Context, client shared.Client, token, content, visibility string) shared.Status {
 	t.Helper()
 	var status shared.Status
@@ -502,7 +519,10 @@ func TestVisibilityDeliveryAndTimelines(t *testing.T) {
 
 	gtsDirectMarker := fmt.Sprintf("gts-direct-to-gargoyle-%d", time.Now().UnixNano())
 	postStatus(t, s.ctx, s.gts, s.gtsToken, "@alice@gargoyle.test direct from gts "+gtsDirectMarker, "direct")
-	waitForStatus(t, s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/timelines/public?limit=60", gtsDirectMarker)
+	gotDirect := waitForConversationStatus(t, s.ctx, s.gargoyle, s.gargoyleToken, gtsDirectMarker)
+	if gotDirect.Visibility != "" && gotDirect.Visibility != "direct" {
+		t.Fatalf("received direct visibility = %q, want direct", gotDirect.Visibility)
+	}
 }
 
 func TestFavouritesBoostsRepliesAndDelete(t *testing.T) {
