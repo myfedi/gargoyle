@@ -33,10 +33,17 @@ func (h APIHandler) notificationStream(c *fiber.Ctx) error {
 		seen[item.Notification.ID] = true
 	}
 
+	requestDone := c.Context().Done()
+	userCtx := c.UserContext()
+
 	c.Set(fiber.HeaderContentType, "text/event-stream")
 	c.Set(fiber.HeaderCacheControl, "no-cache, no-transform")
 	c.Set(fiber.HeaderConnection, "keep-alive")
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+		defer func() {
+			_ = recover()
+		}()
+
 		_, _ = w.WriteString(": connected\n\n")
 		_ = w.Flush()
 		ticker := time.NewTicker(2 * time.Second)
@@ -45,7 +52,7 @@ func (h APIHandler) notificationStream(c *fiber.Ctx) error {
 		defer heartbeat.Stop()
 		for {
 			select {
-			case <-c.Context().Done():
+			case <-requestDone:
 				return
 			case <-heartbeat.C:
 				_, _ = w.WriteString(": keep-alive\n\n")
@@ -53,7 +60,7 @@ func (h APIHandler) notificationStream(c *fiber.Ctx) error {
 					return
 				}
 			case <-ticker.C:
-				items, derr := h.notificationsWorkflow.Notifications(c.UserContext(), principal.Account, 20)
+				items, derr := h.notificationsWorkflow.Notifications(userCtx, principal.Account, 20)
 				if derr != nil {
 					continue
 				}
