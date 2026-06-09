@@ -17,6 +17,13 @@ oauth:
 # /api routes used by the first-party UI and third-party Mastodon clients.
 client_api:
   enabled: true
+  # Required for Mastodon-compatible push notifications (Ivory, mobile apps).
+  # Generate once and keep stable; changing these invalidates client subscriptions.
+  # A small helper can be added later, or use webpush-go's GenerateVAPIDKeys.
+  vapid_public_key: ""
+  vapid_private_key: ""
+  # Recommended format: mailto:admin@example.org
+  vapid_subject: ""
 
 media:
   # Uploaded media bytes are stored on disk; only metadata is kept in SQLite.

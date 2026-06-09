@@ -61,6 +61,7 @@ var supportedScopes = map[string]bool{
 	"write:reports":       true,
 	"write:statuses":      true,
 	"follow":              true,
+	"push":                true,
 }
 
 type UseCase struct{ cfg Config }
@@ -130,10 +131,11 @@ type AccountStats struct {
 }
 
 type AuthenticatedUser struct {
-	User    *models.User
-	Account *models.Account
-	Scopes  string
-	Stats   AccountStats
+	User          *models.User
+	Account       *models.Account
+	AccessTokenID string
+	Scopes        string
+	Stats         AccountStats
 }
 
 func NewUseCase(cfg Config) UseCase {
@@ -396,7 +398,7 @@ func (u UseCase) AuthenticateBearer(ctx context.Context, bearer string) (*Authen
 	if derr != nil {
 		return nil, derr
 	}
-	return &AuthenticatedUser{User: user, Account: account, Scopes: token.Scopes, Stats: stats}, nil
+	return &AuthenticatedUser{User: user, Account: account, AccessTokenID: token.ID, Scopes: token.Scopes, Stats: stats}, nil
 }
 
 func (u UseCase) accountStats(ctx context.Context, account *models.Account) (AccountStats, *derrors.DomainError) {

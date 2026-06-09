@@ -47,7 +47,10 @@ type OAuthConfig struct {
 }
 
 type ClientAPIConfig struct {
-	Enabled bool `mapstructure:"enabled"`
+	Enabled         bool   `mapstructure:"enabled"`
+	VAPIDPublicKey  string `mapstructure:"vapid_public_key"`
+	VAPIDPrivateKey string `mapstructure:"vapid_private_key"`
+	VAPIDSubject    string `mapstructure:"vapid_subject"`
 }
 
 type Config struct {
@@ -123,6 +126,7 @@ func NewConfig(configFile string) (*Config, error) {
 	viper.SetDefault("media.remote_cache_ttl", "720h")
 	viper.SetDefault("oauth.allow_password_grant", false)
 	viper.SetDefault("client_api.enabled", true)
+	viper.SetDefault("client_api.vapid_subject", "")
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err

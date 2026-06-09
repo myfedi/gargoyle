@@ -10,6 +10,7 @@ import (
 
 	"os"
 
+	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/myfedi/gargoyle/adapters"
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/adapters/gcrypto"
@@ -38,6 +39,18 @@ func main() {
 		Name:  "admin",
 		Usage: "Admin CLI for user management",
 		Commands: []*cli.Command{
+			{
+				Name:  "generate-vapid-keys",
+				Usage: "Generate a VAPID keypair for Mastodon-compatible push notifications",
+				Action: func(c *cli.Context) error {
+					privateKey, publicKey, err := webpush.GenerateVAPIDKeys()
+					if err != nil {
+						return err
+					}
+					fmt.Printf("client_api:\n  vapid_public_key: %q\n  vapid_private_key: %q\n", publicKey, privateKey)
+					return nil
+				},
+			},
 			{
 				Name:  "media-cleanup",
 				Usage: "Delete broken media metadata and unattached uploads older than a duration",

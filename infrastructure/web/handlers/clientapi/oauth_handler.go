@@ -11,9 +11,18 @@ import (
 	"github.com/myfedi/gargoyle/infrastructure/web"
 )
 
-type OAuthHandler struct{ uc oauth.UseCase }
+type OAuthHandler struct {
+	uc             oauth.UseCase
+	vapidPublicKey string
+}
 
-func NewOAuthHandler(uc oauth.UseCase) OAuthHandler { return OAuthHandler{uc: uc} }
+func NewOAuthHandler(uc oauth.UseCase, vapidPublicKey ...string) OAuthHandler {
+	key := ""
+	if len(vapidPublicKey) > 0 {
+		key = vapidPublicKey[0]
+	}
+	return OAuthHandler{uc: uc, vapidPublicKey: key}
+}
 
 func (h OAuthHandler) Setup(app *fiber.App) {
 	app.Post("/api/v1/apps", h.registerApplication)
@@ -50,7 +59,7 @@ func (h OAuthHandler) registerApplication(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	return c.JSON(appToResponse(app))
+	return c.JSON(h.appToResponse(app))
 }
 
 func (h OAuthHandler) authorizeForm(c *fiber.Ctx) error {
@@ -176,8 +185,8 @@ func (h OAuthHandler) verifyCredentials(c *fiber.Ctx) error {
 	return c.JSON(accountToResponseWithStats(principal.Account, principal.Stats))
 }
 
-func appToResponse(app *models.OAuthApplication) appResponse {
-	return appResponse{ID: app.ID, Name: app.Name, Website: app.Website, RedirectURI: app.RedirectURI, ClientID: app.ClientID, ClientSecret: app.ClientSecret}
+func (h OAuthHandler) appToResponse(app *models.OAuthApplication) appResponse {
+	return appResponse{ID: app.ID, Name: app.Name, Website: app.Website, RedirectURI: app.RedirectURI, ClientID: app.ClientID, ClientSecret: app.ClientSecret, VapidKey: h.vapidPublicKey}
 }
 
 func accountToResponse(account *models.Account) accountResponse {

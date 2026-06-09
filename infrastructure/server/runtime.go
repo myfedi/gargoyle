@@ -62,6 +62,8 @@ type ClientAPIDeps struct {
 	Media              clientapiUsecases.Media
 	Profile            clientapiUsecases.Profile
 	Moderation         clientapiUsecases.Moderation
+	PushRepo           *repos.PushRepo
+	VAPIDPublicKey     string
 	ActivityPubHandler *activitypubHandlers.Handler
 }
 
@@ -84,6 +86,10 @@ type WorkerDeps struct {
 	ContentSanitizer     ports.ContentSanitizer
 	Moderation           clientapiUsecases.Moderation
 	ActivityPubHandler   *activitypubHandlers.Handler
+	PushRepo             *repos.PushRepo
+	VAPIDPublicKey       string
+	VAPIDPrivateKey      string
+	VAPIDSubject         string
 }
 
 func activityPubRemoteURLExceptions(exceptions []config.ActivityPubRemoteURLException) []activitypubHandlers.RemoteURLException {
@@ -147,6 +153,7 @@ func BuildDeps(cfg *config.Config) *Deps {
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
 	moderationRepo := repos.NewModerationRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
+	pushRepo := repos.NewPushRepo(sqlite.Bun)
 	jobsRepo := repos.NewJobsRepo(sqlite.Bun)
 	txProvider := dbAdapters.NewBunTxProvider(sqlite.Bun)
 
@@ -237,7 +244,7 @@ func BuildDeps(cfg *config.Config) *Deps {
 		Store:       sqlite,
 		Discovery:   DiscoveryDeps{Webfinger: webfingerHandler, HostMeta: hostMetaHandler, NodeInfo: nodeInfoHandler},
 		ActivityPub: ActivityPubDeps{Handler: userProfileHandler},
-		ClientAPI:   ClientAPIDeps{OAuth: oauthUC, Instance: clientAPIComponents.Instance, Accounts: clientAPIComponents.Accounts, Statuses: clientAPIComponents.Statuses, Timelines: clientAPIComponents.Timelines, Interactions: clientAPIComponents.Interactions, Notifications: clientAPIComponents.Notifications, Conversations: clientAPIComponents.Conversations, Media: clientAPIComponents.Media, Profile: clientAPIComponents.Profile, Moderation: clientAPIComponents.Moderation, ActivityPubHandler: userProfileHandler},
+		ClientAPI:   ClientAPIDeps{OAuth: oauthUC, Instance: clientAPIComponents.Instance, Accounts: clientAPIComponents.Accounts, Statuses: clientAPIComponents.Statuses, Timelines: clientAPIComponents.Timelines, Interactions: clientAPIComponents.Interactions, Notifications: clientAPIComponents.Notifications, Conversations: clientAPIComponents.Conversations, Media: clientAPIComponents.Media, Profile: clientAPIComponents.Profile, Moderation: clientAPIComponents.Moderation, PushRepo: pushRepo, VAPIDPublicKey: cfg.ClientAPI.VAPIDPublicKey, ActivityPubHandler: userProfileHandler},
 		Workers: WorkerDeps{
 			JobsRepo:             jobsRepo,
 			AccountsRepo:         accountsRepo,
@@ -257,6 +264,10 @@ func BuildDeps(cfg *config.Config) *Deps {
 			ContentSanitizer:     contentSanitizer,
 			Moderation:           clientAPIComponents.Moderation,
 			ActivityPubHandler:   userProfileHandler,
+			PushRepo:             pushRepo,
+			VAPIDPublicKey:       cfg.ClientAPI.VAPIDPublicKey,
+			VAPIDPrivateKey:      cfg.ClientAPI.VAPIDPrivateKey,
+			VAPIDSubject:         cfg.ClientAPI.VAPIDSubject,
 		},
 	}
 }
@@ -272,8 +283,8 @@ func MountActivityPub(app *fiber.App, deps ActivityPubDeps) {
 }
 
 func MountClientAPI(app *fiber.App, deps ClientAPIDeps) {
-	clientapiHandlers.NewOAuthHandler(deps.OAuth).Setup(app)
-	clientapiHandlers.NewAPIHandler(clientapiHandlers.APIHandlerConfig{OAuth: deps.OAuth, Instance: deps.Instance, Accounts: deps.Accounts, Statuses: deps.Statuses, Timelines: deps.Timelines, Interactions: deps.Interactions, Notifications: deps.Notifications, Conversations: deps.Conversations, Media: deps.Media, Profile: deps.Profile, Moderation: deps.Moderation, QueueDelivery: deps.ActivityPubHandler.QueueDelivery}).Setup(app)
+	clientapiHandlers.NewOAuthHandler(deps.OAuth, deps.VAPIDPublicKey).Setup(app)
+	clientapiHandlers.NewAPIHandler(clientapiHandlers.APIHandlerConfig{OAuth: deps.OAuth, Instance: deps.Instance, Accounts: deps.Accounts, Statuses: deps.Statuses, Timelines: deps.Timelines, Interactions: deps.Interactions, Notifications: deps.Notifications, Conversations: deps.Conversations, Media: deps.Media, Profile: deps.Profile, Moderation: deps.Moderation, PushRepo: deps.PushRepo, VAPIDPublicKey: deps.VAPIDPublicKey, QueueDelivery: deps.ActivityPubHandler.QueueDelivery}).Setup(app)
 }
 
 func StartCoreWorkers(ctx context.Context, deps WorkerDeps) {
@@ -282,6 +293,7 @@ func StartCoreWorkers(ctx context.Context, deps WorkerDeps) {
 	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: deps.JobsRepo, Accounts: deps.AccountsRepo, Hydrater: hydrateRemoteObjectUC, Blocks: deps.ModerationRepo}).Start(ctx)
 	jobs.NewMediaCleanupWorker(jobs.MediaCleanupWorkerConfig{MediaRepo: deps.MediaRepo, Storage: deps.MediaStorage, Interval: deps.MediaCleanupInterval, UnattachedTTL: deps.MediaUnattachedTTL, RemoteCacheMaxBytes: deps.RemoteCacheMaxBytes, RemoteCacheTTL: deps.RemoteCacheTTL}).Start(ctx)
 	jobs.NewModerationWorker(jobs.ModerationWorkerConfig{JobsRepo: deps.ModerationRepo, API: deps.Moderation, MediaStorage: deps.MediaStorage}).Start(ctx)
+	jobs.NewPushDeliveryWorker(jobs.PushDeliveryWorkerConfig{JobsRepo: deps.PushRepo, Subscriptions: deps.PushRepo, VAPIDPublicKey: deps.VAPIDPublicKey, VAPIDPrivateKey: deps.VAPIDPrivateKey, VAPIDSubject: deps.VAPIDSubject}).Start(ctx)
 }
 
 func Listen(app *fiber.App, port int) error {

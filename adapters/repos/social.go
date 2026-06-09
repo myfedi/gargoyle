@@ -3,6 +3,7 @@ package repos
 import (
 	"context"
 	"errors"
+	"time"
 
 	dbAdapters "github.com/myfedi/gargoyle/adapters/db"
 	"github.com/myfedi/gargoyle/domain/models"
@@ -95,9 +96,52 @@ func (r *SocialRepo) CreateNotification(ctx context.Context, tx *dbPorts.Tx, loc
 	if err != nil {
 		return nil, err
 	}
+	if err := r.enqueuePushDeliveryJobs(ctx, db, row); err != nil {
+		return nil, err
+	}
 	model := row.ToModel()
 	return &model, nil
 }
+
+func (r *SocialRepo) enqueuePushDeliveryJobs(ctx context.Context, db bun.IDB, notification *dbModels.Notification) error {
+	var subscriptions []dbModels.PushSubscription
+	query := db.NewSelect().Model(&subscriptions).Where("local_account_id = ?", notification.LocalAccountID)
+	switch notification.Type {
+	case "mention":
+		query = query.Where("alert_mention = ?", true)
+	case "status":
+		query = query.Where("alert_status = ?", true)
+	case "reblog":
+		query = query.Where("alert_reblog = ?", true)
+	case "follow":
+		query = query.Where("alert_follow = ?", true)
+	case "follow_request":
+		query = query.Where("alert_follow_request = ?", true)
+	case "favourite":
+		query = query.Where("alert_favourite = ?", true)
+	case "poll":
+		query = query.Where("alert_poll = ?", true)
+	case "update":
+		query = query.Where("alert_update = ?", true)
+	default:
+		return nil
+	}
+	if err := query.Scan(ctx); err != nil {
+		return err
+	}
+	for _, sub := range subscriptions {
+		id, err := dbUtils.NewULID()
+		if err != nil {
+			return err
+		}
+		job := &dbModels.PushDeliveryJob{ID: id, SubscriptionID: sub.ID, NotificationID: notification.ID, NextAttemptAt: time.Now().UTC(), Status: string(models.JobStatusPending)}
+		if _, err := db.NewInsert().Model(job).On("CONFLICT DO NOTHING").Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *SocialRepo) ListNotifications(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int) ([]models.Notification, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {

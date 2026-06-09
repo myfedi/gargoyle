@@ -45,6 +45,12 @@ media:
   cleanup_interval: "1h"
   unattached_ttl: "24h"
 
+client_api:
+  enabled: true
+  vapid_public_key: "paste-generated-public-key"
+  vapid_private_key: "paste-generated-private-key"
+  vapid_subject: "mailto:admin@example.org"
+
 web:
   cors:
     allowed_origins: []
@@ -57,6 +63,14 @@ activitypub:
 `public_host` is important. The backend may listen on local HTTP, but ActivityPub actor IDs, WebFinger links, OAuth redirects, and federation URLs must use the externally visible HTTPS origin.
 
 Do not configure `activitypub.remote_url_exceptions` in production unless you intentionally trust a specific non-public/local test peer.
+
+For mobile clients such as Ivory, generate one stable VAPID keypair for Mastodon-compatible push notifications and paste it into `client_api.vapid_public_key` / `client_api.vapid_private_key`:
+
+```sh
+go run cmd/cli/admin/main.go generate-vapid-keys
+```
+
+Keep these keys stable. Rotating them can invalidate existing push subscriptions and require clients to resubscribe. Set `client_api.vapid_subject` to a contact URI, usually `mailto:admin@example.org`.
 
 ## Build the frontend
 

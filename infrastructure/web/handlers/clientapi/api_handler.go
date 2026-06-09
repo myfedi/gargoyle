@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
+	"github.com/myfedi/gargoyle/domain/ports/repos"
 	clientapiUC "github.com/myfedi/gargoyle/domain/usecases/clientapi"
 	"github.com/myfedi/gargoyle/domain/usecases/oauth"
 	"github.com/myfedi/gargoyle/infrastructure/web"
@@ -27,29 +28,33 @@ type APIHandler struct {
 	mediaWorkflow         clientapiUC.Media
 	profileWorkflow       clientapiUC.Profile
 	moderationWorkflow    clientapiUC.Moderation
+	pushRepo              repos.PushSubscriptionRepository
+	vapidPublicKey        string
 	queueDelivery         DeliveryQueue
 }
 
 type APIHandlerConfig struct {
-	OAuth         oauth.UseCase
-	Instance      clientapiUC.Instance
-	Accounts      clientapiUC.Accounts
-	Statuses      clientapiUC.Statuses
-	Timelines     clientapiUC.Timelines
-	Interactions  clientapiUC.Interactions
-	Notifications clientapiUC.Notifications
-	Conversations clientapiUC.Conversations
-	Media         clientapiUC.Media
-	Profile       clientapiUC.Profile
-	Moderation    clientapiUC.Moderation
-	QueueDelivery DeliveryQueue
+	OAuth          oauth.UseCase
+	Instance       clientapiUC.Instance
+	Accounts       clientapiUC.Accounts
+	Statuses       clientapiUC.Statuses
+	Timelines      clientapiUC.Timelines
+	Interactions   clientapiUC.Interactions
+	Notifications  clientapiUC.Notifications
+	Conversations  clientapiUC.Conversations
+	Media          clientapiUC.Media
+	Profile        clientapiUC.Profile
+	Moderation     clientapiUC.Moderation
+	PushRepo       repos.PushSubscriptionRepository
+	VAPIDPublicKey string
+	QueueDelivery  DeliveryQueue
 }
 
 func NewAPIHandler(cfg APIHandlerConfig) APIHandler {
 	if cfg.QueueDelivery == nil {
 		panic("client API handler requires QueueDelivery")
 	}
-	return APIHandler{oauth: cfg.OAuth, instanceWorkflow: cfg.Instance, accountsWorkflow: cfg.Accounts, statusesWorkflow: cfg.Statuses, timelinesWorkflow: cfg.Timelines, interactionsWorkflow: cfg.Interactions, notificationsWorkflow: cfg.Notifications, conversationsWorkflow: cfg.Conversations, mediaWorkflow: cfg.Media, profileWorkflow: cfg.Profile, moderationWorkflow: cfg.Moderation, queueDelivery: cfg.QueueDelivery}
+	return APIHandler{oauth: cfg.OAuth, instanceWorkflow: cfg.Instance, accountsWorkflow: cfg.Accounts, statusesWorkflow: cfg.Statuses, timelinesWorkflow: cfg.Timelines, interactionsWorkflow: cfg.Interactions, notificationsWorkflow: cfg.Notifications, conversationsWorkflow: cfg.Conversations, mediaWorkflow: cfg.Media, profileWorkflow: cfg.Profile, moderationWorkflow: cfg.Moderation, pushRepo: cfg.PushRepo, vapidPublicKey: cfg.VAPIDPublicKey, queueDelivery: cfg.QueueDelivery}
 }
 
 func (h APIHandler) Setup(app *fiber.App) {
@@ -73,6 +78,10 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Delete("/api/v1/conversations/:id", h.deleteConversation)
 	app.Post("/api/v1/conversations/:id/read", h.readConversation)
 	app.Get("/api/v1/custom_emojis", h.customEmojis)
+	app.Post("/api/v1/push/subscription", h.createPushSubscription)
+	app.Get("/api/v1/push/subscription", h.getPushSubscription)
+	app.Put("/api/v1/push/subscription", h.updatePushSubscription)
+	app.Delete("/api/v1/push/subscription", h.deletePushSubscription)
 	app.Get("/api/v1/announcements", h.emptyList)
 	app.Get("/api/v1/trends/tags", h.emptyList)
 	app.Get("/api/v1/trends/statuses", h.emptyList)
