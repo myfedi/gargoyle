@@ -43,6 +43,18 @@ export function NotificationsPage() {
     void loadNotifications();
   }, [loadNotifications]);
 
+  useEffect(() => {
+    function handleLiveNotification(event: Event) {
+      const notification = (event as CustomEvent<MastodonNotification>).detail;
+      if (!notification?.id) {
+        return;
+      }
+      setNotifications((current) => current.some((item) => item.id === notification.id) ? current : [notification, ...current]);
+    }
+    globalThis.addEventListener("gargoyle:notification", handleLiveNotification);
+    return () => globalThis.removeEventListener("gargoyle:notification", handleLiveNotification);
+  }, []);
+
   async function clearNotifications() {
     if (!api) return;
     setIsClearing(true);

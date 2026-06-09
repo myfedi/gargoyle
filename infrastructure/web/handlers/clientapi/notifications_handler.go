@@ -1,10 +1,7 @@
 package clientapi
 
 import (
-	"time"
-
 	"github.com/gofiber/fiber/v2"
-	clientapiUC "github.com/myfedi/gargoyle/domain/usecases/clientapi"
 	"github.com/myfedi/gargoyle/infrastructure/web"
 )
 
@@ -25,16 +22,7 @@ func (h APIHandler) notifications(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	resp := make([]notificationResponse, 0, len(items))
-	for _, item := range items {
-		var status *statusResponse
-		if item.Status != nil {
-			s := timelineItemsToStatuses([]clientapiUC.TimelineItem{*item.Status})[0]
-			status = &s
-		}
-		resp = append(resp, notificationResponse{ID: item.Notification.ID, Type: item.Notification.Type, CreatedAt: item.Notification.CreatedAt.UTC().Format(time.RFC3339), Account: accountToResponse(&item.Account), Status: status})
-	}
-	return c.JSON(resp)
+	return c.JSON(notificationItemsToResponses(items))
 }
 
 func (h APIHandler) clearNotifications(c *fiber.Ctx) error {

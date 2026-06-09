@@ -67,6 +67,8 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Post("/api/v1/admin/domain_blocks", h.adminCreateDomainBlock)
 	app.Delete("/api/v1/admin/domain_blocks/:domain", h.adminDeleteDomainBlock)
 	app.Post("/api/v1/admin/domain_blocks/:domain/purge", h.adminPurgeDomain)
+	app.Get("/api/v1/streaming", h.streaming)
+	app.Get("/api/v1/streaming/user/notification", h.notificationStream)
 	app.Get("/api/v1/notifications", h.notifications)
 	app.Post("/api/v1/notifications/clear", h.clearNotifications)
 	app.Post("/api/v1/notifications/:id/dismiss", h.dismissNotification)

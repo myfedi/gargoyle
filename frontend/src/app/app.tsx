@@ -17,6 +17,7 @@ import { SettingsPage } from "@/features/settings/settings-page";
 import { StatusPage } from "@/features/status/status-page";
 import { ApiError } from "@/lib/api";
 import { createMastodonApi } from "@/lib/mastodon-api";
+import { startNotificationStream } from "@/lib/streaming";
 import { cn } from "@/lib/utils";
 import type { MastodonAccount } from "@/types/mastodon";
 import { navItems } from "./navigation";
@@ -43,6 +44,7 @@ function AuthenticatedApp() {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [liveNotificationCount, setLiveNotificationCount] = useState(0);
   const route = useHashRoute();
   const RoutePage = routes[route as keyof typeof routes];
   const page = renderRoute(route, RoutePage);
@@ -56,6 +58,12 @@ function AuthenticatedApp() {
       globalThis.history.scrollRestoration = previous;
     };
   }, []);
+
+  useEffect(() => {
+    if (route === "/notifications") {
+      setLiveNotificationCount(0);
+    }
+  }, [route]);
 
   useEffect(() => {
     if (status !== "authenticated" || !session?.accessToken) {
@@ -91,6 +99,22 @@ function AuthenticatedApp() {
       cancelled = true;
     };
   }, [session?.accessToken, signOut, status]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.accessToken) {
+      setLiveNotificationCount(0);
+      return;
+    }
+    return startNotificationStream(session.accessToken, {
+      onNotification(notification) {
+        globalThis.dispatchEvent(new CustomEvent("gargoyle:notification", { detail: notification }));
+        setLiveNotificationCount((current) => current + 1);
+      },
+      onError(error) {
+        console.warn("Notification stream disconnected", error);
+      },
+    });
+  }, [session?.accessToken, status]);
 
   if (status === "checking") {
     return (
@@ -153,9 +177,14 @@ function AuthenticatedApp() {
             >
               <Search className="size-4" aria-hidden="true" />
             </Button>
-            <Button asChild variant="ghost" size="icon" aria-label="Notifications">
-              <a href="/#/notifications">
+            <Button asChild variant="ghost" size="icon" aria-label={liveNotificationCount > 0 ? `${liveNotificationCount} new notifications` : "Notifications"}>
+              <a href="/#/notifications" className="relative">
                 <Bell className="size-4" aria-hidden="true" />
+                {liveNotificationCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+                    {liveNotificationCount > 9 ? "9+" : liveNotificationCount}
+                  </span>
+                ) : null}
               </a>
             </Button>
             <Button asChild variant="ghost" size="icon" aria-label="Settings">
