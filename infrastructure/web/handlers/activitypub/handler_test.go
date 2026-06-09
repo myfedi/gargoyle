@@ -410,6 +410,9 @@ func (fakeSocialRepo) DeleteInteraction(ctx context.Context, tx *db.Tx, localAcc
 func (fakeSocialRepo) InteractionExists(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) (bool, error) {
 	return false, nil
 }
+func (fakeSocialRepo) CountInteractionsForNote(ctx context.Context, tx *db.Tx, noteID, typ string) (int, error) {
+	return 0, nil
+}
 func (fakeSocialRepo) ListInteractions(ctx context.Context, tx *db.Tx, localAccountID, typ string, limit int) ([]models.StatusInteraction, error) {
 	return nil, nil
 }
@@ -441,6 +444,9 @@ func (trackingSocialRepo) DeleteInteraction(ctx context.Context, tx *db.Tx, loca
 }
 func (trackingSocialRepo) InteractionExists(ctx context.Context, tx *db.Tx, localAccountID, noteID, typ string) (bool, error) {
 	return false, nil
+}
+func (trackingSocialRepo) CountInteractionsForNote(ctx context.Context, tx *db.Tx, noteID, typ string) (int, error) {
+	return 0, nil
 }
 func (trackingSocialRepo) ListInteractions(ctx context.Context, tx *db.Tx, localAccountID, typ string, limit int) ([]models.StatusInteraction, error) {
 	return nil, nil

@@ -98,6 +98,7 @@ func timelineItemsToStatuses(items []clientapiUC.TimelineItem) []statusResponse 
 		status.MediaAttachments = mediaResponses(item.Media)
 		status.Mentions = mentionResponses(item.Mentions)
 		status.ReblogsCount = item.ReblogsCount
+		status.FavouritesCount = item.FavouritesCount
 		status.Reblogged = item.Reblogged
 		status.Favourited = item.Favourited
 		status.Bookmarked = item.Bookmarked

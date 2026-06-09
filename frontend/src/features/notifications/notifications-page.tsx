@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/auth-context";
 import { Button } from "@/components/ui/button";
 import { EmptyState, FeaturePage, Panel } from "@/features/shared";
-import { runStatusAction } from "@/features/status/status-actions";
+import { optimisticStatusAction, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { accountHref } from "@/lib/routes";
@@ -109,10 +109,14 @@ export function NotificationsPage() {
     setActingStatusId(status.id);
     setError(null);
 
+    const optimisticStatus = optimisticStatusAction(status, action);
+    setNotifications((current) => current.map((item) => item.status?.id === status.id ? { ...item, status: optimisticStatus } : item));
+
     try {
       const nextStatus = await runStatusAction(api, action, status);
       setNotifications((current) => current.map((item) => item.status?.id === nextStatus.id ? { ...item, status: nextStatus } : item));
     } catch (caughtError) {
+      setNotifications((current) => current.map((item) => item.status?.id === status.id ? { ...item, status } : item));
       setError(caughtError instanceof Error ? caughtError.message : "Could not update post.");
     } finally {
       setActingStatusId(null);

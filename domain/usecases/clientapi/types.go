@@ -75,6 +75,7 @@ type TimelineItem struct {
 	Bookmarked         bool
 	Pinned             bool
 	ReblogsCount       int
+	FavouritesCount    int
 }
 
 type TimelineOptions struct {

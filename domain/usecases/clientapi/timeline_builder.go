@@ -53,6 +53,10 @@ func (b timelineBuilder) timelineItem(ctx context.Context, localAccount *models.
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+	favouritesCount, err := b.socialRepo.CountInteractionsForNote(ctx, nil, note.ID, "favourite")
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
 	favourited, err := b.socialRepo.InteractionExists(ctx, nil, localAccount.ID, note.ID, "favourite")
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -76,7 +80,7 @@ func (b timelineBuilder) timelineItem(ctx context.Context, localAccount *models.
 	if derr != nil {
 		return nil, derr
 	}
-	return &TimelineItem{ID: note.ID, URI: note.URI, CreatedAt: note.PublishedAt, Note: note, Account: author, InReplyToAccountID: replyAccountID, Media: media, Mentions: mentions, Poll: poll, ReblogsCount: reblogsCount, Reblogged: reblogged, Favourited: favourited, Bookmarked: bookmarked, Pinned: pinned}, nil
+	return &TimelineItem{ID: note.ID, URI: note.URI, CreatedAt: note.PublishedAt, Note: note, Account: author, InReplyToAccountID: replyAccountID, Media: media, Mentions: mentions, Poll: poll, ReblogsCount: reblogsCount, FavouritesCount: favouritesCount, Reblogged: reblogged, Favourited: favourited, Bookmarked: bookmarked, Pinned: pinned}, nil
 }
 
 func (b timelineBuilder) timelineItems(ctx context.Context, localAccount *models.Account, notes []models.Note) ([]TimelineItem, *domainerrors.DomainError) {

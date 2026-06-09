@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Panel } from "@/features/shared";
 import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
-import { replaceStatus, runStatusAction } from "@/features/status/status-actions";
+import { optimisticStatusAction, replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { accountHref } from "@/lib/routes";
@@ -142,6 +142,10 @@ export function MyProfilePage() {
     setActingStatusId(status.id);
     setError(null);
 
+    const optimisticStatus = optimisticStatusAction(status, action);
+    setStatuses((current) => replaceStatus(current, optimisticStatus));
+    setPinnedStatuses((current) => replaceStatus(current, optimisticStatus));
+
     try {
       const nextStatus = await runStatusAction(api, action, status);
       setStatuses((current) => replaceStatus(current, nextStatus));
@@ -155,6 +159,8 @@ export function MyProfilePage() {
         setPinnedStatuses((current) => replaceStatus(current, nextStatus));
       }
     } catch (caughtError) {
+      setStatuses((current) => replaceStatus(current, status));
+      setPinnedStatuses((current) => replaceStatus(current, status));
       setError(caughtError instanceof Error ? caughtError.message : "Could not update post.");
     } finally {
       setActingStatusId(null);

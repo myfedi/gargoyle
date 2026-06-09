@@ -49,9 +49,13 @@ func (u Interactions) interact(ctx context.Context, account *models.Account, id,
 	if derr != nil {
 		return nil, derr
 	}
-	if apType == "Announce" {
+	switch apType {
+	case "Announce":
 		item.Reblogged = true
 		item.ReblogsCount++
+	case "Like":
+		item.Favourited = true
+		item.FavouritesCount++
 	}
 	return &InteractionResult{Status: *item, Delivery: interactionDelivery(res.Account, res.RawJSON, res.Inbox, item, account)}, nil
 }
@@ -72,10 +76,16 @@ func (u Interactions) undoInteract(ctx context.Context, account *models.Account,
 	if derr != nil {
 		return nil, derr
 	}
-	if apType == "Announce" {
+	switch apType {
+	case "Announce":
 		item.Reblogged = false
 		if item.ReblogsCount > 0 {
 			item.ReblogsCount--
+		}
+	case "Like":
+		item.Favourited = false
+		if item.FavouritesCount > 0 {
+			item.FavouritesCount--
 		}
 	}
 	return &InteractionResult{Status: *item, Delivery: interactionDelivery(res.Account, res.RawJSON, res.Inbox, item, account)}, nil

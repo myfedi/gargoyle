@@ -1,4 +1,4 @@
-import { Check, MoreHorizontal } from "lucide-react";
+import { Check, Heart, MessageCircle, MoreHorizontal, Repeat2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -69,7 +69,6 @@ export function StatusList({
   }
 
   const isDeleting = Boolean(statusPendingDeletion && deletingStatusId === statusPendingDeletion.id);
-
   return (
     <>
       <div className="mx-auto w-full max-w-2xl">
@@ -93,8 +92,9 @@ export function StatusList({
             <article key={status.id} data-status-id={(status.reblog ?? status).id} className="py-4 first:pt-0 last:pb-0">
               {index > 0 && !continuesFromPrevious ? <div className="mb-4 border-t border-border" aria-hidden="true" /> : null}
               {status.reblog ? (
-                <p className="mb-2 text-xs text-muted-foreground">
-                  {status.account.display_name || status.account.username} boosted
+                <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Repeat2 className="size-3.5" aria-hidden="true" />
+                  <span>{status.account.display_name || status.account.username} boosted</span>
                 </p>
               ) : null}
               <div className="relative flex items-start gap-3">
@@ -119,9 +119,17 @@ export function StatusList({
                     <StatusPoll status={displayedStatus} onVote={onVotePoll ? (choices) => onVotePoll(displayedStatus, choices) : undefined} />
                     <StatusMedia attachments={displayedStatus.media_attachments ?? []} onPreview={setMediaPreview} />
                   </StatusBody>
+                  <StatusActionBar
+                    status={displayedStatus}
+                    canReply={canReply}
+                    canInteract={canInteract}
+                    isActing={isActing}
+                    onReply={onReply}
+                    onAction={(action, nextStatus) => void onAction?.(action, nextStatus)}
+                  />
                   <StatusStats status={displayedStatus} />
                 </div>
-                {canDelete || canEdit || canReply || canForward || canInteract ? (
+                {canDelete || canEdit || canForward || canInteract ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" aria-label="Post actions" disabled={isActing}>
@@ -129,7 +137,6 @@ export function StatusList({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      {canReply ? <DropdownMenuItem onSelect={() => onReply?.(displayedStatus)}>Reply</DropdownMenuItem> : null}
                       {canEdit ? <DropdownMenuItem onSelect={() => { setStatusBeingEdited(displayedStatus); setEditError(null); }}>Edit</DropdownMenuItem> : null}
                       {canForward ? <DropdownMenuItem onSelect={() => onForward?.(displayedStatus)}>Forward by DM</DropdownMenuItem> : null}
                       {canInteract ? (
@@ -137,17 +144,11 @@ export function StatusList({
                           <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.bookmarked ? "unbookmark" : "bookmark", displayedStatus)}>
                             {displayedStatus.bookmarked ? "Remove bookmark" : "Bookmark"}
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.favourited ? "unfavourite" : "favourite", displayedStatus)}>
-                            {displayedStatus.favourited ? "Remove favourite" : "Favourite"}
-                          </DropdownMenuItem>
                           {canPin ? (
                             <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.pinned ? "unpin" : "pin", displayedStatus)}>
                               {displayedStatus.pinned ? "Unpin from profile" : "Pin to profile"}
                             </DropdownMenuItem>
                           ) : null}
-                          <DropdownMenuItem onSelect={() => void onAction?.(displayedStatus.reblogged ? "unreblog" : "reblog", displayedStatus)}>
-                            {displayedStatus.reblogged ? "Undo boost" : "Boost"}
-                          </DropdownMenuItem>
                         </>
                       ) : null}
                       {canDelete ? (
@@ -263,6 +264,69 @@ export function StatusList({
   );
 }
 
+function StatusActionBar({
+  status,
+  canReply,
+  canInteract,
+  isActing,
+  onReply,
+  onAction,
+}: {
+  status: MastodonStatus;
+  canReply: boolean;
+  canInteract: boolean;
+  isActing: boolean;
+  onReply?: (status: MastodonStatus) => void;
+  onAction?: (action: "favourite" | "unfavourite" | "reblog" | "unreblog", status: MastodonStatus) => void;
+}) {
+  if (!canReply && !canInteract) {
+    return null;
+  }
+
+  const favouriteAction = status.favourited ? "unfavourite" : "favourite";
+  const boostAction = status.reblogged ? "unreblog" : "reblog";
+
+  return (
+    <div className="mt-3 flex items-center gap-1 text-muted-foreground" aria-label="Post quick actions">
+      {canReply ? (
+        <Button variant="ghost" size="sm" className="h-8 px-2.5 text-muted-foreground hover:text-foreground" onClick={() => onReply?.(status)} disabled={isActing}>
+          <MessageCircle className="size-4" aria-hidden="true" />
+          <span className="sr-only">Reply</span>
+          <span className="text-xs tabular-nums" aria-hidden="true">{status.replies_count > 0 ? status.replies_count : ""}</span>
+        </Button>
+      ) : null}
+      {canInteract ? (
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={status.favourited ? "h-8 px-2.5 text-[hsl(var(--destructive))] hover:text-[hsl(var(--destructive))]" : "h-8 px-2.5 text-muted-foreground hover:text-foreground"}
+            aria-pressed={Boolean(status.favourited)}
+            aria-label={status.favourited ? "Remove favourite" : "Favourite"}
+            onClick={() => onAction?.(favouriteAction, status)}
+            disabled={isActing}
+          >
+            <Heart className={status.favourited ? "size-4 fill-current" : "size-4"} aria-hidden="true" />
+            <span className="text-xs tabular-nums" aria-hidden="true">{status.favourites_count > 0 ? status.favourites_count : ""}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={status.reblogged ? "h-8 px-2.5 text-sky-600 hover:text-sky-600 dark:text-sky-400 dark:hover:text-sky-400" : "h-8 px-2.5 text-muted-foreground hover:text-foreground"}
+            aria-pressed={Boolean(status.reblogged)}
+            aria-label={status.reblogged ? "Unboost" : "Boost"}
+            onClick={() => onAction?.(boostAction, status)}
+            disabled={isActing}
+          >
+            <Repeat2 className="size-4" aria-hidden="true" />
+            <span className="text-xs tabular-nums" aria-hidden="true">{status.reblogs_count > 0 ? status.reblogs_count : ""}</span>
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function ReplyTarget({ status }: { status: MastodonStatus }) {
   const displayName = status.account.display_name || status.account.username;
   return (
@@ -307,12 +371,7 @@ function StatusMeta({ status }: { status: MastodonStatus }) {
 
 function StatusStats({ status }: { status: MastodonStatus }) {
   const stats = [
-    status.replies_count > 0 ? `${status.replies_count} replies` : null,
-    status.reblogs_count > 0 ? `${status.reblogs_count} boosts` : null,
-    status.favourites_count > 0 ? `${status.favourites_count} favourites` : null,
     status.bookmarked ? "Bookmarked" : null,
-    status.favourited ? "Favourited" : null,
-    status.reblogged ? "Boosted" : null,
     status.pinned ? "Pinned" : null,
   ].filter(Boolean);
 

@@ -138,6 +138,10 @@ func (u Timelines) timelineItem(
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
+	favouritesCount, err := u.deps.SocialRepo.CountInteractionsForNote(ctx, nil, note.ID, "favourite")
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
 	favourited, err := u.deps.SocialRepo.InteractionExists(ctx, nil, localAccount.ID, note.ID, "favourite")
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -174,6 +178,7 @@ func (u Timelines) timelineItem(
 		Mentions:           mentions,
 		Poll:               poll,
 		ReblogsCount:       reblogsCount,
+		FavouritesCount:    favouritesCount,
 		Reblogged:          reblogged,
 		Favourited:         favourited,
 		Bookmarked:         bookmarked,

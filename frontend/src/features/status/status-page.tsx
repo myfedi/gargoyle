@@ -7,7 +7,7 @@ import { DirectMessageForm } from "@/features/direct/direct-message-form";
 import { EmptyState, Panel } from "@/features/shared";
 import type { ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
-import { runStatusAction } from "@/features/status/status-actions";
+import { optimisticStatusAction, replaceOneStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { decodeRouteParam } from "@/lib/routes";
@@ -98,12 +98,20 @@ export function StatusPage({ route }: StatusPageProps) {
     setActingStatusId(statusToUpdate.id);
     setError(null);
 
+    const optimisticStatus = optimisticStatusAction(statusToUpdate, action);
+    setStatus((current) => current ? replaceOneStatus(current, optimisticStatus) : current);
+    setAncestors((current) => current.map((item) => replaceOneStatus(item, optimisticStatus)));
+    setDescendants((current) => current.map((item) => replaceOneStatus(item, optimisticStatus)));
+
     try {
       const nextStatus = await runStatusAction(api, action, statusToUpdate);
-      setStatus((current) => current?.id === nextStatus.id ? nextStatus : current);
-      setAncestors((current) => current.map((item) => item.id === nextStatus.id ? nextStatus : item));
-      setDescendants((current) => current.map((item) => item.id === nextStatus.id ? nextStatus : item));
+      setStatus((current) => current ? replaceOneStatus(current, nextStatus) : current);
+      setAncestors((current) => current.map((item) => replaceOneStatus(item, nextStatus)));
+      setDescendants((current) => current.map((item) => replaceOneStatus(item, nextStatus)));
     } catch (caughtError) {
+      setStatus((current) => current ? replaceOneStatus(current, statusToUpdate) : current);
+      setAncestors((current) => current.map((item) => replaceOneStatus(item, statusToUpdate)));
+      setDescendants((current) => current.map((item) => replaceOneStatus(item, statusToUpdate)));
       setError(caughtError instanceof Error ? caughtError.message : "Could not update post.");
     } finally {
       setActingStatusId(null);

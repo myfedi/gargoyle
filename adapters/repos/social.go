@@ -63,6 +63,17 @@ func (r *SocialRepo) InteractionExists(ctx context.Context, tx *dbPorts.Tx, loca
 	}
 	return db.NewSelect().Model((*dbModels.StatusInteraction)(nil)).Where("local_account_id = ?", localAccountID).Where("note_id = ?", noteID).Where("type = ?", typ).Exists(ctx) // NOSONAR
 }
+func (r *SocialRepo) CountInteractionsForNote(ctx context.Context, tx *dbPorts.Tx, noteID, typ string) (int, error) {
+	db, err := r.resolveDB(tx)
+	if err != nil {
+		return 0, err
+	}
+	count, err := db.NewSelect().Model((*dbModels.StatusInteraction)(nil)).Where("note_id = ?", noteID).Where("type = ?", typ).Count(ctx) // NOSONAR
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
 func (r *SocialRepo) ListInteractions(ctx context.Context, tx *dbPorts.Tx, localAccountID, typ string, limit int) ([]models.StatusInteraction, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
