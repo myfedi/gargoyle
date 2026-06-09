@@ -1,9 +1,9 @@
 import type { AuthSession } from "@/types/auth";
 
-const authSessionKey = "gargoyle.auth.session";
+export const authSessionKey = "gargoyle.auth.session";
 
 export function readAuthSession(): AuthSession | null {
-  const rawSession = sessionStorage.getItem(authSessionKey);
+  const rawSession = readStoredSession();
   if (!rawSession) {
     return null;
   }
@@ -22,11 +22,27 @@ export function readAuthSession(): AuthSession | null {
 }
 
 export function writeAuthSession(session: AuthSession) {
-  sessionStorage.setItem(authSessionKey, JSON.stringify(session));
+  localStorage.setItem(authSessionKey, JSON.stringify(session));
+  sessionStorage.removeItem(authSessionKey);
 }
 
 export function clearAuthSession() {
+  localStorage.removeItem(authSessionKey);
   sessionStorage.removeItem(authSessionKey);
+}
+
+function readStoredSession() {
+  const persistentSession = localStorage.getItem(authSessionKey);
+  if (persistentSession) {
+    return persistentSession;
+  }
+
+  const legacyTabSession = sessionStorage.getItem(authSessionKey);
+  if (legacyTabSession) {
+    localStorage.setItem(authSessionKey, legacyTabSession);
+    sessionStorage.removeItem(authSessionKey);
+  }
+  return legacyTabSession;
 }
 
 function isExpired(session: Partial<AuthSession>) {

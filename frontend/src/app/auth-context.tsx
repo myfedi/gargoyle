@@ -1,7 +1,7 @@
 import type React from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { clearAuthSession, readAuthSession, writeAuthSession } from "@/lib/auth-storage";
+import { authSessionKey, clearAuthSession, readAuthSession, writeAuthSession } from "@/lib/auth-storage";
 import { getOAuthConfig } from "@/lib/config";
 import { clearOAuthTransaction, createAuthorizationUrl, exchangeAuthorizationCode, revokeAccessToken, validateOAuthState } from "@/lib/oauth";
 import type { AuthSession } from "@/types/auth";
@@ -116,6 +116,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => globalThis.clearTimeout(timeout);
   }, [session]);
+
+  useEffect(() => {
+    function syncSession(event: StorageEvent) {
+      if (event.key !== authSessionKey) {
+        return;
+      }
+      const nextSession = readAuthSession();
+      setSession(nextSession);
+      setStatus(nextSession ? "authenticated" : "unauthenticated");
+      if (nextSession) {
+        setError(null);
+      }
+    }
+
+    globalThis.addEventListener("storage", syncSession);
+    return () => globalThis.removeEventListener("storage", syncSession);
+  }, []);
 
   const signIn = useCallback(async () => {
     const config = getOAuthConfig();
