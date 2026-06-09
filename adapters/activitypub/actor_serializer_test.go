@@ -12,6 +12,7 @@ func TestActorSerializerMarshallUsesAccountURI(t *testing.T) {
 	actorJSON, err := serializer.Marshall(models.Account{
 		Username:              "alice",
 		DisplayName:           strPtr("Alice A."),
+		Fields:                []models.AccountProfileField{{Name: "Website", Value: `<a href="https://example.org">example.org</a>`}},
 		AvatarMediaID:         strPtr("avatar-1"),
 		HeaderURL:             strPtr("https://cdn.example.org/header.png"),
 		URI:                   "https://example.org/users/alice",
@@ -58,6 +59,14 @@ func TestActorSerializerMarshallUsesAccountURI(t *testing.T) {
 	image, ok := got["image"].(map[string]any)
 	if !ok || image["url"] != "https://cdn.example.org/header.png" {
 		t.Fatalf("expected header image URL, got %#v", got["image"])
+	}
+	attachments, ok := got["attachment"].([]any)
+	if !ok || len(attachments) != 1 {
+		t.Fatalf("expected one profile field attachment, got %#v", got["attachment"])
+	}
+	field, ok := attachments[0].(map[string]any)
+	if !ok || field["type"] != "PropertyValue" || field["name"] != "Website" || field["value"] != `<a href="https://example.org">example.org</a>` {
+		t.Fatalf("expected PropertyValue attachment, got %#v", attachments[0])
 	}
 }
 

@@ -13,6 +13,12 @@ import (
 	"github.com/myfedi/gargoyle/domain/ports"
 )
 
+const (
+	maxExtractedProfileFields          = 4
+	maxExtractedProfileFieldNameRunes  = 255
+	maxExtractedProfileFieldValueRunes = 2047
+)
+
 // ParsedActivity is the normalized subset of an ActivityPub activity used by the application.
 type ParsedActivity struct {
 	Type   string
@@ -741,6 +747,7 @@ type ExtractedActor struct {
 	URL       string
 	AvatarURL string
 	HeaderURL string
+	Fields    []models.AccountProfileField
 	Inbox     string
 	Outbox    string
 	Followers string
@@ -766,6 +773,7 @@ func ExtractActorObject(raw []byte) (ExtractedActor, bool) {
 		URL               json.RawMessage `json:"url"`
 		Icon              json.RawMessage `json:"icon"`
 		Image             json.RawMessage `json:"image"`
+		Attachment        json.RawMessage `json:"attachment"`
 		Inbox             string          `json:"inbox"`
 		Outbox            string          `json:"outbox"`
 		Followers         string          `json:"followers"`
@@ -778,7 +786,54 @@ func ExtractActorObject(raw []byte) (ExtractedActor, bool) {
 	if err := json.Unmarshal(activity.Object, &actor); err != nil || actor.ID == "" || actor.PreferredUsername == "" || !isActorType(actor.Type) {
 		return ExtractedActor{}, false
 	}
-	return ExtractedActor{URI: actor.ID, Type: actor.Type, Username: actor.PreferredUsername, Name: actor.Name, Summary: actor.Summary, URL: extractURLValue(actor.URL), AvatarURL: extractURLValue(actor.Icon), HeaderURL: extractURLValue(actor.Image), Inbox: actor.Inbox, Outbox: actor.Outbox, Followers: actor.Followers, Following: actor.Following, PublicKey: actor.PublicKey.PublicKeyPem, Locked: actor.Locked}, true
+	return ExtractedActor{URI: actor.ID, Type: actor.Type, Username: actor.PreferredUsername, Name: actor.Name, Summary: actor.Summary, URL: extractURLValue(actor.URL), AvatarURL: extractURLValue(actor.Icon), HeaderURL: extractURLValue(actor.Image), Fields: extractProfileFields(actor.Attachment), Inbox: actor.Inbox, Outbox: actor.Outbox, Followers: actor.Followers, Following: actor.Following, PublicKey: actor.PublicKey.PublicKeyPem, Locked: actor.Locked}, true
+}
+
+func extractProfileFields(raw json.RawMessage) []models.AccountProfileField {
+	if len(raw) == 0 {
+		return nil
+	}
+	var attachments []struct {
+		Type       string `json:"type"`
+		Name       string `json:"name"`
+		Value      string `json:"value"`
+		VerifiedAt string `json:"verified_at"`
+	}
+	if err := json.Unmarshal(raw, &attachments); err != nil {
+		var attachment struct {
+			Type       string `json:"type"`
+			Name       string `json:"name"`
+			Value      string `json:"value"`
+			VerifiedAt string `json:"verified_at"`
+		}
+		if err := json.Unmarshal(raw, &attachment); err != nil {
+			return nil
+		}
+		attachments = append(attachments, attachment)
+	}
+	fields := make([]models.AccountProfileField, 0, len(attachments))
+	for _, attachment := range attachments {
+		if attachment.Type != "PropertyValue" || (strings.TrimSpace(attachment.Name) == "" && strings.TrimSpace(attachment.Value) == "") {
+			continue
+		}
+		var verifiedAt *time.Time
+		if parsed, err := time.Parse(time.RFC3339, attachment.VerifiedAt); err == nil {
+			verifiedAt = &parsed
+		}
+		fields = append(fields, models.AccountProfileField{Name: trimRunes(strings.TrimSpace(attachment.Name), maxExtractedProfileFieldNameRunes), Value: trimRunes(strings.TrimSpace(attachment.Value), maxExtractedProfileFieldValueRunes), VerifiedAt: verifiedAt})
+		if len(fields) == maxExtractedProfileFields {
+			break
+		}
+	}
+	return fields
+}
+
+func trimRunes(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
 }
 
 func isActorType(value string) bool {

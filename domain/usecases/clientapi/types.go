@@ -99,6 +99,7 @@ type Relationship struct {
 type UpdateCredentialsInput struct {
 	DisplayName string
 	Note        string
+	Fields      []models.AccountProfileField
 	Avatar      *UploadMediaInput
 	Header      *UploadMediaInput
 	Locked      bool

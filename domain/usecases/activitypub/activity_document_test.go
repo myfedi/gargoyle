@@ -67,6 +67,29 @@ func TestExtractNoteInfersVisibilityFromAudience(t *testing.T) {
 	}
 }
 
+func TestExtractActorObjectIncludesProfileFields(t *testing.T) {
+	raw := []byte(`{
+		"type":"Update",
+		"actor":"https://remote.example/users/bob",
+		"object":{
+			"id":"https://remote.example/users/bob",
+			"type":"Person",
+			"preferredUsername":"bob",
+			"attachment":[
+				{"type":"PropertyValue","name":"Website","value":"<a href=\"https://example.org\">example.org</a>"},
+				{"type":"Document","name":"ignored","value":"ignored"}
+			]
+		}
+	}`)
+	actor, ok := ExtractActorObject(raw)
+	if !ok {
+		t.Fatal("expected actor object")
+	}
+	if len(actor.Fields) != 1 || actor.Fields[0].Name != "Website" || actor.Fields[0].Value == "" {
+		t.Fatalf("unexpected fields: %#v", actor.Fields)
+	}
+}
+
 func TestExtractNoteExplicitVisibilityWinsOverAudienceInference(t *testing.T) {
 	raw := []byte(`{
 		"type":"Create",

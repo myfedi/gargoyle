@@ -21,6 +21,7 @@ type CreateAccountInput struct {
 	Summary               *string // optional
 	URI                   string
 	URL                   *string // optional
+	Fields                []models.AccountProfileField
 	AvatarMediaID         *string // optional local media id
 	HeaderMediaID         *string // optional local media id
 	AvatarURL             *string // optional remote/external URL
@@ -39,6 +40,7 @@ type CreateAccountInput struct {
 type UpdateAccountProfileInput struct {
 	DisplayName   *string
 	Summary       *string
+	Fields        []models.AccountProfileField
 	AvatarMediaID *string
 	HeaderMediaID *string
 	AvatarURL     *string

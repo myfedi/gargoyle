@@ -25,6 +25,12 @@ import (
 
 // RemoteAccountResolver discovers ActivityPub actors through WebFinger and
 // actor fetches for Mastodon-compatible account search/follow endpoints.
+const (
+	remoteMaxProfileFields          = 4
+	remoteMaxProfileFieldNameRunes  = 255
+	remoteMaxProfileFieldValueRunes = 2047
+)
+
 type RemoteURLException struct {
 	Host           string
 	AllowHTTP      bool
@@ -237,6 +243,7 @@ type remoteActorDocument struct {
 	URL               any    `json:"url"`
 	Icon              any    `json:"icon"`
 	Image             any    `json:"image"`
+	Attachment        any    `json:"attachment"`
 	Inbox             string `json:"inbox"`
 	Outbox            string `json:"outbox"`
 	Followers         string `json:"followers"`
@@ -267,6 +274,7 @@ func accountFromRemoteActor(doc remoteActorDocument) (*models.Account, error) {
 		Summary:      stringPtr(doc.Summary),
 		URI:          doc.ID,
 		URL:          stringPtr(firstNonEmpty(actorURLValue, doc.ID)),
+		Fields:       accountProfileFields(doc.Attachment),
 		AvatarURL:    stringPtr(stringURL(doc.Icon)),
 		HeaderURL:    stringPtr(stringURL(doc.Image)),
 		InboxURI:     doc.Inbox,
@@ -277,6 +285,41 @@ func accountFromRemoteActor(doc remoteActorDocument) (*models.Account, error) {
 		ActorType:    models.ActorTypePerson,
 		Locked:       doc.Locked,
 	}, nil
+}
+
+func accountProfileFields(value any) []models.AccountProfileField {
+	items, ok := value.([]any)
+	if !ok {
+		if value == nil {
+			return nil
+		}
+		items = []any{value}
+	}
+	fields := make([]models.AccountProfileField, 0, len(items))
+	for _, item := range items {
+		object, ok := item.(map[string]any)
+		if !ok || anyString(object["type"]) != "PropertyValue" {
+			continue
+		}
+		name := strings.TrimSpace(anyString(object["name"]))
+		fieldValue := strings.TrimSpace(anyString(object["value"]))
+		if name == "" && fieldValue == "" {
+			continue
+		}
+		fields = append(fields, models.AccountProfileField{Name: trimRunes(name, remoteMaxProfileFieldNameRunes), Value: trimRunes(fieldValue, remoteMaxProfileFieldValueRunes)})
+		if len(fields) == remoteMaxProfileFields {
+			break
+		}
+	}
+	return fields
+}
+
+func trimRunes(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
 }
 
 func mastodonAccountID(actor string) string {
@@ -379,6 +422,13 @@ func accountHandleFromProfileURL(value string) string {
 	}
 	if match := regexp.MustCompile(`^/(?:@|users/)([^/@\s]+)/?$`).FindStringSubmatch(parsed.Path); len(match) == 2 {
 		return match[1] + "@" + parsed.Hostname()
+	}
+	return ""
+}
+
+func anyString(value any) string {
+	if str, ok := value.(string); ok {
+		return str
 	}
 	return ""
 }

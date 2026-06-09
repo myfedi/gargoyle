@@ -14,6 +14,9 @@ import (
 const (
 	maxProfileDisplayNameLength = 120
 	maxProfileNoteLength        = 5000
+	maxProfileFields            = 4
+	maxProfileFieldNameLength   = 255
+	maxProfileFieldValueLength  = 2047
 )
 
 func (u Profile) UpdateCredentials(ctx context.Context, account *models.Account, input UpdateCredentialsInput) (*UpdateCredentialsResult, *domainerrors.DomainError) {
@@ -24,7 +27,7 @@ func (u Profile) UpdateCredentials(ctx context.Context, account *models.Account,
 		return nil, domainerrors.New(domainerrors.ErrUnauthorized, "only local accounts can update credentials")
 	}
 
-	displayName, sanitizedNote, derr := u.validatedProfileText(input)
+	displayName, sanitizedNote, fields, derr := u.validatedProfileText(input)
 	if derr != nil {
 		return nil, derr
 	}
@@ -38,7 +41,7 @@ func (u Profile) UpdateCredentials(ctx context.Context, account *models.Account,
 		u.deleteCreatedProfileMedia(ctx, createdMedia)
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	res, derr := u.deps.UpdateActorUC.UpdateActor(ctx, apUsecases.UpdateActorInput{Username: account.Username, UpdateID: updateID, DisplayName: stringPtrOrNil(displayName), Summary: stringPtrOrNil(sanitizedNote), AvatarMediaID: avatarMediaID, HeaderMediaID: headerMediaID, Locked: &input.Locked})
+	res, derr := u.deps.UpdateActorUC.UpdateActor(ctx, apUsecases.UpdateActorInput{Username: account.Username, UpdateID: updateID, DisplayName: stringPtrOrNil(displayName), Summary: stringPtrOrNil(sanitizedNote), Fields: fields, AvatarMediaID: avatarMediaID, HeaderMediaID: headerMediaID, Locked: &input.Locked})
 	if derr != nil {
 		u.deleteCreatedProfileMedia(ctx, createdMedia)
 		return nil, derr
@@ -46,16 +49,42 @@ func (u Profile) UpdateCredentials(ctx context.Context, account *models.Account,
 	return &UpdateCredentialsResult{Account: res.Account, RawJSON: res.RawJSON, FollowerInboxes: res.FollowerInboxes}, nil
 }
 
-func (u Profile) validatedProfileText(input UpdateCredentialsInput) (string, string, *domainerrors.DomainError) {
+func (u Profile) validatedProfileText(input UpdateCredentialsInput) (string, string, []models.AccountProfileField, *domainerrors.DomainError) {
 	displayName := strings.TrimSpace(input.DisplayName)
 	if len([]rune(displayName)) > maxProfileDisplayNameLength {
-		return "", "", domainerrors.New(domainerrors.ErrBadRequest, "display_name is too long")
+		return "", "", nil, domainerrors.New(domainerrors.ErrBadRequest, "display_name is too long")
 	}
 	note := strings.TrimSpace(input.Note)
 	if len([]rune(note)) > maxProfileNoteLength {
-		return "", "", domainerrors.New(domainerrors.ErrBadRequest, "note is too long")
+		return "", "", nil, domainerrors.New(domainerrors.ErrBadRequest, "note is too long")
 	}
-	return displayName, u.deps.ContentSanitizer.SanitizeHTML(note), nil
+	fields, derr := u.validatedProfileFields(input.Fields)
+	if derr != nil {
+		return "", "", nil, derr
+	}
+	return displayName, u.deps.ContentSanitizer.SanitizeHTML(note), fields, nil
+}
+
+func (u Profile) validatedProfileFields(input []models.AccountProfileField) ([]models.AccountProfileField, *domainerrors.DomainError) {
+	if len(input) > maxProfileFields {
+		return nil, domainerrors.New(domainerrors.ErrBadRequest, "too many profile fields")
+	}
+	fields := make([]models.AccountProfileField, 0, len(input))
+	for _, field := range input {
+		name := strings.TrimSpace(field.Name)
+		value := strings.TrimSpace(field.Value)
+		if name == "" && value == "" {
+			continue
+		}
+		if len([]rune(name)) > maxProfileFieldNameLength {
+			return nil, domainerrors.New(domainerrors.ErrBadRequest, "profile field name is too long")
+		}
+		if len([]rune(value)) > maxProfileFieldValueLength {
+			return nil, domainerrors.New(domainerrors.ErrBadRequest, "profile field value is too long")
+		}
+		fields = append(fields, models.AccountProfileField{Name: name, Value: u.deps.ContentSanitizer.SanitizeHTML(value), VerifiedAt: field.VerifiedAt})
+	}
+	return fields, nil
 }
 
 func (u Profile) profileMediaIDs(ctx context.Context, account *models.Account, input UpdateCredentialsInput) (*string, *string, []models.MediaAttachment, *domainerrors.DomainError) {

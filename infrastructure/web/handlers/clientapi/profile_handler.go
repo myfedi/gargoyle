@@ -2,17 +2,20 @@ package clientapi
 
 import (
 	"io"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
 	clientapiUC "github.com/myfedi/gargoyle/domain/usecases/clientapi"
 	"github.com/myfedi/gargoyle/infrastructure/web"
 )
 
 type updateCredentialsRequest struct {
-	DisplayName string `json:"display_name" form:"display_name"`
-	Note        string `json:"note" form:"note"`
-	Locked      bool   `json:"locked" form:"locked"`
+	DisplayName string                       `json:"display_name" form:"display_name"`
+	Note        string                       `json:"note" form:"note"`
+	Fields      []models.AccountProfileField `json:"fields"`
+	Locked      bool                         `json:"locked" form:"locked"`
 }
 
 func (h APIHandler) updateCredentials(c *fiber.Ctx) error {
@@ -24,7 +27,11 @@ func (h APIHandler) updateCredentials(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return err
 	}
-	input := clientapiUC.UpdateCredentialsInput{DisplayName: req.DisplayName, Note: req.Note, Locked: req.Locked}
+	fields := req.Fields
+	if formFields := profileFieldsFromForm(c); len(formFields) > 0 {
+		fields = formFields
+	}
+	input := clientapiUC.UpdateCredentialsInput{DisplayName: req.DisplayName, Note: req.Note, Fields: fields, Locked: req.Locked}
 	if avatar, derr := profileUploadFromForm(c, "avatar"); derr != nil {
 		return web.HandleDomainError(c, derr)
 	} else {
@@ -45,6 +52,29 @@ func (h APIHandler) updateCredentials(c *fiber.Ctx) error {
 		}
 	}
 	return c.JSON(accountToResponse(&res.Account))
+}
+
+func profileFieldsFromForm(c *fiber.Ctx) []models.AccountProfileField {
+	fields := make([]models.AccountProfileField, 0, 4)
+	for i := 0; i < 16; i++ {
+		index := strconv.Itoa(i)
+		name := firstFormValue(c, "fields_attributes["+index+"][name]", "fields["+index+"][name]")
+		value := firstFormValue(c, "fields_attributes["+index+"][value]", "fields["+index+"][value]")
+		if name == "" && value == "" {
+			continue
+		}
+		fields = append(fields, models.AccountProfileField{Name: name, Value: value})
+	}
+	return fields
+}
+
+func firstFormValue(c *fiber.Ctx, keys ...string) string {
+	for _, key := range keys {
+		if value := c.FormValue(key); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func profileUploadFromForm(c *fiber.Ctx, field string) (*clientapiUC.UploadMediaInput, *domainerrors.DomainError) {

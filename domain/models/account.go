@@ -2,6 +2,12 @@ package models
 
 import "time"
 
+type AccountProfileField struct {
+	Name       string     `json:"name"`
+	Value      string     `json:"value"`
+	VerifiedAt *time.Time `json:"verified_at,omitempty"`
+}
+
 type Account struct {
 	ID                    string
 	UserID                *string // non-nil for local users only
@@ -14,6 +20,7 @@ type Account struct {
 	Summary               *string
 	URI                   string
 	URL                   *string
+	Fields                []AccountProfileField
 	AvatarMediaID         *string
 	HeaderMediaID         *string
 	AvatarURL             *string

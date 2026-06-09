@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"time"
 
 	ap "github.com/go-ap/activitypub"
 	"github.com/myfedi/gargoyle/domain/models"
@@ -118,9 +119,31 @@ func ensureActorDocumentMetadata(data []byte, account models.Account) ([]byte, e
 		}
 		actor["endpoints"] = endpoints
 	}
+	if len(account.Fields) > 0 {
+		attachments, err := json.Marshal(accountProfileFieldAttachments(account.Fields))
+		if err != nil {
+			return nil, err
+		}
+		actor["attachment"] = attachments
+	}
 	actor["manuallyApprovesFollowers"] = json.RawMessage(boolJSON(account.Locked))
 
 	return json.Marshal(actor)
+}
+
+func accountProfileFieldAttachments(fields []models.AccountProfileField) []map[string]any {
+	attachments := make([]map[string]any, 0, len(fields))
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) == "" && strings.TrimSpace(field.Value) == "" {
+			continue
+		}
+		attachment := map[string]any{"type": "PropertyValue", "name": field.Name, "value": field.Value}
+		if field.VerifiedAt != nil {
+			attachment["verified_at"] = field.VerifiedAt.UTC().Format(time.RFC3339)
+		}
+		attachments = append(attachments, attachment)
+	}
+	return attachments
 }
 
 func boolJSON(value bool) []byte {

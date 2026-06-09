@@ -74,6 +74,7 @@ CREATE TABLE accounts (
     summary TEXT,
     uri TEXT NOT NULL UNIQUE,
     url TEXT,
+    profile_fields TEXT NOT NULL DEFAULT '[]',
     avatar_media_id CHAR(26),
     header_media_id CHAR(26),
     avatar_url TEXT,

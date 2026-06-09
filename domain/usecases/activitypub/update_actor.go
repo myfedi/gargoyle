@@ -19,6 +19,7 @@ type UpdateActorInput struct {
 	UpdateID      string
 	DisplayName   *string
 	Summary       *string
+	Fields        []models.AccountProfileField
 	AvatarMediaID *string
 	HeaderMediaID *string
 	Locked        *bool
@@ -48,7 +49,7 @@ func (u *UpdateActorUseCase) UpdateActor(ctx context.Context, input UpdateActorI
 	var raw []byte
 	err := u.cfg.TxProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
 		var err error
-		updated, err = u.cfg.AccountsRepo.UpdateLocalAccountProfile(ctx, &tx, account.ID, repos.UpdateAccountProfileInput{DisplayName: input.DisplayName, Summary: input.Summary, AvatarMediaID: input.AvatarMediaID, HeaderMediaID: input.HeaderMediaID, AvatarURL: nil, HeaderURL: nil, Locked: input.Locked})
+		updated, err = u.cfg.AccountsRepo.UpdateLocalAccountProfile(ctx, &tx, account.ID, repos.UpdateAccountProfileInput{DisplayName: input.DisplayName, Summary: input.Summary, Fields: input.Fields, AvatarMediaID: input.AvatarMediaID, HeaderMediaID: input.HeaderMediaID, AvatarURL: nil, HeaderURL: nil, Locked: input.Locked})
 		if err != nil {
 			return err
 		}

@@ -15,14 +15,21 @@ type Token struct {
 	AccessToken string `json:"access_token"`
 }
 
+type AccountField struct {
+	Name       string  `json:"name"`
+	Value      string  `json:"value"`
+	VerifiedAt *string `json:"verified_at"`
+}
+
 type Account struct {
-	ID          string `json:"id"`
-	Username    string `json:"username"`
-	Acct        string `json:"acct"`
-	DisplayName string `json:"display_name"`
-	Note        string `json:"note"`
-	Avatar      string `json:"avatar"`
-	Header      string `json:"header"`
+	ID          string         `json:"id"`
+	Username    string         `json:"username"`
+	Acct        string         `json:"acct"`
+	DisplayName string         `json:"display_name"`
+	Note        string         `json:"note"`
+	Avatar      string         `json:"avatar"`
+	Header      string         `json:"header"`
+	Fields      []AccountField `json:"fields"`
 }
 
 type Status struct {

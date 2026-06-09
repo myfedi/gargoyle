@@ -49,6 +49,7 @@ func (r *AccountsRepo) CreateAccount(ctx context.Context, tx *dbPorts.Tx, input 
 		Summary:               input.Summary,
 		URI:                   input.URI,
 		URL:                   input.URL,
+		FieldsJSON:            dbModels.AccountProfileFieldsJSON(input.Fields),
 		AvatarMediaID:         input.AvatarMediaID,
 		HeaderMediaID:         input.HeaderMediaID,
 		AvatarURL:             input.AvatarURL,
@@ -109,6 +110,7 @@ func (r *AccountsRepo) UpdateLocalAccountProfile(ctx context.Context, tx *dbPort
 		Model((*dbModels.Account)(nil)).
 		Set("display_name = ?", input.DisplayName).
 		Set("summary = ?", input.Summary).
+		Set("profile_fields = ?", dbModels.AccountProfileFieldsJSON(input.Fields)).
 		Set("avatar_media_id = ?", input.AvatarMediaID).
 		Set("header_media_id = ?", input.HeaderMediaID).
 		Set("avatar_url = ?", input.AvatarURL).

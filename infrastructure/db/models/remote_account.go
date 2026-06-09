@@ -20,6 +20,7 @@ type RemoteAccount struct {
 	Summary               *string   `bun:",nullzero"`
 	URI                   string    `bun:",nullzero,notnull,unique"`
 	URL                   *string   `bun:",nullzero"`
+	FieldsJSON            string    `bun:"profile_fields,nullzero,notnull,default:'[]'"`
 	AvatarMediaID         *string   `bun:"type:CHAR(26),nullzero"`
 	HeaderMediaID         *string   `bun:"type:CHAR(26),nullzero"`
 	AvatarURL             *string   `bun:",nullzero"`
@@ -35,9 +36,9 @@ type RemoteAccount struct {
 }
 
 func RemoteAccountFromModel(account models.Account) RemoteAccount {
-	return RemoteAccount{ID: account.ID, FetchedAt: time.Now().UTC(), Username: account.Username, Domain: account.Domain, DisplayName: account.DisplayName, Summary: account.Summary, URI: account.URI, URL: account.URL, AvatarMediaID: account.AvatarMediaID, HeaderMediaID: account.HeaderMediaID, AvatarURL: account.AvatarURL, HeaderURL: account.HeaderURL, InboxURI: account.InboxURI, OutboxURI: account.OutboxURI, FollowingURI: account.FollowingURI, FollowersURI: account.FollowersURI, FeaturedCollectionURI: account.FeaturedCollectionURI, PublicKey: account.PublicKey, ActorType: int(account.ActorType), Locked: account.Locked}
+	return RemoteAccount{ID: account.ID, FetchedAt: time.Now().UTC(), Username: account.Username, Domain: account.Domain, DisplayName: account.DisplayName, Summary: account.Summary, URI: account.URI, URL: account.URL, FieldsJSON: AccountProfileFieldsJSON(account.Fields), AvatarMediaID: account.AvatarMediaID, HeaderMediaID: account.HeaderMediaID, AvatarURL: account.AvatarURL, HeaderURL: account.HeaderURL, InboxURI: account.InboxURI, OutboxURI: account.OutboxURI, FollowingURI: account.FollowingURI, FollowersURI: account.FollowersURI, FeaturedCollectionURI: account.FeaturedCollectionURI, PublicKey: account.PublicKey, ActorType: int(account.ActorType), Locked: account.Locked}
 }
 
 func (a RemoteAccount) ToModel() models.Account {
-	return models.Account{ID: a.ID, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt, FetchedAt: a.FetchedAt, Username: a.Username, Domain: a.Domain, DisplayName: a.DisplayName, Summary: a.Summary, URI: a.URI, URL: a.URL, AvatarMediaID: a.AvatarMediaID, HeaderMediaID: a.HeaderMediaID, AvatarURL: a.AvatarURL, HeaderURL: a.HeaderURL, InboxURI: a.InboxURI, OutboxURI: a.OutboxURI, FollowingURI: a.FollowingURI, FollowersURI: a.FollowersURI, FeaturedCollectionURI: a.FeaturedCollectionURI, PublicKey: a.PublicKey, ActorType: models.NewActorType(a.ActorType), Locked: a.Locked}
+	return models.Account{ID: a.ID, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt, FetchedAt: a.FetchedAt, Username: a.Username, Domain: a.Domain, DisplayName: a.DisplayName, Summary: a.Summary, URI: a.URI, URL: a.URL, Fields: accountProfileFieldsFromJSON(a.FieldsJSON), AvatarMediaID: a.AvatarMediaID, HeaderMediaID: a.HeaderMediaID, AvatarURL: a.AvatarURL, HeaderURL: a.HeaderURL, InboxURI: a.InboxURI, OutboxURI: a.OutboxURI, FollowingURI: a.FollowingURI, FollowersURI: a.FollowersURI, FeaturedCollectionURI: a.FeaturedCollectionURI, PublicKey: a.PublicKey, ActorType: models.NewActorType(a.ActorType), Locked: a.Locked}
 }

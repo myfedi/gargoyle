@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -20,6 +21,7 @@ type Account struct {
 	URI         string  `bun:",nullzero,notnull,unique"`
 	// null for local accounts
 	URL           *string `bun:",nullzero"`
+	FieldsJSON    string  `bun:"profile_fields,nullzero,notnull,default:'[]'"`
 	AvatarMediaID *string `bun:"type:CHAR(26),nullzero"`
 	HeaderMediaID *string `bun:"type:CHAR(26),nullzero"`
 	AvatarURL     *string `bun:",nullzero"`
@@ -51,6 +53,7 @@ func (a *Account) ToModel() models.Account {
 		Summary:               a.Summary,
 		URI:                   a.URI,
 		URL:                   a.URL,
+		Fields:                accountProfileFieldsFromJSON(a.FieldsJSON),
 		AvatarMediaID:         a.AvatarMediaID,
 		HeaderMediaID:         a.HeaderMediaID,
 		AvatarURL:             a.AvatarURL,
@@ -65,4 +68,26 @@ func (a *Account) ToModel() models.Account {
 		ActorType:             actorType,
 		Locked:                a.Locked,
 	}
+}
+
+func AccountProfileFieldsJSON(fields []models.AccountProfileField) string {
+	if len(fields) == 0 {
+		return "[]"
+	}
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
+}
+
+func accountProfileFieldsFromJSON(raw string) []models.AccountProfileField {
+	if raw == "" {
+		return nil
+	}
+	var fields []models.AccountProfileField
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return nil
+	}
+	return fields
 }

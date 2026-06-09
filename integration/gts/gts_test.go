@@ -780,11 +780,11 @@ func TestProfileUpdateFederatesToGoToSocial(t *testing.T) {
 	displayName := "Alice Updated " + marker
 	note := "bio " + marker
 	var account shared.Account
-	resp, body, err := s.gargoyle.PatchForm(s.ctx, "/api/v1/accounts/update_credentials", s.gargoyleToken, url.Values{"display_name": {displayName}, "note": {note}}, &account)
+	resp, body, err := s.gargoyle.PatchForm(s.ctx, "/api/v1/accounts/update_credentials", s.gargoyleToken, url.Values{"display_name": {displayName}, "note": {note}, "fields_attributes[0][name]": {"Website"}, "fields_attributes[0][value]": {"http://alice.example/" + marker}}, &account)
 	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.Fatalf("profile update failed: status=%d err=%v body=%s", resp.StatusCode, err, body)
 	}
-	if !strings.Contains(account.DisplayName, marker) || !strings.Contains(account.Note, marker) {
+	if !strings.Contains(account.DisplayName, marker) || !strings.Contains(account.Note, marker) || !accountHasField(account, "Website", marker) {
 		t.Fatalf("profile response did not include update: %+v", account)
 	}
 	var verified shared.Account
@@ -792,7 +792,7 @@ func TestProfileUpdateFederatesToGoToSocial(t *testing.T) {
 	if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.Fatalf("verify credentials failed: status=%d err=%v body=%s", resp.StatusCode, err, body)
 	}
-	if verified.DisplayName != account.DisplayName || verified.Note != account.Note {
+	if verified.DisplayName != account.DisplayName || verified.Note != account.Note || !accountHasField(verified, "Website", marker) {
 		t.Fatalf("verified credentials did not persist profile update: verified=%+v updated=%+v", verified, account)
 	}
 	shared.WaitFor(s.ctx, "profile update federates to GTS", 2*time.Second, func(ctx context.Context) (struct{}, bool, error) {
@@ -801,8 +801,17 @@ func TestProfileUpdateFederatesToGoToSocial(t *testing.T) {
 		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return struct{}{}, false, err
 		}
-		return struct{}{}, strings.Contains(remote.DisplayName, marker) || strings.Contains(remote.Note, marker), nil
+		return struct{}{}, (strings.Contains(remote.DisplayName, marker) || strings.Contains(remote.Note, marker)) && accountHasField(remote, "Website", marker), nil
 	})
+}
+
+func accountHasField(account shared.Account, name, valueSubstring string) bool {
+	for _, field := range account.Fields {
+		if field.Name == name && strings.Contains(field.Value, valueSubstring) {
+			return true
+		}
+	}
+	return false
 }
 
 func resetIntegrationStackOnce() error {

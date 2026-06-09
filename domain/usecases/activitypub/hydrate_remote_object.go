@@ -253,6 +253,7 @@ func (u HydrateRemoteObjectUseCase) fetchRemoteAuthor(ctx context.Context, signe
 	if !ok || author.URI != actorURI {
 		return nil
 	}
+	author.Fields = sanitizeAccountProfileFields(u.sanitizer, author.Fields)
 	return &author
 }
 
@@ -277,6 +278,7 @@ func extractRemoteActor(raw []byte) (models.Account, bool) {
 		URL               json.RawMessage `json:"url"`
 		Icon              json.RawMessage `json:"icon"`
 		Image             json.RawMessage `json:"image"`
+		Attachment        json.RawMessage `json:"attachment"`
 		Inbox             string          `json:"inbox"`
 		Outbox            string          `json:"outbox"`
 		Followers         string          `json:"followers"`
@@ -294,7 +296,7 @@ func extractRemoteActor(raw []byte) (models.Account, bool) {
 		domain = parsed.Host
 	}
 	actorURL := remoteActorURL(doc.URL)
-	return models.Account{ID: remoteActorID(doc.ID), Username: doc.PreferredUsername, Domain: stringPtr(domain), DisplayName: stringPtr(firstNonEmpty(doc.Name, doc.PreferredUsername)), Summary: stringPtr(doc.Summary), URI: doc.ID, URL: stringPtr(firstNonEmpty(actorURL, doc.ID)), AvatarURL: stringPtr(remoteActorURL(doc.Icon)), HeaderURL: stringPtr(remoteActorURL(doc.Image)), InboxURI: doc.Inbox, OutboxURI: stringPtr(doc.Outbox), FollowingURI: doc.Following, FollowersURI: doc.Followers, PublicKey: doc.PublicKey.PublicKeyPem, ActorType: models.ActorTypePerson, Locked: doc.Locked}, true
+	return models.Account{ID: remoteActorID(doc.ID), Username: doc.PreferredUsername, Domain: stringPtr(domain), DisplayName: stringPtr(firstNonEmpty(doc.Name, doc.PreferredUsername)), Summary: stringPtr(doc.Summary), URI: doc.ID, URL: stringPtr(firstNonEmpty(actorURL, doc.ID)), Fields: extractProfileFields(doc.Attachment), AvatarURL: stringPtr(remoteActorURL(doc.Icon)), HeaderURL: stringPtr(remoteActorURL(doc.Image)), InboxURI: doc.Inbox, OutboxURI: stringPtr(doc.Outbox), FollowingURI: doc.Following, FollowersURI: doc.Followers, PublicKey: doc.PublicKey.PublicKeyPem, ActorType: models.ActorTypePerson, Locked: doc.Locked}, true
 }
 
 func remoteActorID(actor string) string {

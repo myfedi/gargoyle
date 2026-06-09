@@ -465,7 +465,7 @@ func TestMastodonAdditionalDirectAndLockedFlows(t *testing.T) {
 
 	profileMarker := fmt.Sprintf("mastodon-profile-inbound-%d", time.Now().UnixNano())
 	var account shared.Account
-	resp, body, err = s.mastodon.PatchForm(s.ctx, "/api/v1/accounts/update_credentials", s.mastodonToken, url.Values{"display_name": {"Bob " + profileMarker[:20]}, "note": {"bio " + profileMarker}, "locked": {"true"}}, &account)
+	resp, body, err = s.mastodon.PatchForm(s.ctx, "/api/v1/accounts/update_credentials", s.mastodonToken, url.Values{"display_name": {"Bob " + profileMarker[:20]}, "note": {"bio " + profileMarker}, "locked": {"true"}, "fields_attributes[0][name]": {"Website"}, "fields_attributes[0][value]": {"http://bob.example/" + profileMarker}}, &account)
 	shared.Require2xx(t, resp, body, err)
 	shared.WaitFor(s.ctx, "Mastodon profile update reaches Gargoyle", 2*time.Second, func(ctx context.Context) (struct{}, bool, error) {
 		var remote shared.Account
@@ -473,7 +473,7 @@ func TestMastodonAdditionalDirectAndLockedFlows(t *testing.T) {
 		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return struct{}{}, false, err
 		}
-		return struct{}{}, strings.Contains(remote.DisplayName, profileMarker) || strings.Contains(remote.Note, profileMarker), nil
+		return struct{}{}, (strings.Contains(remote.DisplayName, profileMarker) || strings.Contains(remote.Note, profileMarker)) && accountHasField(remote, "Website", profileMarker), nil
 	})
 }
 
@@ -506,7 +506,7 @@ func TestMastodonDeleteProfileUpdateAndUnsignedInbox(t *testing.T) {
 
 	marker := fmt.Sprintf("mastodon-profile-%d", time.Now().UnixNano())
 	var account shared.Account
-	resp, body, err = s.gargoyle.PatchForm(s.ctx, "/api/v1/accounts/update_credentials", s.gargoyleToken, url.Values{"display_name": {"Alice Mastodon " + marker}, "note": {"bio " + marker}}, &account)
+	resp, body, err = s.gargoyle.PatchForm(s.ctx, "/api/v1/accounts/update_credentials", s.gargoyleToken, url.Values{"display_name": {"Alice Mastodon " + marker}, "note": {"bio " + marker}, "fields_attributes[0][name]": {"Website"}, "fields_attributes[0][value]": {"http://alice.example/" + marker}}, &account)
 	shared.Require2xx(t, resp, body, err)
 	shared.WaitFor(s.ctx, "profile update federates to Mastodon", 2*time.Second, func(ctx context.Context) (struct{}, bool, error) {
 		var remote shared.Account
@@ -514,8 +514,17 @@ func TestMastodonDeleteProfileUpdateAndUnsignedInbox(t *testing.T) {
 		if err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return struct{}{}, false, err
 		}
-		return struct{}{}, strings.Contains(remote.DisplayName, marker) || strings.Contains(remote.Note, marker), nil
+		return struct{}{}, (strings.Contains(remote.DisplayName, marker) || strings.Contains(remote.Note, marker)) && accountHasField(remote, "Website", marker), nil
 	})
+}
+
+func accountHasField(account shared.Account, name, valueSubstring string) bool {
+	for _, field := range account.Fields {
+		if field.Name == name && strings.Contains(field.Value, valueSubstring) {
+			return true
+		}
+	}
+	return false
 }
 
 func searchAccount(t testing.TB, ctx context.Context, client shared.Client, token, acct string) shared.Account {

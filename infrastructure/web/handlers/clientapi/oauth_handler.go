@@ -138,25 +138,32 @@ func (h OAuthHandler) revokeToken(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{})
 }
 
+type accountFieldResponse struct {
+	Name       string  `json:"name"`
+	Value      string  `json:"value"`
+	VerifiedAt *string `json:"verified_at"`
+}
+
 type accountResponse struct {
-	ID             string `json:"id"`
-	Username       string `json:"username"`
-	Acct           string `json:"acct"`
-	DisplayName    string `json:"display_name"`
-	Locked         bool   `json:"locked"`
-	Bot            bool   `json:"bot"`
-	Discoverable   bool   `json:"discoverable"`
-	Group          bool   `json:"group"`
-	CreatedAt      string `json:"created_at"`
-	Note           string `json:"note"`
-	URL            string `json:"url"`
-	Avatar         string `json:"avatar"`
-	AvatarStatic   string `json:"avatar_static"`
-	Header         string `json:"header"`
-	HeaderStatic   string `json:"header_static"`
-	FollowersCount int    `json:"followers_count"`
-	FollowingCount int    `json:"following_count"`
-	StatusesCount  int    `json:"statuses_count"`
+	ID             string                 `json:"id"`
+	Username       string                 `json:"username"`
+	Acct           string                 `json:"acct"`
+	DisplayName    string                 `json:"display_name"`
+	Locked         bool                   `json:"locked"`
+	Bot            bool                   `json:"bot"`
+	Discoverable   bool                   `json:"discoverable"`
+	Group          bool                   `json:"group"`
+	CreatedAt      string                 `json:"created_at"`
+	Note           string                 `json:"note"`
+	URL            string                 `json:"url"`
+	Avatar         string                 `json:"avatar"`
+	AvatarStatic   string                 `json:"avatar_static"`
+	Header         string                 `json:"header"`
+	HeaderStatic   string                 `json:"header_static"`
+	Fields         []accountFieldResponse `json:"fields"`
+	FollowersCount int                    `json:"followers_count"`
+	FollowingCount int                    `json:"following_count"`
+	StatusesCount  int                    `json:"statuses_count"`
 }
 
 func (h OAuthHandler) verifyCredentials(c *fiber.Ctx) error {
@@ -185,7 +192,20 @@ func accountToResponseWithStats(account *models.Account, stats oauth.AccountStat
 	}
 	avatar := accountAvatarURL(account)
 	header := accountHeaderURL(account)
-	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: account.Locked, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header, FollowersCount: stats.FollowersCount, FollowingCount: stats.FollowingCount, StatusesCount: stats.StatusesCount}
+	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: account.Locked, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header, Fields: accountFieldsToResponse(account.Fields), FollowersCount: stats.FollowersCount, FollowingCount: stats.FollowingCount, StatusesCount: stats.StatusesCount}
+}
+
+func accountFieldsToResponse(fields []models.AccountProfileField) []accountFieldResponse {
+	res := make([]accountFieldResponse, 0, len(fields))
+	for _, field := range fields {
+		var verifiedAt *string
+		if field.VerifiedAt != nil {
+			formatted := field.VerifiedAt.UTC().Format(time.RFC3339)
+			verifiedAt = &formatted
+		}
+		res = append(res, accountFieldResponse{Name: field.Name, Value: field.Value, VerifiedAt: verifiedAt})
+	}
+	return res
 }
 
 func accountAvatarURL(account *models.Account) string {

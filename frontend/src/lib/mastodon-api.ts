@@ -1,5 +1,5 @@
 import { ApiClient } from "@/lib/api";
-import type { ActivityPubObjectType, DomainBlock, MastodonAccount, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
+import type { ActivityPubObjectType, DomainBlock, MastodonAccount, MastodonAccountField, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
@@ -19,6 +19,7 @@ export type UpdateCredentialsInput = {
   note: string;
   avatar?: File | null;
   header?: File | null;
+  fields?: MastodonAccountField[];
   locked: boolean;
 };
 
@@ -48,6 +49,10 @@ export function createMastodonApi(accessToken: string) {
       body.set("locked", String(input.locked));
       if (input.avatar) body.set("avatar", input.avatar);
       if (input.header) body.set("header", input.header);
+      input.fields?.forEach((field, index) => {
+        body.set(`fields_attributes[${index}][name]`, field.name);
+        body.set(`fields_attributes[${index}][value]`, field.value);
+      });
       return client.request<MastodonAccount>("/api/v1/accounts/update_credentials", {
         method: "PATCH",
         body,

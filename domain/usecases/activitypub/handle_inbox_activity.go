@@ -11,6 +11,7 @@ import (
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
+	"github.com/myfedi/gargoyle/domain/ports"
 	"github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 )
@@ -205,6 +206,7 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 						return domainerrors.New(domainerrors.ErrUnauthorized, "update actor does not own actor object")
 					}
 					updatedAccount := accountFromExtractedActor(actorUpdate)
+					updatedAccount.Fields = sanitizeAccountProfileFields(u.cfg.ContentSanitizer, updatedAccount.Fields)
 					if existing, err := u.cfg.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, &tx, actorUpdate.URI); err == nil {
 						mergeMissingRemoteAccountFields(&updatedAccount, *existing)
 					}
@@ -483,6 +485,7 @@ func accountFromExtractedActor(actor ExtractedActor) models.Account {
 		Summary:      stringPtr(actor.Summary),
 		URI:          actor.URI,
 		URL:          stringPtr(firstNonEmpty(actor.URL, actor.URI)),
+		Fields:       actor.Fields,
 		AvatarURL:    stringPtr(actor.AvatarURL),
 		HeaderURL:    stringPtr(actor.HeaderURL),
 		InboxURI:     actor.Inbox,
@@ -530,6 +533,17 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func sanitizeAccountProfileFields(sanitizer ports.ContentSanitizer, fields []models.AccountProfileField) []models.AccountProfileField {
+	if sanitizer == nil || len(fields) == 0 {
+		return fields
+	}
+	res := make([]models.AccountProfileField, 0, len(fields))
+	for _, field := range fields {
+		res = append(res, models.AccountProfileField{Name: field.Name, Value: sanitizer.SanitizeHTML(field.Value), VerifiedAt: field.VerifiedAt})
+	}
+	return res
+}
+
 func mergeMissingRemoteAccountFields(account *models.Account, existing models.Account) {
 	if account.PublicKey == "" {
 		account.PublicKey = existing.PublicKey
@@ -551,5 +565,8 @@ func mergeMissingRemoteAccountFields(account *models.Account, existing models.Ac
 	}
 	if account.HeaderURL == nil {
 		account.HeaderURL = existing.HeaderURL
+	}
+	if len(account.Fields) == 0 && len(existing.Fields) > 0 {
+		account.Fields = existing.Fields
 	}
 }

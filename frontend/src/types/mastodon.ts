@@ -1,3 +1,9 @@
+export type MastodonAccountField = {
+  name: string;
+  value: string;
+  verified_at?: string | null;
+};
+
 export type MastodonAccount = {
   id: string;
   username: string;
@@ -14,6 +20,7 @@ export type MastodonAccount = {
   followers_count?: number;
   following_count?: number;
   statuses_count?: number;
+  fields?: MastodonAccountField[];
 };
 
 export type DomainBlock = {
