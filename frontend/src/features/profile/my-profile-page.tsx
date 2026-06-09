@@ -16,13 +16,22 @@ import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { accountHref } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
-import type { MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
+import type { MastodonAccount, MastodonAccountField, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
 
 type ProfileTab = "posts" | "following" | "followers" | "requests" | "bookmarks";
 
 type AccountSearchResult = {
   account: MastodonAccount;
   relationship?: MastodonRelationship;
+};
+
+type ProfileForm = {
+  displayName: string;
+  note: string;
+  avatar: File | null;
+  header: File | null;
+  locked: boolean;
+  fields: MastodonAccountField[];
 };
 
 const profileTabs = [
@@ -55,7 +64,7 @@ export function MyProfilePage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isAvatarPreviewOpen, setIsAvatarPreviewOpen] = useState(false);
-  const [profileForm, setProfileForm] = useState<{ displayName: string; note: string; avatar: File | null; header: File | null; locked: boolean }>({ displayName: "", note: "", avatar: null, header: null, locked: false });
+  const [profileForm, setProfileForm] = useState<ProfileForm>({ displayName: "", note: "", avatar: null, header: null, locked: false, fields: [] });
   const [error, setError] = useState<string | null>(null);
 
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
@@ -76,7 +85,7 @@ export function MyProfilePage() {
     try {
       const nextAccount = await api.verifyCredentials();
       setAccount(nextAccount);
-      setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null, locked: Boolean(nextAccount.locked) });
+      setProfileForm(profileFormFromAccount(nextAccount));
 
       if (activeTab === "posts") {
         const [nextStatuses, nextPinnedStatuses] = await Promise.all([
@@ -304,11 +313,11 @@ export function MyProfilePage() {
     setError(null);
 
     try {
-      const nextAccount = await api.updateCredentials({ display_name: profileForm.displayName, note: profileForm.note, avatar: profileForm.avatar, header: profileForm.header, locked: profileForm.locked });
+      const nextAccount = await api.updateCredentials({ display_name: profileForm.displayName, note: profileForm.note, avatar: profileForm.avatar, header: profileForm.header, locked: profileForm.locked, fields: nonEmptyProfileFields(profileForm.fields) });
       setAccount(nextAccount);
       setStatuses((current) => replaceAccountInStatuses(current, nextAccount));
       setPinnedStatuses((current) => replaceAccountInStatuses(current, nextAccount));
-      setProfileForm({ displayName: nextAccount.display_name || "", note: nextAccount.note ? htmlToPlainText(nextAccount.note) : "", avatar: null, header: null, locked: Boolean(nextAccount.locked) });
+      setProfileForm(profileFormFromAccount(nextAccount));
       setIsEditingProfile(false);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not update profile.");
@@ -319,7 +328,7 @@ export function MyProfilePage() {
 
   function cancelProfileEdit() {
     if (!account) return;
-    setProfileForm({ displayName: account.display_name || "", note: account.note ? htmlToPlainText(account.note) : "", avatar: null, header: null, locked: Boolean(account.locked) });
+    setProfileForm(profileFormFromAccount(account));
     setIsEditingProfile(false);
   }
 
@@ -426,6 +435,56 @@ export function MyProfilePage() {
             />
             <p className="text-xs text-muted-foreground">Your updated profile is federated to followers after it is saved.</p>
           </div>
+          <div className="space-y-3 rounded-md border border-border bg-background p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">Profile fields</p>
+                <p className="text-xs text-muted-foreground">Add up to four label and value pairs, such as pronouns, website, or location.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSavingProfile || profileForm.fields.length >= 4}
+                onClick={() => setProfileForm((current) => ({ ...current, fields: [...current.fields, { name: "", value: "" }] }))}
+              >
+                Add field
+              </Button>
+            </div>
+            {profileForm.fields.length > 0 ? (
+              <div className="space-y-3">
+                {profileForm.fields.map((field, index) => (
+                  <div key={index} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]">
+                    <Input
+                      aria-label={`Profile field ${index + 1} label`}
+                      maxLength={255}
+                      placeholder="Label"
+                      value={field.name}
+                      disabled={isSavingProfile}
+                      onChange={(event) => setProfileForm((current) => ({ ...current, fields: updateProfileField(current.fields, index, { name: event.target.value }) }))}
+                    />
+                    <Input
+                      aria-label={`Profile field ${index + 1} value`}
+                      maxLength={2047}
+                      placeholder="Value"
+                      value={field.value}
+                      disabled={isSavingProfile}
+                      onChange={(event) => setProfileForm((current) => ({ ...current, fields: updateProfileField(current.fields, index, { value: event.target.value }) }))}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={isSavingProfile}
+                      onClick={() => setProfileForm((current) => ({ ...current, fields: removeProfileField(current.fields, index) }))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <label className="flex items-start gap-3 rounded-md border border-border bg-background p-3 text-sm" htmlFor="profile-locked">
             <input
               id="profile-locked"
@@ -480,6 +539,16 @@ export function MyProfilePage() {
           </div>
 
           {currentAccount.note ? <p className="mt-5 max-w-3xl text-sm leading-6 text-muted-foreground">{htmlToPlainText(currentAccount.note)}</p> : null}
+          {currentAccount.fields && currentAccount.fields.length > 0 ? (
+            <dl className="mt-5 grid gap-2 sm:grid-cols-2">
+              {currentAccount.fields.map((field, index) => (
+                <div key={`${field.name}-${index}`} className="rounded-md border border-border bg-background px-3 py-2">
+                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{field.name}</dt>
+                  <dd className="mt-1 break-words text-sm">{htmlToPlainText(field.value)}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
         </div>
       </div>
     );
@@ -692,6 +761,29 @@ function replaceAccountInStatuses(statuses: MastodonStatus[], account: MastodonA
     }
     return nextStatus;
   });
+}
+
+function profileFormFromAccount(account: MastodonAccount): ProfileForm {
+  return {
+    displayName: account.display_name || "",
+    note: account.note ? htmlToPlainText(account.note) : "",
+    avatar: null,
+    header: null,
+    locked: Boolean(account.locked),
+    fields: (account.fields ?? []).slice(0, 4).map((field) => ({ name: field.name ?? "", value: field.value ? htmlToPlainText(field.value) : "" })),
+  };
+}
+
+function updateProfileField(fields: MastodonAccountField[], index: number, patch: Partial<MastodonAccountField>): MastodonAccountField[] {
+  return fields.map((field, currentIndex) => currentIndex === index ? { ...field, ...patch } : field);
+}
+
+function removeProfileField(fields: MastodonAccountField[], index: number): MastodonAccountField[] {
+  return fields.filter((_, currentIndex) => currentIndex !== index);
+}
+
+function nonEmptyProfileFields(fields: MastodonAccountField[]): MastodonAccountField[] {
+  return fields.map((field) => ({ name: field.name.trim(), value: field.value.trim() })).filter((field) => field.name || field.value);
 }
 
 function ProfileSkeleton() {

@@ -298,6 +298,9 @@ export function AccountPage({ route }: AccountPageProps) {
             <FieldRow label="Handle" value={`@${account.acct}`} />
             <FieldRow label="Profile" value={account.url ? <a className="text-primary hover:underline" href={account.url} target="_blank" rel="noreferrer">{account.url}</a> : "No URL"} />
             <FieldRow label="Bio" value={account.note ? htmlToPlainText(account.note) : "No bio"} />
+            {account.fields?.map((field, index) => (
+              <FieldRow key={`${field.name}-${index}`} label={field.name || "Field"} value={field.value ? htmlToPlainText(field.value) : ""} />
+            ))}
           </dl>
         </Panel>
       ) : null}
