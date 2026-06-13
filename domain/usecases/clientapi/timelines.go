@@ -259,7 +259,7 @@ func (u Timelines) accountForActor(ctx context.Context, localAccount *models.Acc
 	}
 	remote, err := u.deps.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, actor)
 	if err == nil {
-		return u.refreshRemoteAccountIfStale(ctx, localAccount, remote), nil
+		return u.ensureRemoteProfileImages(ctx, localAccount, u.refreshRemoteAccountIfStale(ctx, localAccount, remote)), nil
 	}
 	return fallbackRemoteAccount(actor), nil
 }
@@ -276,6 +276,7 @@ func (u Timelines) refreshRemoteAccountIfStale(ctx context.Context, signer *mode
 	if err != nil || fresh == nil {
 		return cached
 	}
+	cacheRemoteAccountProfileImages(ctx, nil, u.deps.MediaRepo, u.deps.MediaStorage, u.deps.RemoteMediaFetcher, signer.ID, fresh)
 	updated, err := u.deps.RemoteAccountsRepo.UpsertRemoteAccount(ctx, nil, *fresh)
 	if err != nil {
 		return cached
@@ -333,9 +334,25 @@ func (u Timelines) noteAuthor(ctx context.Context, localAccount *models.Account,
 	}
 	remote, err := u.deps.RemoteAccountsRepo.GetRemoteAccountByURI(ctx, nil, note.AttributedTo)
 	if err == nil {
-		return remote, nil
+		return u.ensureRemoteProfileImages(ctx, localAccount, remote), nil
 	}
 	return fallbackRemoteAccount(note.AttributedTo), nil
+}
+
+func (u Timelines) ensureRemoteProfileImages(ctx context.Context, localAccount *models.Account, remote *models.Account) *models.Account {
+	if localAccount == nil || remote == nil || remoteProfileImagesCached(remote) {
+		return remote
+	}
+	updated := *remote
+	cacheRemoteAccountProfileImages(ctx, nil, u.deps.MediaRepo, u.deps.MediaStorage, u.deps.RemoteMediaFetcher, localAccount.ID, &updated)
+	if updated.AvatarMediaID == remote.AvatarMediaID && updated.HeaderMediaID == remote.HeaderMediaID {
+		return remote
+	}
+	saved, err := u.deps.RemoteAccountsRepo.UpsertRemoteAccount(ctx, nil, updated)
+	if err != nil {
+		return remote
+	}
+	return saved
 }
 
 func fallbackRemoteAccount(actor string) *models.Account {

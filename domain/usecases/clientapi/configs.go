@@ -73,6 +73,8 @@ type TimelinesConfig struct {
 	AccountsRepo       repos.AccountsRepo
 	FollowsRepo        repos.FollowsRepository
 	MediaRepo          repos.MediaRepository
+	MediaStorage       ports.MediaStorage
+	RemoteMediaFetcher ports.RemoteMediaFetcher
 	SocialRepo         repos.SocialRepository
 	BoostsRepo         repos.BoostsRepository
 	MentionsRepo       repos.MentionsRepository

@@ -191,14 +191,14 @@ func (u HydrateRemoteObjectUseCase) hydrateRawObject(ctx context.Context, accoun
 	author := u.fetchRemoteAuthor(ctx, account, note.AttributedTo)
 	persist := func(ctx context.Context, tx *db.Tx) error {
 		if existing, err := u.notes.GetNoteByURI(ctx, tx, note.URI); err == nil {
-			if err := u.ensureFetchedNoteAuthor(ctx, tx, author); err != nil {
+			if err := u.ensureFetchedNoteAuthor(ctx, tx, account, author); err != nil {
 				return err
 			}
 			return u.ensureFetchedNoteMedia(ctx, tx, account, existing.ID, note.Media, downloadRemoteMedia)
 		} else if err != sql.ErrNoRows {
 			return err
 		}
-		if err := u.ensureFetchedNoteAuthor(ctx, tx, author); err != nil {
+		if err := u.ensureFetchedNoteAuthor(ctx, tx, account, author); err != nil {
 			return err
 		}
 		activity, err := u.activities.CreateActivity(ctx, tx, repos.CreateActivityInput{LocalAccountID: account.ID, Direction: models.ActivityDirectionInbox, Type: "Create", Actor: note.AttributedTo, Object: note.URI, RawJSON: string(raw)})
@@ -242,8 +242,13 @@ func (u HydrateRemoteObjectUseCase) fetchRemoteAuthor(ctx context.Context, signe
 	if u.remotes == nil || actorURI == "" {
 		return nil
 	}
-	if existing, err := u.remotes.GetRemoteAccountByURI(ctx, nil, actorURI); err == nil && existing.AvatarURL != nil && *existing.AvatarURL != "" {
-		return nil
+	if existing, err := u.remotes.GetRemoteAccountByURI(ctx, nil, actorURI); err == nil {
+		if remoteProfileImagesCached(existing) {
+			return nil
+		}
+		if hasRemoteProfileImageURLs(existing) {
+			return existing
+		}
 	}
 	raw, err := u.fetcher.FetchObject(ctx, actorURI, &signer)
 	if err != nil {
@@ -257,15 +262,70 @@ func (u HydrateRemoteObjectUseCase) fetchRemoteAuthor(ctx context.Context, signe
 	return &author
 }
 
-func (u HydrateRemoteObjectUseCase) ensureFetchedNoteAuthor(ctx context.Context, tx *db.Tx, author *models.Account) error {
+func (u HydrateRemoteObjectUseCase) ensureFetchedNoteAuthor(ctx context.Context, tx *db.Tx, account models.Account, author *models.Account) error {
 	if u.remotes == nil || author == nil {
 		return nil
 	}
-	if existing, err := u.remotes.GetRemoteAccountByURI(ctx, tx, author.URI); err == nil && existing.AvatarURL != nil && *existing.AvatarURL != "" {
+	if existing, err := u.remotes.GetRemoteAccountByURI(ctx, tx, author.URI); err == nil && remoteProfileImagesCached(existing) {
 		return nil
 	}
+	u.cacheFetchedAuthorProfileImages(ctx, tx, account.ID, author)
 	_, err := u.remotes.UpsertRemoteAccount(ctx, tx, *author)
 	return err
+}
+
+func hasRemoteProfileImageURLs(account *models.Account) bool {
+	return account != nil && ((account.AvatarURL != nil && *account.AvatarURL != "") || (account.HeaderURL != nil && *account.HeaderURL != ""))
+}
+
+func remoteProfileImagesCached(account *models.Account) bool {
+	if account == nil {
+		return true
+	}
+	avatarCached := account.AvatarURL == nil || *account.AvatarURL == "" || account.AvatarMediaID != nil
+	headerCached := account.HeaderURL == nil || *account.HeaderURL == "" || account.HeaderMediaID != nil
+	return avatarCached && headerCached
+}
+
+func (u HydrateRemoteObjectUseCase) cacheFetchedAuthorProfileImages(ctx context.Context, tx *db.Tx, localAccountID string, author *models.Account) {
+	if author == nil || localAccountID == "" || u.media == nil || u.mediaStorage == nil || u.remoteMediaFetcher == nil {
+		return
+	}
+	if author.AvatarMediaID == nil {
+		author.AvatarMediaID = u.cacheFetchedAuthorProfileImage(ctx, tx, localAccountID, author.AvatarURL)
+	}
+	if author.HeaderMediaID == nil {
+		author.HeaderMediaID = u.cacheFetchedAuthorProfileImage(ctx, tx, localAccountID, author.HeaderURL)
+	}
+}
+
+func (u HydrateRemoteObjectUseCase) cacheFetchedAuthorProfileImage(ctx context.Context, tx *db.Tx, localAccountID string, rawURL *string) *string {
+	if rawURL == nil || *rawURL == "" {
+		return nil
+	}
+	if media, err := u.media.GetMediaAttachmentByRemoteURL(ctx, tx, *rawURL); err == nil {
+		_ = u.media.MarkMediaAccessed(ctx, tx, media.ID, time.Now().UTC())
+		return &media.ID
+	}
+	fetched, err := u.remoteMediaFetcher.FetchMedia(ctx, *rawURL, 10<<20)
+	if err != nil || !strings.HasPrefix(fetched.ContentType, "image/") {
+		return nil
+	}
+	fileName := fetched.FileName
+	if strings.TrimSpace(fileName) == "" || fileName == "." || fileName == "/" {
+		fileName = remoteMediaFileName(*rawURL)
+	}
+	now := time.Now().UTC()
+	storagePath, err := u.mediaStorage.SaveMedia(ctx, remoteMediaCacheKey(*rawURL), fileName, fetched.Data)
+	if err != nil {
+		return nil
+	}
+	media, err := u.media.CreateMediaAttachment(ctx, tx, repos.CreateMediaAttachmentInput{LocalAccountID: localAccountID, FileName: fileName, ContentType: fetched.ContentType, StoragePath: storagePath, RemoteURL: rawURL, RemoteFetchedAt: &now, RemoteLastAccessedAt: &now, FileSize: int64(len(fetched.Data))})
+	if err != nil {
+		_ = u.mediaStorage.DeleteMedia(ctx, storagePath)
+		return nil
+	}
+	return &media.ID
 }
 
 func extractRemoteActor(raw []byte) (models.Account, bool) {

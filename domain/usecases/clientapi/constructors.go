@@ -72,8 +72,8 @@ func validateStatusesConfig(cfg StatusesConfig) {
 
 func validateTimelinesConfig(cfg TimelinesConfig) {
 	validateCommon(cfg.CommonConfig, "timelines")
-	if cfg.NotesRepo == nil || cfg.AccountsRepo == nil || cfg.FollowsRepo == nil || cfg.MediaRepo == nil || cfg.SocialRepo == nil || cfg.BoostsRepo == nil || cfg.MentionsRepo == nil || cfg.PollsRepo == nil || cfg.RemoteAccountsRepo == nil || cfg.DomainBlocksRepo == nil || cfg.RemoteResolver == nil {
-		panic("client API timelines workflow missing repository dependency")
+	if cfg.NotesRepo == nil || cfg.AccountsRepo == nil || cfg.FollowsRepo == nil || cfg.MediaRepo == nil || cfg.MediaStorage == nil || cfg.RemoteMediaFetcher == nil || cfg.SocialRepo == nil || cfg.BoostsRepo == nil || cfg.MentionsRepo == nil || cfg.PollsRepo == nil || cfg.RemoteAccountsRepo == nil || cfg.DomainBlocksRepo == nil || cfg.RemoteResolver == nil {
+		panic("client API timelines workflow missing repository or media dependency")
 	}
 }
 

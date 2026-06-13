@@ -221,6 +221,8 @@ func buildTimelinesWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.Time
 		AccountsRepo:       in.AccountsRepo,
 		FollowsRepo:        in.FollowsRepo,
 		MediaRepo:          in.MediaRepo,
+		MediaStorage:       in.MediaStorage,
+		RemoteMediaFetcher: ctx.remoteMediaFetcher,
 		SocialRepo:         in.SocialRepo,
 		BoostsRepo:         in.BoostsRepo,
 		MentionsRepo:       in.MentionsRepo,
