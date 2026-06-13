@@ -43,10 +43,51 @@ func (u HydrateRemoteObjectUseCase) cacheRemoteOutboxItem(ctx context.Context, a
 		}
 		raw = fetched
 	}
+	if createObject, ok := extractOutboxCreateObject(raw); ok {
+		if expectedActor != "" && createObject.Actor != "" && createObject.Actor != expectedActor {
+			return nil
+		}
+		if len(createObject.ObjectRaw) > 0 {
+			raw = createObject.ObjectRaw
+		} else if createObject.Object != "" {
+			fetched, err := u.fetcher.FetchObject(ctx, createObject.Object, &account)
+			if err != nil {
+				return err
+			}
+			raw = fetched
+		}
+	}
 	if announce, ok := extractOutboxAnnounce(raw); ok {
 		return u.hydrateRemoteAnnounce(ctx, account, expectedActor, announce)
 	}
 	return u.hydrateRawObject(ctx, account, raw, expectedActor, false)
+}
+
+type outboxCreateObject struct {
+	Actor     string
+	Object    string
+	ObjectRaw json.RawMessage
+}
+
+func extractOutboxCreateObject(raw []byte) (outboxCreateObject, bool) {
+	var doc struct {
+		Type   string          `json:"type"`
+		Actor  json.RawMessage `json:"actor"`
+		Object json.RawMessage `json:"object"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil || doc.Type != "Create" || len(doc.Object) == 0 {
+		return outboxCreateObject{}, false
+	}
+	actor, _, _ := ExtractIDAndInbox(doc.Actor)
+	object, _, err := ExtractIDAndInbox(doc.Object)
+	if err == nil && object != "" {
+		return outboxCreateObject{Actor: actor, Object: object}, true
+	}
+	var embedded map[string]any
+	if err := json.Unmarshal(doc.Object, &embedded); err != nil {
+		return outboxCreateObject{}, false
+	}
+	return outboxCreateObject{Actor: actor, ObjectRaw: doc.Object}, true
 }
 
 type outboxAnnounce struct {
@@ -136,10 +177,16 @@ func outboxItems(raw []byte) ([]json.RawMessage, string) {
 		items = doc.Items
 	}
 	next := collectionRef(doc.Next)
-	if len(items) == 0 && next == "" {
-		next = collectionRef(doc.First)
+	if len(items) > 0 || next != "" {
+		return items, next
 	}
-	return items, next
+	if first := collectionRef(doc.First); first != "" {
+		return nil, first
+	}
+	if len(doc.First) > 0 {
+		return outboxItems(doc.First)
+	}
+	return nil, ""
 }
 
 func collectionRef(raw json.RawMessage) string {
