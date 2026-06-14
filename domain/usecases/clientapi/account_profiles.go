@@ -51,6 +51,9 @@ func (u Accounts) AccountStatuses(ctx context.Context, localAccount *models.Acco
 	if limit <= 0 || limit > 40 {
 		limit = 20
 	}
+	if account.ID != localAccount.ID && maxID == "" {
+		u.cacheRemoteOutboxFirstPageAsync(localAccount, *account)
+	}
 	notes, err := u.accountStatusNotes(ctx, localAccount, account, limit, maxID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)

@@ -13,6 +13,23 @@ const remoteOutboxCacheTimeout = 20 * time.Second
 
 var remoteOutboxCacheJobs sync.Map
 
+func (u Accounts) cacheRemoteOutboxFirstPageAsync(localAccount *models.Account, remote models.Account) {
+	if localAccount == nil || remote.OutboxURI == nil || *remote.OutboxURI == "" {
+		return
+	}
+	key := localAccount.ID + "\x00" + remote.URI + "\x00:first-page"
+	if _, loaded := remoteOutboxCacheJobs.LoadOrStore(key, struct{}{}); loaded {
+		return
+	}
+	local := *localAccount
+	go func() {
+		defer remoteOutboxCacheJobs.Delete(key)
+		ctx, cancel := context.WithTimeout(context.Background(), remoteOutboxCacheTimeout)
+		defer cancel()
+		_, _ = u.deps.HydrateRemoteObjectUC.CacheRemoteOutboxPage(ctx, local, *remote.OutboxURI, remote.URI, nil)
+	}()
+}
+
 func (u Accounts) cacheRemoteOutboxUntilAsync(localAccount *models.Account, remote models.Account, limit int, maxID string) {
 	if localAccount == nil || remote.OutboxURI == nil || *remote.OutboxURI == "" {
 		return
