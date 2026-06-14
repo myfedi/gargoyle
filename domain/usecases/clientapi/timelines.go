@@ -35,7 +35,7 @@ func (u Timelines) HomeTimeline(ctx context.Context, account *models.Account, op
 	if derr != nil {
 		return nil, derr
 	}
-	boosts, err := u.deps.BoostsRepo.ListTimelineBoosts(ctx, nil, account.ID, opts.Limit, opts.MaxID)
+	boosts, err := u.deps.BoostsRepo.ListTimelineBoostsByActors(ctx, nil, account.ID, actors, opts.Limit, opts.MaxID)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
@@ -43,11 +43,6 @@ func (u Timelines) HomeTimeline(ctx context.Context, account *models.Account, op
 	if derr != nil {
 		return nil, derr
 	}
-	actorSet := make(map[string]bool, len(actors))
-	for _, actor := range actors {
-		actorSet[actor] = true
-	}
-	boostItems = filterTimelineItemsByActor(boostItems, actorSet)
 	return mergeTimelineItems(items, boostItems, opts.Limit), nil
 }
 
@@ -282,16 +277,6 @@ func (u Timelines) refreshRemoteAccountIfStale(ctx context.Context, signer *mode
 		return cached
 	}
 	return updated
-}
-
-func filterTimelineItemsByActor(items []TimelineItem, actors map[string]bool) []TimelineItem {
-	filtered := make([]TimelineItem, 0, len(items))
-	for _, item := range items {
-		if actors[item.Account.URI] {
-			filtered = append(filtered, item)
-		}
-	}
-	return filtered
 }
 
 func mergeTimelineItems(a, b []TimelineItem, limit int) []TimelineItem {

@@ -56,12 +56,15 @@ func (r *BoostsRepo) DeleteBoost(ctx context.Context, tx *dbPorts.Tx, localAccou
 	return err
 }
 func (r *BoostsRepo) ListTimelineBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID string, limit int, maxID string) ([]models.Boost, error) {
-	return r.listBoosts(ctx, tx, localAccountID, "", limit, maxID)
+	return r.listBoosts(ctx, tx, localAccountID, nil, limit, maxID)
+}
+func (r *BoostsRepo) ListTimelineBoostsByActors(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actors []string, limit int, maxID string) ([]models.Boost, error) {
+	return r.listBoosts(ctx, tx, localAccountID, actors, limit, maxID)
 }
 func (r *BoostsRepo) ListActorBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID, actor string, limit int, maxID string) ([]models.Boost, error) {
-	return r.listBoosts(ctx, tx, localAccountID, actor, limit, maxID)
+	return r.listBoosts(ctx, tx, localAccountID, []string{actor}, limit, maxID)
 }
-func (r *BoostsRepo) listBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID, actor string, limit int, maxID string) ([]models.Boost, error) {
+func (r *BoostsRepo) listBoosts(ctx context.Context, tx *dbPorts.Tx, localAccountID string, actors []string, limit int, maxID string) ([]models.Boost, error) {
 	db, err := r.resolveDB(tx)
 	if err != nil {
 		return nil, err
@@ -71,8 +74,8 @@ func (r *BoostsRepo) listBoosts(ctx context.Context, tx *dbPorts.Tx, localAccoun
 	}
 	var rows []dbModels.Boost
 	q := db.NewSelect().Model(&rows).Where("local_account_id = ?", localAccountID).Order("published_at DESC", "id DESC").Limit(limit) // NOSONAR
-	if actor != "" {
-		q = q.Where("actor = ?", actor) // NOSONAR
+	if len(actors) > 0 {
+		q = q.Where("actor IN (?)", bun.In(actors)) // NOSONAR
 	}
 	if maxID != "" {
 		var cursor dbModels.Boost

@@ -513,6 +513,9 @@ func (f *fakeBoostsRepo) DeleteBoost(ctx context.Context, tx *db.Tx, localAccoun
 func (fakeBoostsRepo) ListTimelineBoosts(ctx context.Context, tx *db.Tx, localAccountID string, limit int, maxID string) ([]models.Boost, error) {
 	return nil, nil
 }
+func (fakeBoostsRepo) ListTimelineBoostsByActors(ctx context.Context, tx *db.Tx, localAccountID string, actors []string, limit int, maxID string) ([]models.Boost, error) {
+	return nil, nil
+}
 func (fakeBoostsRepo) ListActorBoosts(ctx context.Context, tx *db.Tx, localAccountID, actor string, limit int, maxID string) ([]models.Boost, error) {
 	return nil, nil
 }
