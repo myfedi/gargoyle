@@ -26,10 +26,20 @@ type HandleInboxActivityInput struct {
 // HandleInboxActivityResult contains committed inbound processing state and an
 // optional Accept activity that infrastructure may deliver after commit.
 type HandleInboxActivityResult struct {
-	Account     models.Account
-	Activity    ParsedActivity
-	AcceptJSON  []byte
-	AcceptInbox string
+	Account      models.Account
+	Activity     ParsedActivity
+	AcceptJSON   []byte
+	AcceptInbox  string
+	ClientUpdate *ClientUpdate
+}
+
+// ClientUpdate is an account-scoped invalidation signal for connected clients.
+// The domain does not know which browser/mobile clients are connected; adapters
+// broadcast it to sessions for LocalAccountID and clients decide what to refresh.
+type ClientUpdate struct {
+	LocalAccountID       string
+	RelationshipActorURI string
+	NotificationsChanged bool
 }
 
 // ResolveSharedInboxRecipients determines which local actors should process a
@@ -271,7 +281,21 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 		}
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
-	return &HandleInboxActivityResult{Account: *account, Activity: activity, AcceptJSON: acceptJSON, AcceptInbox: acceptInbox}, nil
+	return &HandleInboxActivityResult{Account: *account, Activity: activity, AcceptJSON: acceptJSON, AcceptInbox: acceptInbox, ClientUpdate: clientUpdateForInboxActivity(account.ID, activity)}, nil
+}
+
+func clientUpdateForInboxActivity(localAccountID string, activity ParsedActivity) *ClientUpdate {
+	if localAccountID == "" {
+		return nil
+	}
+	switch activity.Type {
+	case "Accept", "Reject":
+		return &ClientUpdate{LocalAccountID: localAccountID, RelationshipActorURI: activity.Actor}
+	case "Follow", "Create", "Like", "Announce", "Undo":
+		return &ClientUpdate{LocalAccountID: localAccountID, RelationshipActorURI: activity.Actor, NotificationsChanged: true}
+	default:
+		return nil
+	}
 }
 
 func (u *HandleInboxActivityUseCase) handleMoveActivity(ctx context.Context, tx *db.Tx, account models.Account, activity ParsedActivity, raw []byte) error {

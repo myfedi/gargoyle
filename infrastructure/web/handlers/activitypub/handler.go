@@ -49,6 +49,7 @@ type HandlerConfig struct {
 	AllowUnsignedInbox  bool
 	DeliveryRetries     int
 	Host                string
+	RealtimePublisher   func(localAccountID, remoteActor string, notifications bool)
 }
 
 type Handler struct {
@@ -187,6 +188,10 @@ func NewHandler(cfg HandlerConfig) *Handler {
 		handleInboxActivityUC: apUsecases.NewHandleInboxActivityUseCase(flowCfg),
 	}
 	return h
+}
+
+func (h *Handler) SetRealtimePublisher(publisher func(localAccountID, remoteActor string, notifications bool)) {
+	h.cfg.RealtimePublisher = publisher
 }
 
 // SetupHostMeta initializes the hostmeta route for the Fiber application.
@@ -406,6 +411,7 @@ func (h *Handler) handleSharedInboxActivity(c *fiber.Ctx) error {
 			}
 			return web.HandleDomainError(c, derr)
 		}
+		h.publishRealtime(res)
 		if len(res.AcceptJSON) > 0 && res.AcceptInbox != "" {
 			if err := h.queueDelivery(res.AcceptJSON, res.AcceptInbox, res.Account); err != nil {
 				return web.HandleDomainError(c, err)
@@ -432,12 +438,20 @@ func (h *Handler) handleInboxActivity(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
+	h.publishRealtime(res)
 	if len(res.AcceptJSON) > 0 && res.AcceptInbox != "" {
 		if err := h.queueDelivery(res.AcceptJSON, res.AcceptInbox, res.Account); err != nil {
 			return web.HandleDomainError(c, err)
 		}
 	}
 	return c.SendStatus(fiber.StatusAccepted)
+}
+
+func (h *Handler) publishRealtime(res *apUsecases.HandleInboxActivityResult) {
+	if h.cfg.RealtimePublisher == nil || res == nil || res.ClientUpdate == nil {
+		return
+	}
+	h.cfg.RealtimePublisher(res.ClientUpdate.LocalAccountID, res.ClientUpdate.RelationshipActorURI, res.ClientUpdate.NotificationsChanged)
 }
 
 func collectionType(c *fiber.Ctx) string {

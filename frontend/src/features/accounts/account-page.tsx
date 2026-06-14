@@ -41,6 +41,21 @@ export function AccountPage({ route }: AccountPageProps) {
   const api = useMemo(() => (session?.accessToken ? createMastodonApi(session.accessToken) : null), [session?.accessToken]);
   const oldestStatusId = statuses.at(-1)?.id;
 
+  useEffect(() => {
+    if (!account?.id || account.id === currentAccount?.id) {
+      return;
+    }
+    globalThis.dispatchEvent(new CustomEvent("gargoyle:watch-relationship", { detail: account.id }));
+    const handleRelationship = (event: Event) => {
+      const next = (event as CustomEvent<MastodonRelationship>).detail;
+      if (next?.id === account.id) {
+        setRelationship(next);
+      }
+    };
+    globalThis.addEventListener("gargoyle:relationship", handleRelationship);
+    return () => globalThis.removeEventListener("gargoyle:relationship", handleRelationship);
+  }, [account?.id, currentAccount?.id]);
+
   const loadAccount = useCallback(async () => {
     if (!api || !accountId) {
       return;

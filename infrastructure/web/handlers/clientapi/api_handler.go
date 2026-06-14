@@ -31,6 +31,7 @@ type APIHandler struct {
 	pushRepo              repos.PushSubscriptionRepository
 	vapidPublicKey        string
 	queueDelivery         DeliveryQueue
+	realtimeHub           *RealtimeHub
 }
 
 type APIHandlerConfig struct {
@@ -48,13 +49,18 @@ type APIHandlerConfig struct {
 	PushRepo       repos.PushSubscriptionRepository
 	VAPIDPublicKey string
 	QueueDelivery  DeliveryQueue
+	RealtimeHub    *RealtimeHub
 }
 
 func NewAPIHandler(cfg APIHandlerConfig) APIHandler {
 	if cfg.QueueDelivery == nil {
 		panic("client API handler requires QueueDelivery")
 	}
-	return APIHandler{oauth: cfg.OAuth, instanceWorkflow: cfg.Instance, accountsWorkflow: cfg.Accounts, statusesWorkflow: cfg.Statuses, timelinesWorkflow: cfg.Timelines, interactionsWorkflow: cfg.Interactions, notificationsWorkflow: cfg.Notifications, conversationsWorkflow: cfg.Conversations, mediaWorkflow: cfg.Media, profileWorkflow: cfg.Profile, moderationWorkflow: cfg.Moderation, pushRepo: cfg.PushRepo, vapidPublicKey: cfg.VAPIDPublicKey, queueDelivery: cfg.QueueDelivery}
+	realtimeHub := cfg.RealtimeHub
+	if realtimeHub == nil {
+		realtimeHub = NewRealtimeHub(cfg.Accounts, cfg.Notifications)
+	}
+	return APIHandler{oauth: cfg.OAuth, instanceWorkflow: cfg.Instance, accountsWorkflow: cfg.Accounts, statusesWorkflow: cfg.Statuses, timelinesWorkflow: cfg.Timelines, interactionsWorkflow: cfg.Interactions, notificationsWorkflow: cfg.Notifications, conversationsWorkflow: cfg.Conversations, mediaWorkflow: cfg.Media, profileWorkflow: cfg.Profile, moderationWorkflow: cfg.Moderation, pushRepo: cfg.PushRepo, vapidPublicKey: cfg.VAPIDPublicKey, queueDelivery: cfg.QueueDelivery, realtimeHub: realtimeHub}
 }
 
 func (h APIHandler) Setup(app *fiber.App) {

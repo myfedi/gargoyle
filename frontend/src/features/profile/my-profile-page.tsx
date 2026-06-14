@@ -287,6 +287,7 @@ export function MyProfilePage() {
 
     try {
       await api.followAccount(accountToFollow.id);
+      globalThis.dispatchEvent(new CustomEvent("gargoyle:watch-relationship", { detail: accountToFollow.id }));
       const [relationship] = await api.relationships([accountToFollow.id]);
       if (relationship) updateRelationship(accountToFollow.id, relationship);
     } catch (caughtError) {
@@ -359,6 +360,17 @@ export function MyProfilePage() {
       setBusyAccountId(null);
     }
   }
+
+  useEffect(() => {
+    const handleRelationship = (event: Event) => {
+      const relationship = (event as CustomEvent<MastodonRelationship>).detail;
+      if (relationship?.id) {
+        updateRelationship(relationship.id, relationship);
+      }
+    };
+    globalThis.addEventListener("gargoyle:relationship", handleRelationship);
+    return () => globalThis.removeEventListener("gargoyle:relationship", handleRelationship);
+  }, []);
 
   function updateRelationship(accountId: string, relationship: MastodonRelationship) {
     const update = (current: AccountSearchResult[]) => current.map((item) => item.account.id === accountId ? { ...item, relationship } : item);

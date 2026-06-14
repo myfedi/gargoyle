@@ -1,48 +1,95 @@
 import { getApiBaseUrl, trimTrailingSlash } from "@/lib/config";
-import type { MastodonNotification } from "@/types/mastodon";
+import type { MastodonNotification, MastodonRelationship } from "@/types/mastodon";
 
 export type NotificationStreamHandlers = {
   onNotification: (notification: MastodonNotification) => void;
+  onRelationship?: (relationship: MastodonRelationship) => void;
   onError?: (error: Error) => void;
 };
 
 export function startNotificationStream(accessToken: string, handlers: NotificationStreamHandlers) {
-  const controller = new AbortController();
+  let currentController: AbortController | undefined;
   let retryTimeout: number | undefined;
+  let reconnectTimeout: number | undefined;
   let stopped = false;
+  const watchedRelationships = new Set<string>();
+
+  function streamURL() {
+    const url = new URL(`${trimTrailingSlash(getApiBaseUrl())}/api/v1/streaming/user/notification`);
+    if (watchedRelationships.size > 0) {
+      url.searchParams.set("watch_relationships", [...watchedRelationships].join(","));
+    }
+    return url.toString();
+  }
+
+  function reconnectSoon() {
+    if (stopped) {
+      return;
+    }
+    currentController?.abort();
+  }
+
+  function watchRelationship(event: Event) {
+    const id = (event as CustomEvent<string>).detail;
+    if (!id || watchedRelationships.has(id)) {
+      return;
+    }
+    watchedRelationships.add(id);
+    reconnectTimeout = globalThis.setTimeout(reconnectSoon, 0);
+  }
 
   async function connect() {
+    const requestController = new AbortController();
+    currentController = requestController;
     try {
-      const response = await fetch(`${trimTrailingSlash(getApiBaseUrl())}/api/v1/streaming/user/notification`, {
+      const response = await fetch(streamURL(), {
         headers: { Accept: "text/event-stream", Authorization: `Bearer ${accessToken}` },
         credentials: "same-origin",
-        signal: controller.signal,
+        signal: requestController.signal,
       });
       if (!response.ok || !response.body) {
         throw new Error(`Notification stream failed with status ${response.status}`);
       }
       await readServerSentEvents(response.body, (event, data) => {
-        if (event !== "notification" || !data) {
+        if (!data) {
           return;
         }
-        handlers.onNotification(JSON.parse(data) as MastodonNotification);
+        if (event === "notification") {
+          handlers.onNotification(JSON.parse(data) as MastodonNotification);
+        }
+        if (event === "relationship_update") {
+          handlers.onRelationship?.(JSON.parse(data) as MastodonRelationship);
+        }
       });
     } catch (error) {
-      if (stopped || controller.signal.aborted) {
+      if (stopped) {
         return;
       }
-      handlers.onError?.(error instanceof Error ? error : new Error("Notification stream disconnected."));
-      retryTimeout = globalThis.setTimeout(connect, 3000);
+      if (!requestController.signal.aborted) {
+        handlers.onError?.(error instanceof Error ? error : new Error("Notification stream disconnected."));
+      }
+    } finally {
+      if (currentController === requestController) {
+        currentController = undefined;
+      }
+      if (!stopped) {
+        retryTimeout = globalThis.setTimeout(connect, requestController.signal.aborted ? 0 : 3000);
+      }
     }
   }
 
+  globalThis.addEventListener("gargoyle:watch-relationship", watchRelationship);
   void connect();
 
   return () => {
     stopped = true;
-    controller.abort();
+    currentController?.abort();
+    globalThis.removeEventListener("gargoyle:watch-relationship", watchRelationship);
     if (retryTimeout) {
       globalThis.clearTimeout(retryTimeout);
+    }
+    if (reconnectTimeout) {
+      globalThis.clearTimeout(reconnectTimeout);
     }
   };
 }

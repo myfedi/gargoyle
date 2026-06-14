@@ -2,8 +2,8 @@ package clientapi
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -29,12 +29,13 @@ func (h APIHandler) notificationStream(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	seen := map[string]bool{}
-	for _, item := range initial {
-		seen[item.Notification.ID] = true
+	initialResponses := notificationItemsToResponses(initial)
+	client := h.realtimeHub.Add(principal)
+	defer h.realtimeHub.Remove(client)
+	h.realtimeHub.MarkNotificationsSeen(client, initialResponses)
+	for _, id := range strings.Split(c.Query("watch_relationships"), ",") {
+		h.realtimeHub.WatchRelationship(client, strings.TrimSpace(id))
 	}
-
-	streamCtx := context.Background()
 
 	c.Set(fiber.HeaderContentType, "text/event-stream")
 	c.Set(fiber.HeaderCacheControl, "no-cache, no-transform")
@@ -46,8 +47,6 @@ func (h APIHandler) notificationStream(c *fiber.Ctx) error {
 
 		_, _ = w.WriteString(": connected\n\n")
 		_ = w.Flush()
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
 		heartbeat := time.NewTicker(25 * time.Second)
 		defer heartbeat.Stop()
 		for {
@@ -57,29 +56,19 @@ func (h APIHandler) notificationStream(c *fiber.Ctx) error {
 				if err := w.Flush(); err != nil {
 					return
 				}
-			case <-ticker.C:
-				items, derr := h.notificationsWorkflow.Notifications(streamCtx, principal.Account, 20)
-				if derr != nil {
+			case event := <-client.send:
+				payload, err := json.Marshal(event.Data)
+				if err != nil {
 					continue
 				}
-				responses := notificationItemsToResponses(items)
-				for i := len(responses) - 1; i >= 0; i-- {
-					item := responses[i]
-					if seen[item.ID] {
-						continue
-					}
-					seen[item.ID] = true
-					payload, err := json.Marshal(item)
-					if err != nil {
-						continue
-					}
-					_, _ = w.WriteString("event: notification\n")
-					_, _ = w.WriteString("data: ")
-					_, _ = w.Write(payload)
-					_, _ = w.WriteString("\n\n")
-					if err := w.Flush(); err != nil {
-						return
-					}
+				_, _ = w.WriteString("event: ")
+				_, _ = w.WriteString(event.Event)
+				_, _ = w.WriteString("\n")
+				_, _ = w.WriteString("data: ")
+				_, _ = w.Write(payload)
+				_, _ = w.WriteString("\n\n")
+				if err := w.Flush(); err != nil {
+					return
 				}
 			}
 		}

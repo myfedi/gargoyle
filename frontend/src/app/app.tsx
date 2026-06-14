@@ -110,6 +110,9 @@ function AuthenticatedApp() {
         globalThis.dispatchEvent(new CustomEvent("gargoyle:notification", { detail: notification }));
         setLiveNotificationCount((current) => current + 1);
       },
+      onRelationship(relationship) {
+        globalThis.dispatchEvent(new CustomEvent("gargoyle:relationship", { detail: relationship }));
+      },
       onError(error) {
         console.warn("Notification stream disconnected", error);
       },
