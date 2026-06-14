@@ -134,7 +134,7 @@ func newClientAPIWorkflowContext(in clientAPIWorkflowInputs) clientAPIWorkflowCo
 	remoteObjectFetcher := clientapiHandlers.NewRemoteObjectFetcher(nil, in.URLExceptions)
 	remoteMediaFetcher := clientapiHandlers.NewRemoteMediaFetcher(nil, in.URLExceptions)
 	threadResolver := activitypubAdapters.NewLemmyThreadResolver(remoteObjectFetcher)
-	outboxResolver := activitypubAdapters.NewPixelfedOutboxResolver(nil)
+	outboxResolver := activitypubAdapters.NewPixelfedOutboxResolver(remoteObjectFetcher)
 	return clientAPIWorkflowContext{
 		in:                  in,
 		common:              clientapiUsecases.CommonConfig{Host: in.Host, Domain: in.Domain, ServerVersion: in.ServerVersion},

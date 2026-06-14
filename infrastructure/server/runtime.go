@@ -299,7 +299,7 @@ func MountClientAPI(app *fiber.App, deps ClientAPIDeps) {
 func StartCoreWorkers(ctx context.Context, deps WorkerDeps) {
 	jobs.NewDeliveryWorker(jobs.DeliveryWorkerConfig{JobsRepo: deps.JobsRepo, Accounts: deps.AccountsRepo, Deliverer: deps.ActivityPubHandler.ActivityDeliverer(), Blocks: deps.ModerationRepo}).Start(ctx)
 	threadResolver := apAdapters.NewLemmyThreadResolver(deps.RemoteObjectFetcher)
-	outboxResolver := apAdapters.NewPixelfedOutboxResolver(nil)
+	outboxResolver := apAdapters.NewPixelfedOutboxResolver(deps.RemoteObjectFetcher)
 	hydrateRemoteObjectUC := apUsecases.NewHydrateRemoteObjectUseCase(apUsecases.HydrateRemoteObjectConfig{Fetcher: deps.RemoteObjectFetcher, ThreadResolver: threadResolver, OutboxResolver: outboxResolver, ActivitiesRepo: deps.ActivitiesRepo, NotesRepo: deps.NotesRepo, MediaRepo: deps.MediaRepo, MediaStorage: deps.MediaStorage, RemoteMediaFetcher: deps.RemoteMediaFetcher, BoostsRepo: deps.BoostsRepo, RemoteAccountsRepo: deps.RemoteAccountsRepo, Sanitizer: deps.ContentSanitizer})
 	jobs.NewFetchWorker(jobs.FetchWorkerConfig{JobsRepo: deps.JobsRepo, Accounts: deps.AccountsRepo, Hydrater: hydrateRemoteObjectUC, Blocks: deps.ModerationRepo}).Start(ctx)
 	jobs.NewMediaCleanupWorker(jobs.MediaCleanupWorkerConfig{MediaRepo: deps.MediaRepo, Storage: deps.MediaStorage, Interval: deps.MediaCleanupInterval, UnattachedTTL: deps.MediaUnattachedTTL, RemoteCacheMaxBytes: deps.RemoteCacheMaxBytes, RemoteCacheTTL: deps.RemoteCacheTTL}).Start(ctx)

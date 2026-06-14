@@ -3,33 +3,30 @@ package activitypub
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"html"
-	"io"
-	"net/http"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
+	"github.com/myfedi/gargoyle/domain/ports"
 )
 
 // PixelfedOutboxResolver adapts Pixelfed's public profile API for instances
 // whose ActivityPub outbox only exposes totalItems without pages.
 type PixelfedOutboxResolver struct {
-	client *http.Client
+	fetcher ports.RemoteObjectFetcher
 }
 
-func NewPixelfedOutboxResolver(client *http.Client) *PixelfedOutboxResolver {
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+func NewPixelfedOutboxResolver(fetcher ports.RemoteObjectFetcher) *PixelfedOutboxResolver {
+	return &PixelfedOutboxResolver{fetcher: fetcher}
+}
+
+func (r *PixelfedOutboxResolver) ResolveOutboxPage(ctx context.Context, signer models.Account, pageURI, expectedActor string) ([]json.RawMessage, string, error) {
+	if r.fetcher == nil {
+		return nil, "", nil
 	}
-	return &PixelfedOutboxResolver{client: client}
-}
-
-func (r *PixelfedOutboxResolver) ResolveOutboxPage(ctx context.Context, _ models.Account, pageURI, expectedActor string) ([]json.RawMessage, string, error) {
 	parsed, err := url.Parse(pageURI)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || !strings.HasSuffix(parsed.Path, "/outbox") {
 		return nil, "", nil
@@ -38,7 +35,7 @@ func (r *PixelfedOutboxResolver) ResolveOutboxPage(ctx context.Context, _ models
 	if username == "" {
 		return nil, "", nil
 	}
-	profileID, err := r.profileID(ctx, parsed.Scheme+"://"+parsed.Host+"/"+username)
+	profileID, err := r.profileID(ctx, signer, parsed.Scheme, parsed.Host, username)
 	if err != nil || profileID == "" {
 		return nil, "", err
 	}
@@ -47,7 +44,7 @@ func (r *PixelfedOutboxResolver) ResolveOutboxPage(ctx context.Context, _ models
 	if maxID != "" {
 		apiURL += "&max_id=" + url.QueryEscape(maxID)
 	}
-	statuses, err := r.statuses(ctx, apiURL)
+	statuses, err := r.statuses(ctx, signer, apiURL)
 	if err != nil || len(statuses) == 0 {
 		return nil, "", err
 	}
@@ -79,32 +76,19 @@ func pixelfedOutboxUsername(path string) string {
 	return ""
 }
 
-var pixelfedProfileIDPattern = regexp.MustCompile(`<profile[^>]+profile-id="([0-9]+)"`)
-
-func (r *PixelfedOutboxResolver) profileID(ctx context.Context, profileURL string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, profileURL, nil)
+func (r *PixelfedOutboxResolver) profileID(ctx context.Context, signer models.Account, scheme, host, username string) (string, error) {
+	lookupURL := scheme + "://" + host + "/api/v1/accounts/lookup?acct=" + url.QueryEscape(username)
+	raw, err := r.fetcher.FetchObject(ctx, lookupURL, &signer)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "Gargoyle/1.0")
-	req.Header.Set("Accept", "text/html")
-	resp, err := r.client.Do(req)
-	if err != nil {
+	var account struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &account); err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("pixelfed profile fetch failed: HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
-	if err != nil {
-		return "", err
-	}
-	match := pixelfedProfileIDPattern.FindSubmatch(body)
-	if len(match) < 2 {
-		return "", nil
-	}
-	return string(match[1]), nil
+	return strings.TrimSpace(account.ID), nil
 }
 
 type pixelfedStatus struct {
@@ -127,23 +111,13 @@ type pixelfedMediaAttachment struct {
 	Mime        string `json:"mime"`
 }
 
-func (r *PixelfedOutboxResolver) statuses(ctx context.Context, apiURL string) ([]pixelfedStatus, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+func (r *PixelfedOutboxResolver) statuses(ctx context.Context, signer models.Account, apiURL string) ([]pixelfedStatus, error) {
+	raw, err := r.fetcher.FetchObject(ctx, apiURL, &signer)
 	if err != nil {
 		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Gargoyle/1.0")
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("pixelfed statuses fetch failed: HTTP %d", resp.StatusCode)
 	}
 	var statuses []pixelfedStatus
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&statuses); err != nil {
+	if err := json.Unmarshal(raw, &statuses); err != nil {
 		return nil, err
 	}
 	return statuses, nil
