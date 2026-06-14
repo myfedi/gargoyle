@@ -129,13 +129,16 @@ The server now has the basic pieces for federation and Mastodon-compatible clien
 
 Compatibility notes:
 
-| Implementation | Discovery | Inbound Follow | Outbound Accept | Outbound Note | Inbound Mention Note | Unfollow |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| GoToSocial | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Mastodon | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| Akkoma/Pleroma | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| Implementation | Discovery / profile resolution | Follow flow | Notes / statuses | Threads / replies | Notes |
+| --- | ---: | ---: | ---: | ---: | --- |
+| GoToSocial | ✅ | ✅ | ✅ | ✅ | Covered by the Dockerized integration suite. |
+| Mastodon | ✅ | ✅ | ✅ | ✅ | Real-server smoke tested; broader compatibility still needs coverage. |
+| BookWyrm | ✅ | ⏳ | ✅ | ⏳ | Confirmed basic ActivityPub interop/profile and object discovery; deeper workflows need tests. |
+| Pixelfed | ✅ | ✅ | ✅ | ⏳ | Confirmed profile resolution, follow acceptance, and public profile status hydration through a Pixelfed-compatible outbox resolver for non-pageable AP outboxes. |
+| Lemmy | ✅ | ✅ | ✅ | ✅ | Confirmed community/profile resolution, community outbox hydration, community boosts/reblogs, and Lemmy-compatible comment discovery behind a port. |
+| Akkoma/Pleroma | ⏳ | ⏳ | ⏳ | ⏳ | Not yet compatibility-tested. |
 
-See [`integration/README.md`](integration/README.md) for the Dockerized GoToSocial integration suite. [`compat/README.md`](compat/README.md) contains the older/manual local compatibility setup and checklist.
+See [`integration/README.md`](integration/README.md) for the Dockerized GoToSocial integration suite. [`compat/README.md`](compat/README.md) contains the older/manual local compatibility setup and checklist. The non-GoToSocial rows are production smoke-test results and should be treated as confirmed partial interoperability, not exhaustive certification.
 
 ### Browser UI hosting and CORS
 
@@ -200,7 +203,8 @@ go run cmd/cli/admin/main.go media-cleanup --config ./config.yml --older-than 24
 
 Known gaps before claiming broad compatibility:
 
--   Mastodon/Akkoma compatibility still needs real-world testing.
+-   Akkoma/Pleroma compatibility still needs real-world testing.
+-   BookWyrm, Pixelfed, Lemmy, and Mastodon interop is based on focused production smoke tests; add repeatable integration/manual compatibility checks before treating them as fully supported matrices.
 -   GoToSocial integration coverage includes discovery, follow/unfollow, outbound follow, multiple visibility statuses, direct mentions, status edits/federated Update, favourites, boosts, replies, deletes, polls/votes, OAuth/token setup, delivery retry, private-host hardening, profile update federation, and media upload/fetchability, but broader real-server validation is still needed.
 -   Fetch and delivery queues have basic observability and duplicate fetch suppression, but need richer operational tooling.
 -   Some security limitations remain documented in [`LIMITATIONS.md`](LIMITATIONS.md).
