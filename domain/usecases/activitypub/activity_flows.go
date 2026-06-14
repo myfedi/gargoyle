@@ -108,20 +108,14 @@ func NewGetFollowingUseCase(cfg ActivityPubFlowConfig) GetFollowingUseCase {
 }
 func NewGetFeaturedUseCase(cfg ActivityPubFlowConfig) GetFeaturedUseCase {
 	requireAccountsRepo(cfg)
-	if cfg.NotesRepo == nil {
-		panic("activitypub use case requires NotesRepo")
-	}
-	if cfg.SocialRepo == nil {
-		panic("activitypub use case requires SocialRepo")
-	}
+	requireNotesRepo(cfg)
+	requireSocialRepo(cfg)
 	return GetFeaturedUseCase{cfg: cfg}
 }
 func NewGetDereferenceUseCase(cfg ActivityPubFlowConfig) GetDereferenceUseCase {
 	requireAccountsRepo(cfg)
 	requireActivitiesRepo(cfg)
-	if cfg.NotesRepo == nil {
-		panic("activitypub use case requires NotesRepo")
-	}
+	requireNotesRepo(cfg)
 	return GetDereferenceUseCase{cfg: cfg}
 }
 func NewCreateFollowingUseCase(cfg ActivityPubFlowConfig) CreateFollowingUseCase {
