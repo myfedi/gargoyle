@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -398,6 +399,7 @@ func (h *Handler) handleSharedInboxActivity(c *fiber.Ctx) error {
 		}
 	}
 	if derr := h.cfg.SignatureVerifier.VerifyInbound(c.UserContext(), signatureVerificationInput(c, raw, activity.Actor, verifierAccount, h.cfg.RequireSignedInbox)); derr != nil {
+		logInboundVerificationFailure(c, activity.Actor, derr)
 		return web.HandleDomainError(c, derr)
 	}
 	for _, username := range usernames {
@@ -431,6 +433,7 @@ func (h *Handler) handleInboxActivity(c *fiber.Ctx) error {
 		return web.HandleDomainError(c, derr)
 	}
 	if derr := h.cfg.SignatureVerifier.VerifyInbound(c.UserContext(), signatureVerificationInput(c, raw, activity.Actor, account, h.cfg.RequireSignedInbox)); derr != nil {
+		logInboundVerificationFailure(c, activity.Actor, derr)
 		return web.HandleDomainError(c, derr)
 	}
 
@@ -445,6 +448,13 @@ func (h *Handler) handleInboxActivity(c *fiber.Ctx) error {
 		}
 	}
 	return c.SendStatus(fiber.StatusAccepted)
+}
+
+func logInboundVerificationFailure(c *fiber.Ctx, actor string, derr *domainerrors.DomainError) {
+	if derr == nil {
+		return
+	}
+	log.Printf("inbound ActivityPub signature verification failed path=%s actor=%q ua=%q reason=%q", c.Path(), actor, c.Get(fiber.HeaderUserAgent), derr.Message)
 }
 
 func (h *Handler) publishRealtime(res *apUsecases.HandleInboxActivityResult) {
