@@ -31,6 +31,7 @@ type HydrateRemoteObjectUseCase struct {
 	mediaStorage       ports.MediaStorage
 	remoteMediaFetcher ports.RemoteMediaFetcher
 	threadResolver     ports.RemoteThreadResolver
+	outboxResolver     ports.RemoteOutboxResolver
 	boosts             repos.BoostsRepository
 	remotes            repos.RemoteAccountsRepository
 	sanitizer          ports.ContentSanitizer
@@ -48,6 +49,7 @@ type HydrateRemoteObjectConfig struct {
 	MediaStorage       ports.MediaStorage
 	RemoteMediaFetcher ports.RemoteMediaFetcher
 	ThreadResolver     ports.RemoteThreadResolver
+	OutboxResolver     ports.RemoteOutboxResolver
 	BoostsRepo         repos.BoostsRepository
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	Sanitizer          ports.ContentSanitizer
@@ -66,7 +68,7 @@ func NewHydrateRemoteObjectUseCase(cfg HydrateRemoteObjectConfig) HydrateRemoteO
 	if cfg.Sanitizer == nil {
 		panic("hydrate remote object use case requires Sanitizer")
 	}
-	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, mediaStorage: cfg.MediaStorage, remoteMediaFetcher: cfg.RemoteMediaFetcher, threadResolver: cfg.ThreadResolver, boosts: cfg.BoostsRepo, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer, hydrationLocks: &remoteHydrationLocks}
+	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, mediaStorage: cfg.MediaStorage, remoteMediaFetcher: cfg.RemoteMediaFetcher, threadResolver: cfg.ThreadResolver, outboxResolver: cfg.OutboxResolver, boosts: cfg.BoostsRepo, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer, hydrationLocks: &remoteHydrationLocks}
 }
 
 func (u HydrateRemoteObjectUseCase) HydrateRemoteObject(ctx context.Context, account models.Account, objectURI string) error {

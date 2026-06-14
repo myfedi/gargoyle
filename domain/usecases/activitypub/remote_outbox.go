@@ -22,6 +22,12 @@ func (u HydrateRemoteObjectUseCase) CacheRemoteOutboxPage(ctx context.Context, a
 		return "", err
 	}
 	items, next := outboxItems(raw)
+	if len(items) == 0 && next == "" && u.outboxResolver != nil {
+		resolvedItems, resolvedNext, err := u.outboxResolver.ResolveOutboxPage(ctx, account, pageURI, expectedActor)
+		if err == nil && (len(resolvedItems) > 0 || resolvedNext != "") {
+			items, next = resolvedItems, resolvedNext
+		}
+	}
 	for index, item := range items {
 		if shouldStop != nil && index%5 == 0 {
 			stop, err := shouldStop()
