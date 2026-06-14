@@ -30,7 +30,12 @@ var (
 )
 
 func cacheRemoteAccountProfileImagesAsync(mediaRepo repos.MediaRepository, mediaStorage ports.MediaStorage, remoteMediaFetcher ports.RemoteMediaFetcher, remoteAccountsRepo repos.RemoteAccountsRepository, notifier RemoteProfileCacheNotifier, localAccountID string, remote *models.Account) {
-	if remote == nil || remote.URI == "" || localAccountID == "" || remoteAccountsRepo == nil || remoteProfileImagesCached(remote) {
+	if remote == nil || remote.URI == "" || localAccountID == "" || remoteAccountsRepo == nil {
+		return
+	}
+	remoteCopy := *remote
+	clearMissingRemoteProfileImageMedia(mediaRepo, &remoteCopy)
+	if remoteProfileImagesCached(&remoteCopy) {
 		return
 	}
 	key := localAccountID + "\x00" + remote.URI
@@ -43,7 +48,6 @@ func cacheRemoteAccountProfileImagesAsync(mediaRepo repos.MediaRepository, media
 		remoteProfileImageCacheInflight.Delete(key)
 		return
 	}
-	remoteCopy := *remote
 	go func() {
 		defer func() {
 			<-remoteProfileImageCacheSlots
@@ -59,6 +63,24 @@ func cacheRemoteAccountProfileImagesAsync(mediaRepo repos.MediaRepository, media
 			notifier.RemoteProfileImagesCached(localAccountID, remoteCopy.URI)
 		}
 	}()
+}
+
+func clearMissingRemoteProfileImageMedia(mediaRepo repos.MediaRepository, remote *models.Account) {
+	if mediaRepo == nil || remote == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	if remote.AvatarMediaID != nil && *remote.AvatarMediaID != "" {
+		if _, err := mediaRepo.GetMediaAttachmentByID(ctx, nil, *remote.AvatarMediaID); err != nil {
+			remote.AvatarMediaID = nil
+		}
+	}
+	if remote.HeaderMediaID != nil && *remote.HeaderMediaID != "" {
+		if _, err := mediaRepo.GetMediaAttachmentByID(ctx, nil, *remote.HeaderMediaID); err != nil {
+			remote.HeaderMediaID = nil
+		}
+	}
 }
 
 func cacheRemoteAccountProfileImages(ctx context.Context, tx *db.Tx, mediaRepo repos.MediaRepository, mediaStorage ports.MediaStorage, remoteMediaFetcher ports.RemoteMediaFetcher, localAccountID string, remote *models.Account) {
