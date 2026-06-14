@@ -31,7 +31,6 @@ func (h APIHandler) notificationStream(c *fiber.Ctx) error {
 	}
 	initialResponses := notificationItemsToResponses(initial)
 	client := h.realtimeHub.Add(principal)
-	defer h.realtimeHub.Remove(client)
 	h.realtimeHub.MarkNotificationsSeen(client, initialResponses)
 	for _, id := range strings.Split(c.Query("watch_relationships"), ",") {
 		h.realtimeHub.WatchRelationship(client, strings.TrimSpace(id))
@@ -42,6 +41,7 @@ func (h APIHandler) notificationStream(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderConnection, "keep-alive")
 	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 		defer func() {
+			h.realtimeHub.Remove(client)
 			_ = recover()
 		}()
 

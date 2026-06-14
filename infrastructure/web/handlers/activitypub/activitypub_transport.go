@@ -318,6 +318,12 @@ func (t httpActivityPubTransport) VerifyInbound(ctx context.Context, input activ
 
 func signatureVerificationInput(c *fiber.Ctx, body []byte, actor string, account *models.Account, required bool) activitypub.SignatureVerificationInput {
 	u, _ := url.Parse(c.OriginalURL())
+	signature := c.Get("Signature")
+	if signature == "" {
+		if auth := c.Get("Authorization"); strings.HasPrefix(auth, "Signature ") {
+			signature = strings.TrimSpace(strings.TrimPrefix(auth, "Signature "))
+		}
+	}
 	return activitypub.SignatureVerificationInput{
 		Method:       c.Method(),
 		URL:          u,
@@ -327,7 +333,7 @@ func signatureVerificationInput(c *fiber.Ctx, body []byte, actor string, account
 		LocalAccount: account,
 		Required:     required,
 		Headers: map[string]string{
-			"signature":           c.Get("Signature"),
+			"signature":           signature,
 			"date":                c.Get("Date"),
 			"digest":              c.Get("Digest"),
 			contentTypeHeaderName: c.Get("Content-Type"),
