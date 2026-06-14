@@ -305,11 +305,12 @@ func (t httpActivityPubTransport) VerifyInbound(ctx context.Context, input activ
 		return domainerrors.NewErr(domainerrors.ErrUnauthorized, err)
 	}
 
-	headerValues := map[string]string{
-		"host":                input.Host,
-		"date":                input.Headers["date"],
-		"digest":              digest,
-		contentTypeHeaderName: input.Headers[contentTypeHeaderName],
+	headerValues := make(map[string]string, len(input.Headers)+1)
+	for key, value := range input.Headers {
+		headerValues[strings.ToLower(key)] = value
+	}
+	if headerValues["host"] == "" {
+		headerValues["host"] = input.Host
 	}
 	signed := signatureString(input.Method, input.URL, headerValues, headers)
 	hash := sha256.Sum256([]byte(signed))
@@ -331,6 +332,14 @@ func signatureVerificationInput(c *fiber.Ctx, body []byte, actor string, account
 			signature = strings.TrimSpace(strings.TrimPrefix(auth, "Signature "))
 		}
 	}
+	headers := map[string]string{}
+	c.Request().Header.VisitAll(func(key, value []byte) {
+		headers[strings.ToLower(string(key))] = string(value)
+	})
+	headers["signature"] = signature
+	if headers["host"] == "" {
+		headers["host"] = c.Hostname()
+	}
 	return activitypub.SignatureVerificationInput{
 		Method:       c.Method(),
 		URL:          u,
@@ -339,12 +348,7 @@ func signatureVerificationInput(c *fiber.Ctx, body []byte, actor string, account
 		Actor:        actor,
 		LocalAccount: account,
 		Required:     required,
-		Headers: map[string]string{
-			"signature":           signature,
-			"date":                c.Get("Date"),
-			"digest":              c.Get("Digest"),
-			contentTypeHeaderName: c.Get("Content-Type"),
-		},
+		Headers:      headers,
 	}
 }
 
