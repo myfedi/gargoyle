@@ -79,7 +79,7 @@ func (u Accounts) FollowAccount(ctx context.Context, localAccount *models.Accoun
 	if derr != nil {
 		return nil, derr
 	}
-	return &FollowAccountResult{Account: res.Account, RawJSON: res.RawJSON, Inbox: res.Inbox}, nil
+	return &FollowAccountResult{Account: res.Account, RawJSON: res.RawJSON, Inbox: res.Inbox, Following: !remote.Locked, Requested: remote.Locked}, nil
 }
 
 // UnfollowAccount removes a following relationship and returns an Undo Follow
@@ -105,7 +105,7 @@ func (u Accounts) UnfollowAccount(ctx context.Context, localAccount *models.Acco
 	if derr != nil {
 		return nil, derr
 	}
-	return &FollowAccountResult{Account: res.Account, RawJSON: res.RawJSON, Inbox: res.Inbox}, nil
+	return &FollowAccountResult{Account: res.Account, RawJSON: res.RawJSON, Inbox: res.Inbox, Following: false, Requested: false}, nil
 }
 
 func remoteResolveError(err error) *domainerrors.DomainError {

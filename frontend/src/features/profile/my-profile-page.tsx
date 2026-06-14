@@ -286,9 +286,8 @@ export function MyProfilePage() {
     setError(null);
 
     try {
-      await api.followAccount(accountToFollow.id);
-      const [relationship] = await api.relationships([accountToFollow.id]);
-      if (relationship) updateRelationship(accountToFollow.id, relationship);
+      const relationship = await api.followAccount(accountToFollow.id);
+      updateRelationship(accountToFollow.id, relationship);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not follow account.");
     } finally {
@@ -302,9 +301,8 @@ export function MyProfilePage() {
     setError(null);
 
     try {
-      await api.unfollowAccount(accountToUnfollow.id);
-      const [relationship] = await api.relationships([accountToUnfollow.id]);
-      if (relationship) updateRelationship(accountToUnfollow.id, relationship);
+      const relationship = await api.unfollowAccount(accountToUnfollow.id);
+      updateRelationship(accountToUnfollow.id, relationship);
       setFollowing((current) => current.filter((item) => item.account.id !== accountToUnfollow.id));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not unfollow account.");

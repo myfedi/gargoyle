@@ -86,9 +86,11 @@ type TimelineOptions struct {
 }
 
 type FollowAccountResult struct {
-	Account models.Account
-	RawJSON []byte
-	Inbox   string
+	Account   models.Account
+	RawJSON   []byte
+	Inbox     string
+	Following bool
+	Requested bool
 }
 
 type Relationship struct {
