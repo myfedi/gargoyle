@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/myfedi/gargoyle/adapters"
+	activitypubAdapters "github.com/myfedi/gargoyle/adapters/activitypub"
 	"github.com/myfedi/gargoyle/adapters/repos"
 	"github.com/myfedi/gargoyle/domain/ports"
 	domainDB "github.com/myfedi/gargoyle/domain/ports/db"
@@ -132,6 +133,7 @@ func buildClientAPIComponents(in clientAPIWorkflowInputs) clientAPIComponents {
 func newClientAPIWorkflowContext(in clientAPIWorkflowInputs) clientAPIWorkflowContext {
 	remoteObjectFetcher := clientapiHandlers.NewRemoteObjectFetcher(nil, in.URLExceptions)
 	remoteMediaFetcher := clientapiHandlers.NewRemoteMediaFetcher(nil, in.URLExceptions)
+	threadResolver := activitypubAdapters.NewLemmyThreadResolver(remoteObjectFetcher)
 	return clientAPIWorkflowContext{
 		in:                  in,
 		common:              clientapiUsecases.CommonConfig{Host: in.Host, Domain: in.Domain, ServerVersion: in.ServerVersion},
@@ -147,6 +149,7 @@ func newClientAPIWorkflowContext(in clientAPIWorkflowInputs) clientAPIWorkflowCo
 			MediaRepo:          in.MediaRepo,
 			MediaStorage:       in.MediaStorage,
 			RemoteMediaFetcher: remoteMediaFetcher,
+			ThreadResolver:     threadResolver,
 			BoostsRepo:         in.BoostsRepo,
 			RemoteAccountsRepo: in.RemoteAccountsRepo,
 			Sanitizer:          in.ContentSanitizer,

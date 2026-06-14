@@ -60,6 +60,9 @@ func (u Accounts) AccountStatuses(ctx context.Context, localAccount *models.Acco
 		return nil, derr
 	}
 	if excludeReblogs {
+		if account.ID != localAccount.ID && len(items) < limit {
+			u.cacheRemoteOutboxUntilAsync(localAccount, *account, limit, maxID)
+		}
 		return items, nil
 	}
 	boosts, err := u.deps.BoostsRepo.ListActorBoosts(ctx, nil, localAccount.ID, account.URI, limit, maxID)
@@ -70,7 +73,11 @@ func (u Accounts) AccountStatuses(ctx context.Context, localAccount *models.Acco
 	if derr != nil {
 		return nil, derr
 	}
-	return mergeTimelineItems(items, boostItems, limit), nil
+	merged := mergeTimelineItems(items, boostItems, limit)
+	if account.ID != localAccount.ID && len(merged) < limit {
+		u.cacheRemoteOutboxUntilAsync(localAccount, *account, limit, maxID)
+	}
+	return merged, nil
 }
 
 func (u Accounts) refreshRemoteAccountIfStale(ctx context.Context, signer *models.Account, cached *models.Account) *models.Account {
@@ -87,30 +94,11 @@ func (u Accounts) refreshRemoteAccountIfStale(ctx context.Context, signer *model
 }
 
 func (u Accounts) accountStatusNotes(ctx context.Context, localAccount, account *models.Account, limit int, maxID string) ([]models.Note, error) {
+	actor := account.URI
 	if account.ID == localAccount.ID {
-		return u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, localAccount.URI, limit, maxID)
+		actor = localAccount.URI
 	}
-	notes, err := u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
-	if err != nil {
-		return notes, err
-	}
-	enough := func() (bool, error) {
-		notes, err = u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
-		if err != nil {
-			return false, err
-		}
-		boosts, err := u.deps.BoostsRepo.ListActorBoosts(ctx, nil, localAccount.ID, account.URI, limit, maxID)
-		return err == nil && len(notes)+len(boosts) >= limit, err
-	}
-	ok, err := enough()
-	if err != nil || ok {
-		return notes, err
-	}
-	derr := u.cacheRemoteOutboxUntil(ctx, localAccount, *account, enough)
-	if derr != nil {
-		return notes, nil
-	}
-	return u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+	return u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, actor, limit, maxID)
 }
 
 func (u Accounts) accountStatusItems(ctx context.Context, localAccount, account *models.Account, notes []models.Note) ([]TimelineItem, *domainerrors.DomainError) {

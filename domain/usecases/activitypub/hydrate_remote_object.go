@@ -30,6 +30,7 @@ type HydrateRemoteObjectUseCase struct {
 	media              repos.MediaRepository
 	mediaStorage       ports.MediaStorage
 	remoteMediaFetcher ports.RemoteMediaFetcher
+	threadResolver     ports.RemoteThreadResolver
 	boosts             repos.BoostsRepository
 	remotes            repos.RemoteAccountsRepository
 	sanitizer          ports.ContentSanitizer
@@ -46,6 +47,7 @@ type HydrateRemoteObjectConfig struct {
 	MediaRepo          repos.MediaRepository
 	MediaStorage       ports.MediaStorage
 	RemoteMediaFetcher ports.RemoteMediaFetcher
+	ThreadResolver     ports.RemoteThreadResolver
 	BoostsRepo         repos.BoostsRepository
 	RemoteAccountsRepo repos.RemoteAccountsRepository
 	Sanitizer          ports.ContentSanitizer
@@ -64,7 +66,7 @@ func NewHydrateRemoteObjectUseCase(cfg HydrateRemoteObjectConfig) HydrateRemoteO
 	if cfg.Sanitizer == nil {
 		panic("hydrate remote object use case requires Sanitizer")
 	}
-	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, mediaStorage: cfg.MediaStorage, remoteMediaFetcher: cfg.RemoteMediaFetcher, boosts: cfg.BoostsRepo, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer, hydrationLocks: &remoteHydrationLocks}
+	return HydrateRemoteObjectUseCase{fetcher: cfg.Fetcher, txProvider: cfg.TxProvider, activities: cfg.ActivitiesRepo, notes: cfg.NotesRepo, media: cfg.MediaRepo, mediaStorage: cfg.MediaStorage, remoteMediaFetcher: cfg.RemoteMediaFetcher, threadResolver: cfg.ThreadResolver, boosts: cfg.BoostsRepo, remotes: cfg.RemoteAccountsRepo, sanitizer: cfg.Sanitizer, hydrationLocks: &remoteHydrationLocks}
 }
 
 func (u HydrateRemoteObjectUseCase) HydrateRemoteObject(ctx context.Context, account models.Account, objectURI string) error {
@@ -83,7 +85,10 @@ func (u HydrateRemoteObjectUseCase) HydrateRemoteReplies(ctx context.Context, ac
 	if err != nil {
 		return err
 	}
-	return u.hydrateReplyCollection(ctx, account, objectURI, raw, 0, map[string]bool{objectURI: true})
+	if err := u.hydrateReplyCollection(ctx, account, objectURI, raw, 0, map[string]bool{objectURI: true}); err != nil {
+		return err
+	}
+	return u.hydrateResolvedRemoteReplies(ctx, account, objectURI)
 }
 
 func (u HydrateRemoteObjectUseCase) hydrateReplyCollection(ctx context.Context, account models.Account, parentURI string, raw []byte, depth int, seen map[string]bool) error {
@@ -262,14 +267,13 @@ func (u HydrateRemoteObjectUseCase) fetchRemoteAuthor(ctx context.Context, signe
 	return &author
 }
 
-func (u HydrateRemoteObjectUseCase) ensureFetchedNoteAuthor(ctx context.Context, tx *db.Tx, account models.Account, author *models.Account) error {
+func (u HydrateRemoteObjectUseCase) ensureFetchedNoteAuthor(ctx context.Context, tx *db.Tx, _ models.Account, author *models.Account) error {
 	if u.remotes == nil || author == nil {
 		return nil
 	}
 	if existing, err := u.remotes.GetRemoteAccountByURI(ctx, tx, author.URI); err == nil && remoteProfileImagesCached(existing) {
 		return nil
 	}
-	u.cacheFetchedAuthorProfileImages(ctx, tx, account.ID, author)
 	_, err := u.remotes.UpsertRemoteAccount(ctx, tx, *author)
 	return err
 }
@@ -575,6 +579,41 @@ func uniqueStrings(values []string) []string {
 		res = append(res, value)
 	}
 	return res
+}
+
+func (u HydrateRemoteObjectUseCase) hydrateResolvedRemoteReplies(ctx context.Context, account models.Account, objectURI string) error {
+	if u.threadResolver == nil {
+		return nil
+	}
+	replies, err := u.threadResolver.ResolveReplies(ctx, objectURI, &account)
+	if err != nil {
+		return nil
+	}
+	for _, reply := range replies {
+		if reply.URI == "" || reply.AttributedTo == "" || reply.InReplyToURI == "" {
+			continue
+		}
+		published := ""
+		if !reply.PublishedAt.IsZero() {
+			published = reply.PublishedAt.Format(time.RFC3339Nano)
+		}
+		note := map[string]any{
+			"type":         "Note",
+			"id":           reply.URI,
+			"attributedTo": reply.AttributedTo,
+			"content":      reply.Content,
+			"published":    published,
+			"inReplyTo":    reply.InReplyToURI,
+			"to":           reply.To,
+			"cc":           reply.CC,
+			"sensitive":    reply.Sensitive,
+			"summary":      reply.SpoilerText,
+		}
+		if rawNote, err := json.Marshal(note); err == nil {
+			_ = u.HydrateRawObject(ctx, account, rawNote, "")
+		}
+	}
+	return nil
 }
 
 func fetchedNoteRepliesTo(raw []byte, parentURI string) bool {

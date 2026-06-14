@@ -189,6 +189,7 @@ func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbo
 	if retries < 1 {
 		retries = 3
 	}
+	var lastErr error
 	for attempt := 0; attempt < retries; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, inbox, bytes.NewReader(body))
 		if err != nil {
@@ -199,14 +200,20 @@ func (t httpActivityPubTransport) Deliver(ctx context.Context, body []byte, inbo
 		signOutboundRequest(req, body, account)
 		resp, err := client.Do(req)
 		if err == nil && resp != nil {
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+			responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 			_ = resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				return nil
 			}
-			err = fmt.Errorf("delivery failed with status %d", resp.StatusCode)
+			err = fmt.Errorf("delivery failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+		}
+		if err != nil {
+			lastErr = err
 		}
 		time.Sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
+	}
+	if lastErr != nil {
+		return fmt.Errorf("delivery failed after retries: %w", lastErr)
 	}
 	return errors.New("delivery failed after retries")
 }

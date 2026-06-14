@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/models/domainerrors"
@@ -22,6 +24,10 @@ type StatusContext struct {
 	Descendants []TimelineItem
 	Warnings    []string
 }
+
+const remoteRepliesCacheTimeout = 20 * time.Second
+
+var remoteRepliesCacheJobs sync.Map
 
 func (u Statuses) GetStatus(ctx context.Context, localAccount *models.Account, statusID string) (*TimelineItem, *domainerrors.DomainError) {
 	return u.getStatus(ctx, localAccount, statusID)
@@ -100,7 +106,11 @@ func (u Statuses) statusDescendants(ctx context.Context, localAccount *models.Ac
 	if depth >= 40 {
 		return []TimelineItem{}, nil
 	}
-	u.cacheRemoteReplies(ctx, localAccount, note)
+	if depth == 0 {
+		u.cacheRemoteRepliesNow(ctx, localAccount, note)
+	} else {
+		u.cacheRemoteReplies(ctx, localAccount, note)
+	}
 	replies, err := u.deps.NotesRepo.ListReplies(ctx, nil, localAccount.ID, note.ID, note.URI)
 	if err != nil {
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
@@ -213,9 +223,33 @@ func (u Statuses) cacheRemoteContextNote(ctx context.Context, localAccount *mode
 	return u.deps.HydrateRemoteObjectUC.HydrateRemoteObject(ctx, *localAccount, objectURI)
 }
 
-func (u Statuses) cacheRemoteReplies(ctx context.Context, localAccount *models.Account, note models.Note) {
-	if note.URI == "" || note.AttributedTo == localAccount.URI || !(strings.HasPrefix(note.URI, "https://") || strings.HasPrefix(note.URI, "http://")) {
+func (u Statuses) cacheRemoteRepliesNow(ctx context.Context, localAccount *models.Account, note models.Note) {
+	if note.URI == "" || localAccount == nil || note.AttributedTo == localAccount.URI || !(strings.HasPrefix(note.URI, "https://") || strings.HasPrefix(note.URI, "http://")) {
 		return
 	}
-	_ = u.deps.HydrateRemoteObjectUC.HydrateRemoteReplies(ctx, *localAccount, note.URI)
+	key := localAccount.ID + "\x00" + note.URI
+	if _, loaded := remoteRepliesCacheJobs.LoadOrStore(key, struct{}{}); loaded {
+		return
+	}
+	defer remoteRepliesCacheJobs.Delete(key)
+	cacheCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	_ = u.deps.HydrateRemoteObjectUC.HydrateRemoteReplies(cacheCtx, *localAccount, note.URI)
+}
+
+func (u Statuses) cacheRemoteReplies(ctx context.Context, localAccount *models.Account, note models.Note) {
+	if note.URI == "" || localAccount == nil || note.AttributedTo == localAccount.URI || !(strings.HasPrefix(note.URI, "https://") || strings.HasPrefix(note.URI, "http://")) {
+		return
+	}
+	key := localAccount.ID + "\x00" + note.URI
+	if _, loaded := remoteRepliesCacheJobs.LoadOrStore(key, struct{}{}); loaded {
+		return
+	}
+	account := *localAccount
+	go func() {
+		defer remoteRepliesCacheJobs.Delete(key)
+		cacheCtx, cancel := context.WithTimeout(context.Background(), remoteRepliesCacheTimeout)
+		defer cancel()
+		_ = u.deps.HydrateRemoteObjectUC.HydrateRemoteReplies(cacheCtx, account, note.URI)
+	}()
 }

@@ -8,7 +8,7 @@ import { FieldRow, Panel } from "@/features/shared";
 import type { ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
 import { optimisticStatusAction, replaceStatus, runStatusAction } from "@/features/status/status-actions";
-import { StatusList, type StatusAction } from "@/features/status/status-list";
+import { StatusList, StatusListSkeleton, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { decodeRouteParam } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
@@ -28,6 +28,7 @@ export function AccountPage({ route }: AccountPageProps) {
   const [relationship, setRelationship] = useState<MastodonRelationship | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isLoadingRemotePosts, setIsLoadingRemotePosts] = useState(false);
   const [isUpdatingFollow, setIsUpdatingFollow] = useState(false);
   const [deletingStatusId, setDeletingStatusId] = useState<string | null>(null);
   const [actingStatusId, setActingStatusId] = useState<string | null>(null);
@@ -65,18 +66,28 @@ export function AccountPage({ route }: AccountPageProps) {
     setError(null);
 
     try {
-      const [nextCurrentAccount, nextAccount, nextStatuses, nextPinnedStatuses] = await Promise.all([
+      setIsLoadingRemotePosts(false);
+      const [nextCurrentAccount, nextAccount] = await Promise.all([
         api.verifyCredentials(),
         api.account(accountId),
-        api.accountStatuses(accountId, { limit: 5 }),
-        api.accountStatuses(accountId, { pinned: true, limit: 5 }),
       ]);
-      const [nextRelationship] = nextAccount.id !== nextCurrentAccount.id ? await api.relationships([nextAccount.id]) : [];
+      const isRemoteAccount = nextAccount.id.startsWith("remote:");
+      if (isRemoteAccount) {
+        setIsLoadingRemotePosts(true);
+      }
+      const [nextRelationship, nextStatuses, nextPinnedStatuses] = await Promise.all([
+        nextAccount.id !== nextCurrentAccount.id ? api.relationships([nextAccount.id]).then(([item]) => item ?? null) : Promise.resolve(null),
+        api.accountStatuses(accountId, { limit: 5 }),
+        isRemoteAccount ? Promise.resolve([]) : api.accountStatuses(accountId, { pinned: true, limit: 5 }),
+      ]);
       setCurrentAccount(nextCurrentAccount);
       setAccount(nextAccount);
-      setRelationship(nextRelationship ?? null);
+      setRelationship(nextRelationship);
       setStatuses(nextStatuses);
       setPinnedStatuses(nextPinnedStatuses);
+      if (!isRemoteAccount || nextStatuses.length > 0) {
+        setIsLoadingRemotePosts(false);
+      }
       setReplyingTo(null);
       setReplyError(null);
       setForwardingStatus(null);
@@ -90,6 +101,45 @@ export function AccountPage({ route }: AccountPageProps) {
   useEffect(() => {
     void loadAccount();
   }, [loadAccount]);
+
+  useEffect(() => {
+    if (!api || isLoading || statuses.length > 0 || !account?.id?.startsWith("remote:")) {
+      setIsLoadingRemotePosts(false);
+      return;
+    }
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 12;
+    const pollDelayMs = 2500;
+    setIsLoadingRemotePosts(true);
+    let pollTimer: number | undefined;
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const nextStatuses = await api.accountStatuses(account.id, { limit: 5 });
+        if (cancelled) return;
+        if (nextStatuses.length > 0) {
+          setStatuses(nextStatuses);
+          setIsLoadingRemotePosts(false);
+          return;
+        }
+      } catch {
+        // Keep the optimistic loading state brief. The normal empty state will take over.
+      }
+      if (!cancelled && attempts < maxAttempts) {
+        pollTimer = globalThis.setTimeout(() => void poll(), pollDelayMs);
+      } else if (!cancelled) {
+        setIsLoadingRemotePosts(false);
+      }
+    };
+    pollTimer = globalThis.setTimeout(() => void poll(), pollDelayMs);
+    return () => {
+      cancelled = true;
+      if (pollTimer) {
+        globalThis.clearTimeout(pollTimer);
+      }
+    };
+  }, [account?.id, api, isLoading, statuses.length]);
 
   useEffect(() => {
     if (!api) return;
@@ -384,9 +434,7 @@ export function AccountPage({ route }: AccountPageProps) {
 
       <Panel title="Posts" className="mx-auto max-w-2xl">
         {isLoading ? (
-          <div className="space-y-3">
-            {[0, 1, 2].map((item) => <div key={item} className="h-24 animate-pulse rounded-md bg-secondary" />)}
-          </div>
+          <StatusListSkeleton />
         ) : (
           <>
             <StatusList
@@ -394,6 +442,8 @@ export function AccountPage({ route }: AccountPageProps) {
               currentAccountId={currentAccount?.id}
               emptyTitle="No posts"
               emptyDescription="No posts to show."
+              isLoading={isLoadingRemotePosts}
+              loadingLabel="Looking for remote posts"
               deletingStatusId={deletingStatusId}
               actingStatusId={actingStatusId}
               onDelete={deleteStatus}

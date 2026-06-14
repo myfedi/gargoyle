@@ -22,14 +22,20 @@ func (u HydrateRemoteObjectUseCase) CacheRemoteOutboxPage(ctx context.Context, a
 		return "", err
 	}
 	items, next := outboxItems(raw)
-	for _, item := range items {
-		if shouldStop != nil {
+	for index, item := range items {
+		if shouldStop != nil && index%5 == 0 {
 			stop, err := shouldStop()
 			if err != nil || stop {
 				return next, err
 			}
 		}
 		_ = u.cacheRemoteOutboxItem(ctx, account, expectedActor, item)
+	}
+	if shouldStop != nil {
+		stop, err := shouldStop()
+		if err != nil || stop {
+			return next, err
+		}
 	}
 	return next, nil
 }
@@ -44,18 +50,26 @@ func (u HydrateRemoteObjectUseCase) cacheRemoteOutboxItem(ctx context.Context, a
 		raw = fetched
 	}
 	if createObject, ok := extractOutboxCreateObject(raw); ok {
-		if expectedActor != "" && createObject.Actor != "" && createObject.Actor != expectedActor {
+		objectRaw, note, err := u.outboxCreateNote(ctx, account, createObject)
+		if err != nil {
+			return err
+		}
+		objectURI := note.URI
+		if objectURI == "" {
+			objectURI = createObject.Object
+		}
+		if len(objectRaw) == 0 || objectURI == "" {
 			return nil
 		}
-		if len(createObject.ObjectRaw) > 0 {
-			raw = createObject.ObjectRaw
-		} else if createObject.Object != "" {
-			fetched, err := u.fetcher.FetchObject(ctx, createObject.Object, &account)
-			if err != nil {
-				return err
+		if expectedActor != "" && (createObject.Actor == "" || createObject.Actor != expectedActor || note.AttributedTo == "" || note.AttributedTo != expectedActor) {
+			_ = u.hydrateRawObject(ctx, account, objectRaw, "", false)
+			published := createObject.Published
+			if published.IsZero() {
+				published = note.PublishedAt
 			}
-			raw = fetched
+			return u.createRemoteOutboxBoost(ctx, account, expectedActor, objectURI, createObject.ID, published)
 		}
+		raw = objectRaw
 	}
 	if announce, ok := extractOutboxAnnounce(raw); ok {
 		return u.hydrateRemoteAnnounce(ctx, account, expectedActor, announce)
@@ -64,30 +78,35 @@ func (u HydrateRemoteObjectUseCase) cacheRemoteOutboxItem(ctx context.Context, a
 }
 
 type outboxCreateObject struct {
+	ID        string
 	Actor     string
 	Object    string
 	ObjectRaw json.RawMessage
+	Published time.Time
 }
 
 func extractOutboxCreateObject(raw []byte) (outboxCreateObject, bool) {
 	var doc struct {
-		Type   string          `json:"type"`
-		Actor  json.RawMessage `json:"actor"`
-		Object json.RawMessage `json:"object"`
+		ID        string          `json:"id"`
+		Type      string          `json:"type"`
+		Actor     json.RawMessage `json:"actor"`
+		Object    json.RawMessage `json:"object"`
+		Published string          `json:"published"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil || doc.Type != "Create" || len(doc.Object) == 0 {
 		return outboxCreateObject{}, false
 	}
 	actor, _, _ := ExtractIDAndInbox(doc.Actor)
-	object, _, err := ExtractIDAndInbox(doc.Object)
-	if err == nil && object != "" {
-		return outboxCreateObject{Actor: actor, Object: object}, true
+	published, _ := time.Parse(time.RFC3339, doc.Published)
+	var objectURL string
+	if err := json.Unmarshal(doc.Object, &objectURL); err == nil && objectURL != "" {
+		return outboxCreateObject{ID: doc.ID, Actor: actor, Object: objectURL, Published: published}, true
 	}
-	var embedded map[string]any
-	if err := json.Unmarshal(doc.Object, &embedded); err != nil {
+	object, _, err := ExtractIDAndInbox(doc.Object)
+	if err != nil {
 		return outboxCreateObject{}, false
 	}
-	return outboxCreateObject{Actor: actor, ObjectRaw: doc.Object}, true
+	return outboxCreateObject{ID: doc.ID, Actor: actor, Object: object, ObjectRaw: doc.Object, Published: published}, true
 }
 
 type outboxAnnounce struct {
@@ -96,6 +115,49 @@ type outboxAnnounce struct {
 	Object    string
 	ObjectRaw json.RawMessage
 	Published time.Time
+}
+
+func (u HydrateRemoteObjectUseCase) outboxCreateNote(ctx context.Context, account models.Account, createObject outboxCreateObject) ([]byte, ExtractedNote, error) {
+	if len(createObject.ObjectRaw) > 0 {
+		note, _ := extractFetchedNote(createObject.ObjectRaw)
+		return createObject.ObjectRaw, note, nil
+	}
+	if createObject.Object == "" {
+		return nil, ExtractedNote{}, nil
+	}
+	fetched, err := u.fetcher.FetchObject(ctx, createObject.Object, &account)
+	if err != nil {
+		return nil, ExtractedNote{}, err
+	}
+	note, _ := extractFetchedNote(fetched)
+	return fetched, note, nil
+}
+
+func (u HydrateRemoteObjectUseCase) createRemoteOutboxBoost(ctx context.Context, account models.Account, actor, objectURI, activityID string, published time.Time) error {
+	if u.boosts == nil || actor == "" || objectURI == "" {
+		return nil
+	}
+	persist := func(ctx context.Context, tx *db.Tx) error {
+		note, err := u.notes.GetNoteByURI(ctx, tx, objectURI)
+		if err != nil {
+			return nil
+		}
+		uri := activityID
+		if uri == "" {
+			uri = objectURI + "#outbox-" + actor
+		}
+		if published.IsZero() {
+			published = time.Now().UTC()
+		}
+		_, err = u.boosts.CreateBoost(ctx, tx, repos.CreateBoostInput{LocalAccountID: account.ID, Actor: actor, NoteID: note.ID, URI: uri, PublishedAt: published})
+		return err
+	}
+	if u.txProvider == nil {
+		return persist(ctx, nil)
+	}
+	return u.txProvider.RunInTx(ctx, sql.TxOptions{}, func(ctx context.Context, tx db.Tx) error {
+		return persist(ctx, &tx)
+	})
 }
 
 func extractOutboxAnnounce(raw []byte) (outboxAnnounce, bool) {
@@ -117,10 +179,7 @@ func extractOutboxAnnounce(raw []byte) (outboxAnnounce, bool) {
 	if err != nil {
 		return outboxAnnounce{}, false
 	}
-	published, err := time.Parse(time.RFC3339, doc.Published)
-	if err != nil {
-		published = time.Now().UTC()
-	}
+	published, _ := time.Parse(time.RFC3339, doc.Published)
 	return outboxAnnounce{ID: doc.ID, Actor: actor, Object: object, ObjectRaw: doc.Object, Published: published}, true
 }
 
@@ -131,7 +190,27 @@ func (u HydrateRemoteObjectUseCase) hydrateRemoteAnnounce(ctx context.Context, a
 	if expectedActor != "" && announce.Actor != expectedActor {
 		return nil
 	}
-	if _, err := u.notes.GetNoteByURI(ctx, nil, announce.Object); err != nil {
+	noteURI := announce.Object
+	if createObject, ok := extractOutboxCreateObject(announce.ObjectRaw); ok {
+		objectRaw, note, err := u.outboxCreateNote(ctx, account, createObject)
+		if err != nil {
+			return err
+		}
+		if note.URI != "" {
+			noteURI = note.URI
+		} else if createObject.Object != "" {
+			noteURI = createObject.Object
+		}
+		if announce.Published.IsZero() {
+			announce.Published = createObject.Published
+		}
+		if announce.Published.IsZero() {
+			announce.Published = note.PublishedAt
+		}
+		if len(objectRaw) > 0 {
+			_ = u.hydrateRawObject(ctx, account, objectRaw, "", false)
+		}
+	} else if _, err := u.notes.GetNoteByURI(ctx, nil, noteURI); err != nil {
 		var embedded map[string]any
 		if err := json.Unmarshal(announce.ObjectRaw, &embedded); err == nil {
 			if raw, err := json.Marshal(embedded); err == nil {
@@ -141,16 +220,26 @@ func (u HydrateRemoteObjectUseCase) hydrateRemoteAnnounce(ctx context.Context, a
 			_ = u.hydrateRawObject(ctx, account, fetched, "", false)
 		}
 	}
+	if noteURI == "" {
+		return nil
+	}
 	persist := func(ctx context.Context, tx *db.Tx) error {
-		note, err := u.notes.GetNoteByURI(ctx, tx, announce.Object)
+		note, err := u.notes.GetNoteByURI(ctx, tx, noteURI)
 		if err != nil {
 			return nil
 		}
 		uri := announce.ID
 		if uri == "" {
-			uri = announce.Object + "#announce-" + announce.Actor
+			uri = noteURI + "#announce-" + announce.Actor
 		}
-		_, err = u.boosts.CreateBoost(ctx, tx, repos.CreateBoostInput{LocalAccountID: account.ID, Actor: announce.Actor, NoteID: note.ID, URI: uri, PublishedAt: announce.Published})
+		published := announce.Published
+		if published.IsZero() {
+			published = note.PublishedAt
+		}
+		if published.IsZero() {
+			published = time.Now().UTC()
+		}
+		_, err = u.boosts.CreateBoost(ctx, tx, repos.CreateBoostInput{LocalAccountID: account.ID, Actor: announce.Actor, NoteID: note.ID, URI: uri, PublishedAt: published})
 		return err
 	}
 	if u.txProvider == nil {

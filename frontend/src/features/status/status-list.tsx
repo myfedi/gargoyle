@@ -36,6 +36,8 @@ type StatusListProps = {
   onAction?: (action: StatusAction, status: MastodonStatus) => Promise<void> | void;
   onVotePoll?: (status: MastodonStatus, choices: number[]) => Promise<void> | void;
   renderAfterStatus?: (status: MastodonStatus) => ReactNode;
+  isLoading?: boolean;
+  loadingLabel?: string;
 };
 
 export function StatusList({
@@ -53,6 +55,8 @@ export function StatusList({
   onAction,
   onVotePoll,
   renderAfterStatus,
+  isLoading = false,
+  loadingLabel = "Loading posts",
 }: StatusListProps) {
   const [statusPendingDeletion, setStatusPendingDeletion] = useState<MastodonStatus | null>(null);
   const [statusBeingEdited, setStatusBeingEdited] = useState<MastodonStatus | null>(null);
@@ -63,7 +67,7 @@ export function StatusList({
   if (statuses.length === 0) {
     return (
       <div className="mx-auto w-full max-w-2xl">
-        <EmptyState title={emptyTitle} description={emptyDescription} />
+        {isLoading ? <StatusListSkeleton label={loadingLabel} /> : <EmptyState title={emptyTitle} description={emptyDescription} />}
       </div>
     );
   }
@@ -261,6 +265,35 @@ export function StatusList({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+export function StatusListSkeleton({ label = "Loading posts" }: { label?: string }) {
+  return (
+    <div className="space-y-5" aria-label={label} aria-busy="true">
+      {[0, 1, 2].map((item) => (
+        <div key={item} className="flex animate-pulse items-start gap-3 py-1">
+          <div className="size-10 shrink-0 rounded-full bg-secondary" />
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-28 rounded-full bg-secondary" />
+              <div className="h-3 w-20 rounded-full bg-secondary/80" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-3.5 w-full rounded-full bg-secondary" />
+              <div className="h-3.5 w-11/12 rounded-full bg-secondary" />
+              <div className="h-3.5 w-2/3 rounded-full bg-secondary" />
+            </div>
+            {item === 1 ? <div className="h-28 rounded-lg bg-secondary/70" /> : null}
+            <div className="flex gap-5 pt-1">
+              <div className="h-4 w-10 rounded-full bg-secondary/80" />
+              <div className="h-4 w-10 rounded-full bg-secondary/80" />
+              <div className="h-4 w-10 rounded-full bg-secondary/80" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

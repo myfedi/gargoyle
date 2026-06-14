@@ -16,7 +16,7 @@ export function startNotificationStream(accessToken: string, handlers: Notificat
   const watchedRelationships = new Set<string>();
 
   function streamURL() {
-    const url = new URL(`${trimTrailingSlash(getApiBaseUrl())}/api/v1/streaming/user/notification`);
+    const url = new URL(`${trimTrailingSlash(getApiBaseUrl())}/api/v1/streaming/user/notification`, globalThis.location.origin);
     if (watchedRelationships.size > 0) {
       url.searchParams.set("watch_relationships", [...watchedRelationships].join(","));
     }

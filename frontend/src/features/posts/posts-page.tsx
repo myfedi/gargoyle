@@ -9,7 +9,7 @@ import { EmptyState } from "@/features/shared";
 import { ComposeForm, type ComposeValues } from "@/features/status/compose-form";
 import { ReplyComposer } from "@/features/status/reply-composer";
 import { optimisticStatusAction, replaceStatus, runStatusAction } from "@/features/status/status-actions";
-import { StatusList, type StatusAction } from "@/features/status/status-list";
+import { StatusList, StatusListSkeleton, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import type { AccountUpdate, MastodonAccount, MastodonStatus } from "@/types/mastodon";
 
@@ -457,11 +457,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
             {timelineError}
           </p>
         ) : isLoading ? (
-          <div className="space-y-3" aria-label="Loading posts">
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="h-24 animate-pulse rounded-md bg-secondary" />
-            ))}
-          </div>
+          <StatusListSkeleton />
         ) : statuses.length === 0 ? (
           <EmptyState title="No posts" description="Nothing to show here yet." />
         ) : (

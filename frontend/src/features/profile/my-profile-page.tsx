@@ -584,6 +584,7 @@ export function MyProfilePage() {
           deletingStatusId={deletingStatusId}
           emptyTitle="No bookmarks"
           emptyDescription="Bookmarked posts will appear here."
+          isLoading={isLoading}
           onDelete={deleteStatus}
           onEdit={editStatus}
           onAction={runAction}
@@ -648,6 +649,7 @@ export function MyProfilePage() {
               deletingStatusId={deletingStatusId}
               emptyTitle="No posts"
               emptyDescription="No posts to show."
+              isLoading={isLoading}
               onDelete={deleteStatus}
               onEdit={editStatus}
               onAction={runAction}

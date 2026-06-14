@@ -293,6 +293,12 @@ function subscribeToHashChange(callback: () => void) {
 }
 
 function getHashRoute() {
+  if (globalThis.location.pathname === "/activitypub/externalInteraction") {
+    const params = new URLSearchParams(globalThis.location.search);
+    const uri = params.get("uri") ?? "";
+    return uri ? `/external-interaction?uri=${encodeURIComponent(uri)}` : "/external-interaction";
+  }
+
   const route = globalThis.location.hash.replace(/^#/, "") || "/";
   if (route.startsWith("/")) {
     return route;
