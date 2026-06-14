@@ -69,7 +69,7 @@ export function startNotificationStream(accessToken: string, handlers: Notificat
       if (stopped) {
         return;
       }
-      if (!requestController.signal.aborted) {
+      if (!requestController.signal.aborted && !isExpectedStreamDisconnect(error)) {
         handlers.onError?.(error instanceof Error ? error : new Error("Notification stream disconnected."));
       }
     } finally {
@@ -96,6 +96,14 @@ export function startNotificationStream(accessToken: string, handlers: Notificat
       globalThis.clearTimeout(reconnectTimeout);
     }
   };
+}
+
+function isExpectedStreamDisconnect(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const message = error.message.toLowerCase();
+  return error.name === "TypeError" && (message.includes("load failed") || message.includes("network") || message.includes("cancelled") || message.includes("aborted"));
 }
 
 async function readServerSentEvents(body: ReadableStream<Uint8Array>, onEvent: (event: string, data: string) => void) {
