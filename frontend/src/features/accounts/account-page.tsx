@@ -133,8 +133,9 @@ export function AccountPage({ route }: AccountPageProps) {
     setError(null);
 
     try {
-      const nextRelationship = await api.followAccount(account.id);
-      setRelationship(nextRelationship);
+      await api.followAccount(account.id);
+      const [nextRelationship] = await api.relationships([account.id]);
+      setRelationship(nextRelationship ?? null);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not follow account.");
     } finally {
@@ -150,8 +151,9 @@ export function AccountPage({ route }: AccountPageProps) {
     setError(null);
 
     try {
-      const nextRelationship = await api.unfollowAccount(account.id);
-      setRelationship(nextRelationship);
+      await api.unfollowAccount(account.id);
+      const [nextRelationship] = await api.relationships([account.id]);
+      setRelationship(nextRelationship ?? null);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Could not unfollow account.");
     } finally {

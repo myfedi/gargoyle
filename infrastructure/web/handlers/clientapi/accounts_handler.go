@@ -229,7 +229,7 @@ func (h APIHandler) followAccount(c *fiber.Ctx) error {
 			return web.HandleDomainError(c, err)
 		}
 	}
-	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: res.Following, Requested: res.Requested, ShowingReblogs: true})
+	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: false, Requested: true, ShowingReblogs: true})
 }
 
 func (h APIHandler) unfollowAccount(c *fiber.Ctx) error {
@@ -246,5 +246,5 @@ func (h APIHandler) unfollowAccount(c *fiber.Ctx) error {
 			return web.HandleDomainError(c, err)
 		}
 	}
-	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: res.Following, Requested: res.Requested, ShowingReblogs: true})
+	return c.JSON(relationshipResponse{ID: c.Params("id"), Following: false, Requested: false, ShowingReblogs: true})
 }
