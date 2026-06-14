@@ -187,6 +187,7 @@ func (r *MediaRepo) ListUnattachedMediaOlderThan(ctx context.Context, tx *dbPort
 	var rows []dbModels.MediaAttachment
 	err = db.NewSelect().Model(&rows).
 		Where("created_at < ?", cutoff).
+		Where("remote_url IS NULL OR remote_url = ''").
 		Where("NOT EXISTS (SELECT 1 FROM note_media_attachments nma WHERE nma.media_id = media_attachment.id)").
 		Where("NOT EXISTS (SELECT 1 FROM accounts a WHERE a.avatar_media_id = media_attachment.id OR a.header_media_id = media_attachment.id)").
 		Order("created_at ASC").
