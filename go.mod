@@ -3,13 +3,13 @@ module github.com/myfedi/gargoyle
 go 1.25
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/stretchr/testify v1.10.0
 )
 
 require (
 	git.sr.ht/~mariusor/go-xsd-duration v0.0.0-20220703122237-02e73435a078 // indirect
-	github.com/SherClockHolmes/webpush-go v1.4.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
@@ -60,7 +60,7 @@ require (
 
 require (
 	github.com/go-ap/activitypub v0.0.0-20260416122353-fb80985e153a
-	github.com/gofiber/fiber/v2 v2.52.9
+	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
