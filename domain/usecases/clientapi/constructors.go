@@ -25,6 +25,11 @@ func NewInteractions(cfg InteractionsConfig) Interactions {
 	return Interactions{deps: cfg}
 }
 
+func NewExternalInteraction(cfg ExternalInteractionConfig) ExternalInteraction {
+	validateExternalInteractionConfig(cfg)
+	return ExternalInteraction{deps: cfg, resolver: accountResolverFromExternalInteraction(cfg)}
+}
+
 func NewNotifications(cfg NotificationsConfig) Notifications {
 	validateNotificationsConfig(cfg)
 	return Notifications{deps: cfg}
@@ -81,6 +86,13 @@ func validateInteractionsConfig(cfg InteractionsConfig) {
 	validateCommon(cfg.CommonConfig, "interactions")
 	if cfg.NotesRepo == nil || cfg.AccountsRepo == nil || cfg.MediaRepo == nil || cfg.SocialRepo == nil || cfg.BoostsRepo == nil || cfg.MentionsRepo == nil || cfg.PollsRepo == nil || cfg.RemoteAccountsRepo == nil || cfg.DomainBlocksRepo == nil || cfg.RemoteResolver == nil || cfg.IDGenerator == nil {
 		panic("client API interactions workflow missing repository or service dependency")
+	}
+}
+
+func validateExternalInteractionConfig(cfg ExternalInteractionConfig) {
+	validateCommon(cfg.CommonConfig, "external interaction")
+	if cfg.AccountsRepo == nil || cfg.RemoteAccountsRepo == nil || cfg.DomainBlocksRepo == nil || cfg.RemoteResolver == nil {
+		panic("client API external interaction workflow missing repository or resolver dependency")
 	}
 }
 

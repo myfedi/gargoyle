@@ -51,21 +51,22 @@ type ActivityPubDeps struct {
 }
 
 type ClientAPIDeps struct {
-	OAuth              oauth.UseCase
-	Instance           clientapiUsecases.Instance
-	Accounts           clientapiUsecases.Accounts
-	Statuses           clientapiUsecases.Statuses
-	Timelines          clientapiUsecases.Timelines
-	Interactions       clientapiUsecases.Interactions
-	Notifications      clientapiUsecases.Notifications
-	Conversations      clientapiUsecases.Conversations
-	Media              clientapiUsecases.Media
-	Profile            clientapiUsecases.Profile
-	Moderation         clientapiUsecases.Moderation
-	PushRepo           *repos.PushRepo
-	VAPIDPublicKey     string
-	ActivityPubHandler *activitypubHandlers.Handler
-	RealtimeHub        *clientapiHandlers.RealtimeHub
+	OAuth               oauth.UseCase
+	Instance            clientapiUsecases.Instance
+	Accounts            clientapiUsecases.Accounts
+	Statuses            clientapiUsecases.Statuses
+	Timelines           clientapiUsecases.Timelines
+	Interactions        clientapiUsecases.Interactions
+	ExternalInteraction clientapiUsecases.ExternalInteraction
+	Notifications       clientapiUsecases.Notifications
+	Conversations       clientapiUsecases.Conversations
+	Media               clientapiUsecases.Media
+	Profile             clientapiUsecases.Profile
+	Moderation          clientapiUsecases.Moderation
+	PushRepo            *repos.PushRepo
+	VAPIDPublicKey      string
+	ActivityPubHandler  *activitypubHandlers.Handler
+	RealtimeHub         *clientapiHandlers.RealtimeHub
 }
 
 type WorkerDeps struct {
@@ -199,6 +200,7 @@ func BuildDeps(cfg *config.Config) *Deps {
 		TxProvider:         txProvider,
 		AllowPasswordGrant: cfg.OAuth.AllowPasswordGrant,
 	})
+	profileCacheNotifier := clientapiHandlers.NewProfileCacheNotifier()
 	clientAPIFlowCfg := apUsecases.ActivityPubFlowConfig{
 		TxProvider:         txProvider,
 		AccountsRepo:       accountsRepo,
@@ -239,8 +241,10 @@ func BuildDeps(cfg *config.Config) *Deps {
 		contentSanitizer,
 		clientAPIFlowCfg,
 		clientAPIURLExceptions,
+		profileCacheNotifier,
 	))
 	realtimeHub := clientapiHandlers.NewRealtimeHub(clientAPIComponents.Accounts, clientAPIComponents.Notifications)
+	profileCacheNotifier.SetHub(realtimeHub)
 	userProfileHandler.SetRealtimePublisher(func(localAccountID, remoteActor string, notifications bool) {
 		realtimeHub.Publish(clientapiHandlers.RealtimeEvent{LocalAccountID: localAccountID, RemoteActor: remoteActor, Notifications: notifications})
 	})
@@ -249,7 +253,7 @@ func BuildDeps(cfg *config.Config) *Deps {
 		Store:       sqlite,
 		Discovery:   DiscoveryDeps{Webfinger: webfingerHandler, HostMeta: hostMetaHandler, NodeInfo: nodeInfoHandler},
 		ActivityPub: ActivityPubDeps{Handler: userProfileHandler},
-		ClientAPI:   ClientAPIDeps{OAuth: oauthUC, Instance: clientAPIComponents.Instance, Accounts: clientAPIComponents.Accounts, Statuses: clientAPIComponents.Statuses, Timelines: clientAPIComponents.Timelines, Interactions: clientAPIComponents.Interactions, Notifications: clientAPIComponents.Notifications, Conversations: clientAPIComponents.Conversations, Media: clientAPIComponents.Media, Profile: clientAPIComponents.Profile, Moderation: clientAPIComponents.Moderation, PushRepo: pushRepo, VAPIDPublicKey: cfg.ClientAPI.VAPIDPublicKey, ActivityPubHandler: userProfileHandler, RealtimeHub: realtimeHub},
+		ClientAPI:   ClientAPIDeps{OAuth: oauthUC, Instance: clientAPIComponents.Instance, Accounts: clientAPIComponents.Accounts, Statuses: clientAPIComponents.Statuses, Timelines: clientAPIComponents.Timelines, Interactions: clientAPIComponents.Interactions, ExternalInteraction: clientAPIComponents.ExternalInteraction, Notifications: clientAPIComponents.Notifications, Conversations: clientAPIComponents.Conversations, Media: clientAPIComponents.Media, Profile: clientAPIComponents.Profile, Moderation: clientAPIComponents.Moderation, PushRepo: pushRepo, VAPIDPublicKey: cfg.ClientAPI.VAPIDPublicKey, ActivityPubHandler: userProfileHandler, RealtimeHub: realtimeHub},
 		Workers: WorkerDeps{
 			JobsRepo:             jobsRepo,
 			AccountsRepo:         accountsRepo,
@@ -289,7 +293,7 @@ func MountActivityPub(app *fiber.App, deps ActivityPubDeps) {
 
 func MountClientAPI(app *fiber.App, deps ClientAPIDeps) {
 	clientapiHandlers.NewOAuthHandler(deps.OAuth, deps.VAPIDPublicKey).Setup(app)
-	clientapiHandlers.NewAPIHandler(clientapiHandlers.APIHandlerConfig{OAuth: deps.OAuth, Instance: deps.Instance, Accounts: deps.Accounts, Statuses: deps.Statuses, Timelines: deps.Timelines, Interactions: deps.Interactions, Notifications: deps.Notifications, Conversations: deps.Conversations, Media: deps.Media, Profile: deps.Profile, Moderation: deps.Moderation, PushRepo: deps.PushRepo, VAPIDPublicKey: deps.VAPIDPublicKey, QueueDelivery: deps.ActivityPubHandler.QueueDelivery, RealtimeHub: deps.RealtimeHub}).Setup(app)
+	clientapiHandlers.NewAPIHandler(clientapiHandlers.APIHandlerConfig{OAuth: deps.OAuth, Instance: deps.Instance, Accounts: deps.Accounts, Statuses: deps.Statuses, Timelines: deps.Timelines, Interactions: deps.Interactions, ExternalInteraction: deps.ExternalInteraction, Notifications: deps.Notifications, Conversations: deps.Conversations, Media: deps.Media, Profile: deps.Profile, Moderation: deps.Moderation, PushRepo: deps.PushRepo, VAPIDPublicKey: deps.VAPIDPublicKey, QueueDelivery: deps.ActivityPubHandler.QueueDelivery, RealtimeHub: deps.RealtimeHub}).Setup(app)
 }
 
 func StartCoreWorkers(ctx context.Context, deps WorkerDeps) {

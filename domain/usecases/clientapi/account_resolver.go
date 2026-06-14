@@ -27,6 +27,10 @@ func accountResolverFromNotifications(cfg NotificationsConfig) accountResolver {
 	return accountResolver{accountsRepo: cfg.AccountsRepo, remoteAccountsRepo: cfg.RemoteAccountsRepo, domainBlocksRepo: cfg.DomainBlocksRepo, remoteResolver: cfg.RemoteResolver}
 }
 
+func accountResolverFromExternalInteraction(cfg ExternalInteractionConfig) accountResolver {
+	return accountResolver{accountsRepo: cfg.AccountsRepo, remoteAccountsRepo: cfg.RemoteAccountsRepo, domainBlocksRepo: cfg.DomainBlocksRepo, remoteResolver: cfg.RemoteResolver}
+}
+
 func (r accountResolver) getAccount(ctx context.Context, localAccount *models.Account, accountID string) (*models.Account, *domainerrors.DomainError) {
 	if derr := requireAccount(localAccount); derr != nil {
 		return nil, derr

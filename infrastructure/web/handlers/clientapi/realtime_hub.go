@@ -19,6 +19,7 @@ type RealtimeEvent struct {
 	LocalAccountID string
 	RemoteActor    string
 	Notifications  bool
+	AccountUpdate  *AccountUpdateResponse
 }
 
 type realtimeClient struct {
@@ -106,6 +107,9 @@ func (h *RealtimeHub) deliver(client *realtimeClient, event RealtimeEvent) {
 		if client.watched[id] {
 			h.deliverRelationship(client, id)
 		}
+	}
+	if event.AccountUpdate != nil {
+		h.send(client, streamEvent{Event: "account_update", Data: event.AccountUpdate})
 	}
 }
 

@@ -282,9 +282,17 @@ func accountFromRemoteActor(doc remoteActorDocument) (*models.Account, error) {
 		FollowingURI: doc.Following,
 		FollowersURI: doc.Followers,
 		PublicKey:    doc.PublicKey.PublicKeyPem,
-		ActorType:    models.ActorTypePerson,
+		ActorType:    remoteActorType(doc.Type),
 		Locked:       doc.Locked,
 	}, nil
+}
+
+func remoteActorType(value string) models.ActorType {
+	actorType := models.ParseActorType(value)
+	if actorType == models.ActorTypeUnknown {
+		return models.ActorTypePerson
+	}
+	return actorType
 }
 
 func accountProfileFields(value any) []models.AccountProfileField {

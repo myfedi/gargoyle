@@ -18,6 +18,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const oauthExchangePromises = new Map<string, Promise<AuthSession>>();
+const oauthReturnToKey = "gargoyle.oauth.return_to";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(() => readAuthSession());
@@ -80,7 +81,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(nextSession);
         setError(null);
         setStatus("authenticated");
-        globalThis.history.replaceState({}, document.title, "/");
+        const returnTo = globalThis.sessionStorage.getItem(oauthReturnToKey);
+        globalThis.sessionStorage.removeItem(oauthReturnToKey);
+        globalThis.history.replaceState({}, document.title, safeOAuthReturnTo(returnTo));
       } catch (caughtError) {
         if (cancelled) {
           return;
@@ -141,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    globalThis.sessionStorage.setItem(oauthReturnToKey, currentOAuthReturnTo());
     const url = await createAuthorizationUrl(config);
     globalThis.location.assign(url.toString());
   }, []);
@@ -171,6 +175,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+function currentOAuthReturnTo() {
+  return `${globalThis.location.pathname}${globalThis.location.search}${globalThis.location.hash}` || "/";
+}
+
+function safeOAuthReturnTo(value: string | null) {
+  if (!value || !value.startsWith("/")) {
+    return "/";
+  }
+  if (value.startsWith("//")) {
+    return "/";
+  }
+  return value;
 }
 
 function sessionExpiryCheckDelay(expiresAtMs: number) {

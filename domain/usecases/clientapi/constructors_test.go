@@ -27,6 +27,7 @@ func TestConstructorsValidateRequiredDependencies(t *testing.T) {
 		{name: "statuses deps", fn: func() { NewStatuses(StatusesConfig{CommonConfig: common}) }},
 		{name: "timelines deps", fn: func() { NewTimelines(TimelinesConfig{CommonConfig: common}) }},
 		{name: "interactions deps", fn: func() { NewInteractions(InteractionsConfig{CommonConfig: common}) }},
+		{name: "external interaction deps", fn: func() { NewExternalInteraction(ExternalInteractionConfig{CommonConfig: common}) }},
 		{name: "notifications deps", fn: func() { NewNotifications(NotificationsConfig{CommonConfig: common}) }},
 		{name: "conversations deps", fn: func() { NewConversations(ConversationsConfig{CommonConfig: common}) }},
 		{name: "media deps", fn: func() { NewMedia(MediaConfig{}) }},

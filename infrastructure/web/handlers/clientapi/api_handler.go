@@ -23,6 +23,7 @@ type APIHandler struct {
 	statusesWorkflow      clientapiUC.Statuses
 	timelinesWorkflow     clientapiUC.Timelines
 	interactionsWorkflow  clientapiUC.Interactions
+	externalInteraction   clientapiUC.ExternalInteraction
 	notificationsWorkflow clientapiUC.Notifications
 	conversationsWorkflow clientapiUC.Conversations
 	mediaWorkflow         clientapiUC.Media
@@ -35,21 +36,22 @@ type APIHandler struct {
 }
 
 type APIHandlerConfig struct {
-	OAuth          oauth.UseCase
-	Instance       clientapiUC.Instance
-	Accounts       clientapiUC.Accounts
-	Statuses       clientapiUC.Statuses
-	Timelines      clientapiUC.Timelines
-	Interactions   clientapiUC.Interactions
-	Notifications  clientapiUC.Notifications
-	Conversations  clientapiUC.Conversations
-	Media          clientapiUC.Media
-	Profile        clientapiUC.Profile
-	Moderation     clientapiUC.Moderation
-	PushRepo       repos.PushSubscriptionRepository
-	VAPIDPublicKey string
-	QueueDelivery  DeliveryQueue
-	RealtimeHub    *RealtimeHub
+	OAuth               oauth.UseCase
+	Instance            clientapiUC.Instance
+	Accounts            clientapiUC.Accounts
+	Statuses            clientapiUC.Statuses
+	Timelines           clientapiUC.Timelines
+	Interactions        clientapiUC.Interactions
+	ExternalInteraction clientapiUC.ExternalInteraction
+	Notifications       clientapiUC.Notifications
+	Conversations       clientapiUC.Conversations
+	Media               clientapiUC.Media
+	Profile             clientapiUC.Profile
+	Moderation          clientapiUC.Moderation
+	PushRepo            repos.PushSubscriptionRepository
+	VAPIDPublicKey      string
+	QueueDelivery       DeliveryQueue
+	RealtimeHub         *RealtimeHub
 }
 
 func NewAPIHandler(cfg APIHandlerConfig) APIHandler {
@@ -60,13 +62,15 @@ func NewAPIHandler(cfg APIHandlerConfig) APIHandler {
 	if realtimeHub == nil {
 		realtimeHub = NewRealtimeHub(cfg.Accounts, cfg.Notifications)
 	}
-	return APIHandler{oauth: cfg.OAuth, instanceWorkflow: cfg.Instance, accountsWorkflow: cfg.Accounts, statusesWorkflow: cfg.Statuses, timelinesWorkflow: cfg.Timelines, interactionsWorkflow: cfg.Interactions, notificationsWorkflow: cfg.Notifications, conversationsWorkflow: cfg.Conversations, mediaWorkflow: cfg.Media, profileWorkflow: cfg.Profile, moderationWorkflow: cfg.Moderation, pushRepo: cfg.PushRepo, vapidPublicKey: cfg.VAPIDPublicKey, queueDelivery: cfg.QueueDelivery, realtimeHub: realtimeHub}
+	return APIHandler{oauth: cfg.OAuth, instanceWorkflow: cfg.Instance, accountsWorkflow: cfg.Accounts, statusesWorkflow: cfg.Statuses, timelinesWorkflow: cfg.Timelines, interactionsWorkflow: cfg.Interactions, externalInteraction: cfg.ExternalInteraction, notificationsWorkflow: cfg.Notifications, conversationsWorkflow: cfg.Conversations, mediaWorkflow: cfg.Media, profileWorkflow: cfg.Profile, moderationWorkflow: cfg.Moderation, pushRepo: cfg.PushRepo, vapidPublicKey: cfg.VAPIDPublicKey, queueDelivery: cfg.QueueDelivery, realtimeHub: realtimeHub}
 }
 
 func (h APIHandler) Setup(app *fiber.App) {
 	app.Get("/api/v1/instance", h.instanceV1)
 	app.Get("/api/v2/instance", h.instanceV2)
 	app.Get("/api/v2/search", h.search)
+	app.Get("/api/v1/external_interaction", h.externalInteractionResolve)
+	app.Get("/activitypub/externalInteraction", h.externalInteractionPage)
 	app.Get("/api/v1/accounts/search", h.accountsSearch)
 	app.Get("/api/v1/accounts/relationships", h.relationships)
 	app.Get("/api/v1/admin/domain_blocks", h.adminDomainBlocks)

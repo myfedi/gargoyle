@@ -16,6 +16,12 @@ type RemoteAccountResolver interface {
 	ResolveAccount(ctx context.Context, query string, signer *models.Account) (*models.Account, error)
 }
 
+// RemoteProfileCacheNotifier publishes after opportunistic remote avatar/header
+// caching updates an account. Implementations are adapters, for example SSE.
+type RemoteProfileCacheNotifier interface {
+	RemoteProfileImagesCached(localAccountID, actorURI string)
+}
+
 type CommonConfig struct {
 	Host          string
 	Domain        string
@@ -40,6 +46,7 @@ type AccountsConfig struct {
 	DomainBlocksRepo      repos.DomainBlocksRepository
 	IDGenerator           ports.IDGenerator
 	RemoteResolver        RemoteAccountResolver
+	ProfileCacheNotifier  RemoteProfileCacheNotifier
 	CreateFollowingUC     apUsecases.CreateFollowingUseCase
 	UndoFollowingUC       apUsecases.UndoFollowingUseCase
 	FollowDecisionUC      apUsecases.FollowRequestDecisionUseCase
@@ -69,19 +76,20 @@ type StatusesConfig struct {
 
 type TimelinesConfig struct {
 	CommonConfig
-	NotesRepo          repos.NotesRepository
-	AccountsRepo       repos.AccountsRepo
-	FollowsRepo        repos.FollowsRepository
-	MediaRepo          repos.MediaRepository
-	MediaStorage       ports.MediaStorage
-	RemoteMediaFetcher ports.RemoteMediaFetcher
-	SocialRepo         repos.SocialRepository
-	BoostsRepo         repos.BoostsRepository
-	MentionsRepo       repos.MentionsRepository
-	PollsRepo          repos.PollsRepository
-	RemoteAccountsRepo repos.RemoteAccountsRepository
-	DomainBlocksRepo   repos.DomainBlocksRepository
-	RemoteResolver     RemoteAccountResolver
+	NotesRepo            repos.NotesRepository
+	AccountsRepo         repos.AccountsRepo
+	FollowsRepo          repos.FollowsRepository
+	MediaRepo            repos.MediaRepository
+	MediaStorage         ports.MediaStorage
+	RemoteMediaFetcher   ports.RemoteMediaFetcher
+	SocialRepo           repos.SocialRepository
+	BoostsRepo           repos.BoostsRepository
+	MentionsRepo         repos.MentionsRepository
+	PollsRepo            repos.PollsRepository
+	RemoteAccountsRepo   repos.RemoteAccountsRepository
+	DomainBlocksRepo     repos.DomainBlocksRepository
+	RemoteResolver       RemoteAccountResolver
+	ProfileCacheNotifier RemoteProfileCacheNotifier
 }
 
 type InteractionsConfig struct {
@@ -100,6 +108,14 @@ type InteractionsConfig struct {
 	CreateInteractionUC apUsecases.CreateInteractionUseCase
 	UndoInteractionUC   apUsecases.UndoInteractionUseCase
 	VotePollUC          apUsecases.VotePollUseCase
+}
+
+type ExternalInteractionConfig struct {
+	CommonConfig
+	AccountsRepo       repos.AccountsRepo
+	RemoteAccountsRepo repos.RemoteAccountsRepository
+	DomainBlocksRepo   repos.DomainBlocksRepository
+	RemoteResolver     RemoteAccountResolver
 }
 
 type NotificationsConfig struct {

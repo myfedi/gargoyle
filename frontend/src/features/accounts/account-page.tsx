@@ -12,7 +12,7 @@ import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
 import { decodeRouteParam } from "@/lib/routes";
 import { htmlToPlainText } from "@/lib/text";
-import type { MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
+import type { AccountUpdate, MastodonAccount, MastodonRelationship, MastodonStatus } from "@/types/mastodon";
 
 type AccountPageProps = {
   route: string;
@@ -90,6 +90,26 @@ export function AccountPage({ route }: AccountPageProps) {
   useEffect(() => {
     void loadAccount();
   }, [loadAccount]);
+
+  useEffect(() => {
+    if (!api) return;
+    const mastodonApi = api;
+    function handleAccountUpdate(event: Event) {
+      const update = (event as CustomEvent<AccountUpdate>).detail;
+      if (!update?.id) return;
+      const visible = account?.id === update.id || statuses.some((status) => status.account.id === update.id || status.reblog?.account.id === update.id);
+      if (!visible) return;
+      void mastodonApi.account(update.id).then((updatedAccount) => {
+        if (account?.id === updatedAccount.id) {
+          setAccount(updatedAccount);
+        }
+        setStatuses((current) => updateStatusesAccount(current, updatedAccount));
+        setPinnedStatuses((current) => updateStatusesAccount(current, updatedAccount));
+      }).catch(() => undefined);
+    }
+    globalThis.addEventListener("gargoyle:account-update", handleAccountUpdate);
+    return () => globalThis.removeEventListener("gargoyle:account-update", handleAccountUpdate);
+  }, [account?.id, api, statuses]);
 
   async function loadMore() {
     if (!api || !oldestStatusId) {
@@ -408,6 +428,21 @@ export function AccountPage({ route }: AccountPageProps) {
       </Dialog>
     </section>
   );
+}
+
+function updateStatusesAccount(statuses: MastodonStatus[], account: MastodonAccount) {
+  return statuses.map((status) => updateStatusAccount(status, account));
+}
+
+function updateStatusAccount(status: MastodonStatus, account: MastodonAccount): MastodonStatus {
+  const next = status.account.id === account.id ? { ...status, account } : status;
+  if (next.reblog) {
+    const reblog = updateStatusAccount(next.reblog, account);
+    if (reblog !== next.reblog) {
+      return { ...next, reblog };
+    }
+  }
+  return next;
 }
 
 function insertStatusAfter(statuses: MastodonStatus[], status: MastodonStatus, parentID: string) {

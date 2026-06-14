@@ -1,9 +1,10 @@
 import { getApiBaseUrl, trimTrailingSlash } from "@/lib/config";
-import type { MastodonNotification, MastodonRelationship } from "@/types/mastodon";
+import type { AccountUpdate, MastodonNotification, MastodonRelationship } from "@/types/mastodon";
 
 export type NotificationStreamHandlers = {
   onNotification: (notification: MastodonNotification) => void;
   onRelationship?: (relationship: MastodonRelationship) => void;
+  onAccountUpdate?: (account: AccountUpdate) => void;
   onError?: (error: Error) => void;
 };
 
@@ -59,6 +60,9 @@ export function startNotificationStream(accessToken: string, handlers: Notificat
         }
         if (event === "relationship_update") {
           handlers.onRelationship?.(JSON.parse(data) as MastodonRelationship);
+        }
+        if (event === "account_update") {
+          handlers.onAccountUpdate?.(JSON.parse(data) as AccountUpdate);
         }
       });
     } catch (error) {

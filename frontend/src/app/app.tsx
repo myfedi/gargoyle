@@ -9,6 +9,7 @@ import { DomainModerationPage } from "@/features/admin/domain-moderation-page";
 import { LoginPage } from "@/features/auth/login-page";
 import { AccountPage } from "@/features/accounts/account-page";
 import { DirectMessagesPage } from "@/features/direct/direct-messages-page";
+import { ExternalInteractionPage } from "@/features/external/external-interaction-page";
 import { NotificationsPage } from "@/features/notifications/notifications-page";
 import { PostsPage } from "@/features/posts/posts-page";
 import { MyProfilePage } from "@/features/profile/my-profile-page";
@@ -112,6 +113,9 @@ function AuthenticatedApp() {
       },
       onRelationship(relationship) {
         globalThis.dispatchEvent(new CustomEvent("gargoyle:relationship", { detail: relationship }));
+      },
+      onAccountUpdate(accountUpdate) {
+        globalThis.dispatchEvent(new CustomEvent("gargoyle:account-update", { detail: accountUpdate }));
       },
       onError(error) {
         console.warn("Notification stream disconnected", error);
@@ -257,6 +261,10 @@ function renderRoute(route: string, RoutePage: React.ComponentType | undefined) 
 
   if (route.startsWith("/statuses/")) {
     return <StatusPage route={route} />;
+  }
+
+  if (route === "/external-interaction" || route.startsWith("/external-interaction?")) {
+    return <ExternalInteractionPage route={route} />;
   }
 
   if (!RoutePage) {

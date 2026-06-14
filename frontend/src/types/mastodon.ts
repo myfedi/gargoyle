@@ -4,6 +4,11 @@ export type MastodonAccountField = {
   verified_at?: string | null;
 };
 
+export type AccountUpdate = {
+  id: string;
+  uri: string;
+};
+
 export type MastodonAccount = {
   id: string;
   username: string;
@@ -15,6 +20,7 @@ export type MastodonAccount = {
   header?: string;
   header_static?: string;
   bot?: boolean;
+  group?: boolean;
   locked?: boolean;
   note?: string;
   followers_count?: number;
@@ -55,6 +61,10 @@ export type MastodonRelationship = {
   domain_blocking: boolean;
   endorsed: boolean;
 };
+
+export type ExternalInteractionResult =
+  | { type: "account"; account: MastodonAccount }
+  | { type: string; account?: MastodonAccount };
 
 export type MastodonSearchResults = {
   accounts: MastodonAccount[];

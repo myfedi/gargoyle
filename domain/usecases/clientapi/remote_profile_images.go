@@ -4,6 +4,7 @@ import (
 	"context"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/myfedi/gargoyle/domain/models"
@@ -19,6 +20,45 @@ func remoteProfileImagesCached(account *models.Account) bool {
 	avatarCached := account.AvatarURL == nil || *account.AvatarURL == "" || account.AvatarMediaID != nil
 	headerCached := account.HeaderURL == nil || *account.HeaderURL == "" || account.HeaderMediaID != nil
 	return avatarCached && headerCached
+}
+
+const remoteProfileImageCacheTimeout = 8 * time.Second
+
+var (
+	remoteProfileImageCacheSlots    = make(chan struct{}, 2)
+	remoteProfileImageCacheInflight sync.Map
+)
+
+func cacheRemoteAccountProfileImagesAsync(mediaRepo repos.MediaRepository, mediaStorage ports.MediaStorage, remoteMediaFetcher ports.RemoteMediaFetcher, remoteAccountsRepo repos.RemoteAccountsRepository, notifier RemoteProfileCacheNotifier, localAccountID string, remote *models.Account) {
+	if remote == nil || remote.URI == "" || localAccountID == "" || remoteAccountsRepo == nil || remoteProfileImagesCached(remote) {
+		return
+	}
+	key := localAccountID + "\x00" + remote.URI
+	if _, loaded := remoteProfileImageCacheInflight.LoadOrStore(key, struct{}{}); loaded {
+		return
+	}
+	select {
+	case remoteProfileImageCacheSlots <- struct{}{}:
+	default:
+		remoteProfileImageCacheInflight.Delete(key)
+		return
+	}
+	remoteCopy := *remote
+	go func() {
+		defer func() {
+			<-remoteProfileImageCacheSlots
+			remoteProfileImageCacheInflight.Delete(key)
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), remoteProfileImageCacheTimeout)
+		defer cancel()
+		cacheRemoteAccountProfileImages(ctx, nil, mediaRepo, mediaStorage, remoteMediaFetcher, localAccountID, &remoteCopy)
+		if remoteCopy.AvatarMediaID == remote.AvatarMediaID && remoteCopy.HeaderMediaID == remote.HeaderMediaID {
+			return
+		}
+		if _, err := remoteAccountsRepo.UpsertRemoteAccount(ctx, nil, remoteCopy); err == nil && notifier != nil {
+			notifier.RemoteProfileImagesCached(localAccountID, remoteCopy.URI)
+		}
+	}()
 }
 
 func cacheRemoteAccountProfileImages(ctx context.Context, tx *db.Tx, mediaRepo repos.MediaRepository, mediaStorage ports.MediaStorage, remoteMediaFetcher ports.RemoteMediaFetcher, localAccountID string, remote *models.Account) {

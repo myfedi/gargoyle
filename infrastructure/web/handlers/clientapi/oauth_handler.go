@@ -225,7 +225,7 @@ func accountToResponseWithStats(account *models.Account, stats oauth.AccountStat
 	}
 	avatar := accountAvatarURL(account)
 	header := accountHeaderURL(account)
-	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: account.Locked, Bot: false, Discoverable: true, Group: false, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header, Fields: accountFieldsToResponse(account.Fields), FollowersCount: stats.FollowersCount, FollowingCount: stats.FollowingCount, StatusesCount: stats.StatusesCount}
+	return accountResponse{ID: account.ID, Username: account.Username, Acct: acct, DisplayName: stringValue(account.DisplayName), Locked: account.Locked, Bot: account.ActorType == models.ActorTypeService || account.ActorType == models.ActorTypeApplication, Discoverable: true, Group: account.ActorType == models.ActorTypeGroup, CreatedAt: created, Note: stringValue(account.Summary), URL: firstNonEmpty(stringValue(account.URL), account.URI), Avatar: avatar, AvatarStatic: avatar, Header: header, HeaderStatic: header, Fields: accountFieldsToResponse(account.Fields), FollowersCount: stats.FollowersCount, FollowingCount: stats.FollowingCount, StatusesCount: stats.StatusesCount}
 }
 
 func accountFieldsToResponse(fields []models.AccountProfileField) []accountFieldResponse {

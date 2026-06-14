@@ -11,7 +11,7 @@ import { ReplyComposer } from "@/features/status/reply-composer";
 import { optimisticStatusAction, replaceStatus, runStatusAction } from "@/features/status/status-actions";
 import { StatusList, type StatusAction } from "@/features/status/status-list";
 import { createMastodonApi } from "@/lib/mastodon-api";
-import type { MastodonAccount, MastodonStatus } from "@/types/mastodon";
+import type { AccountUpdate, MastodonAccount, MastodonStatus } from "@/types/mastodon";
 
 const timelineTabs = [
   { value: "home", label: "Home" },
@@ -101,6 +101,22 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
     timelineCache[activeTimeline] = { timeline: activeTimeline, statuses, currentAccount, hasMore };
     writeTimelineCache();
   }, [activeTimeline, currentAccount, hasMore, statuses]);
+
+  useEffect(() => {
+    if (!api) return;
+    const mastodonApi = api;
+    function handleAccountUpdate(event: Event) {
+      const update = (event as CustomEvent<AccountUpdate>).detail;
+      if (!update?.id) return;
+      const visible = statuses.some((status) => status.account.id === update.id || status.reblog?.account.id === update.id);
+      if (!visible) return;
+      void mastodonApi.account(update.id).then((account) => {
+        setStatuses((current) => updateStatusesAccount(current, account));
+      }).catch(() => undefined);
+    }
+    globalThis.addEventListener("gargoyle:account-update", handleAccountUpdate);
+    return () => globalThis.removeEventListener("gargoyle:account-update", handleAccountUpdate);
+  }, [api, statuses]);
 
   const loadTimeline = useCallback(
     async (timeline: TimelineTab, options: { silent?: boolean } = {}) => {
@@ -494,6 +510,21 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
       </Dialog>
     </section>
   );
+}
+
+function updateStatusesAccount(statuses: MastodonStatus[], account: MastodonAccount) {
+  return statuses.map((status) => updateStatusAccount(status, account));
+}
+
+function updateStatusAccount(status: MastodonStatus, account: MastodonAccount): MastodonStatus {
+  const next = status.account.id === account.id ? { ...status, account } : status;
+  if (next.reblog) {
+    const reblog = updateStatusAccount(next.reblog, account);
+    if (reblog !== next.reblog) {
+      return { ...next, reblog };
+    }
+  }
+  return next;
 }
 
 function routeToTimeline(route: string): TimelineTab {

@@ -47,6 +47,7 @@ type clientAPIWorkflowInputs struct {
 	ModerationRepo        *repos.ModerationRepo
 	ActivityPubFlowConfig apUsecases.ActivityPubFlowConfig
 	URLExceptions         []clientapiHandlers.RemoteURLException
+	ProfileCacheNotifier  clientapiUsecases.RemoteProfileCacheNotifier
 }
 
 type clientAPIWorkflowContext struct {
@@ -75,6 +76,7 @@ type clientAPIComponents struct {
 	Statuses            clientapiUsecases.Statuses
 	Timelines           clientapiUsecases.Timelines
 	Interactions        clientapiUsecases.Interactions
+	ExternalInteraction clientapiUsecases.ExternalInteraction
 	Notifications       clientapiUsecases.Notifications
 	Conversations       clientapiUsecases.Conversations
 	Media               clientapiUsecases.Media
@@ -83,7 +85,7 @@ type clientAPIComponents struct {
 	RemoteObjectFetcher clientapiHandlers.RemoteObjectFetcher
 }
 
-func clientAPIWorkflowInputsFromRuntime(host, domain string, txProvider domainDB.TxProvider, repos runtimeRepos, mediaStorage *adapters.LocalMediaStorage, sanitizer ports.ContentSanitizer, flowCfg apUsecases.ActivityPubFlowConfig, exceptions []clientapiHandlers.RemoteURLException) clientAPIWorkflowInputs {
+func clientAPIWorkflowInputsFromRuntime(host, domain string, txProvider domainDB.TxProvider, repos runtimeRepos, mediaStorage *adapters.LocalMediaStorage, sanitizer ports.ContentSanitizer, flowCfg apUsecases.ActivityPubFlowConfig, exceptions []clientapiHandlers.RemoteURLException, profileCacheNotifier clientapiUsecases.RemoteProfileCacheNotifier) clientAPIWorkflowInputs {
 	return clientAPIWorkflowInputs{
 		Host:                  host,
 		Domain:                domain,
@@ -105,6 +107,7 @@ func clientAPIWorkflowInputsFromRuntime(host, domain string, txProvider domainDB
 		ModerationRepo:        repos.Moderation,
 		ActivityPubFlowConfig: flowCfg,
 		URLExceptions:         exceptions,
+		ProfileCacheNotifier:  profileCacheNotifier,
 	}
 }
 
@@ -116,6 +119,7 @@ func buildClientAPIComponents(in clientAPIWorkflowInputs) clientAPIComponents {
 		Statuses:            buildStatusesWorkflow(ctx),
 		Timelines:           buildTimelinesWorkflow(ctx),
 		Interactions:        buildInteractionsWorkflow(ctx),
+		ExternalInteraction: buildExternalInteractionWorkflow(ctx),
 		Notifications:       buildNotificationsWorkflow(ctx),
 		Conversations:       buildConversationsWorkflow(ctx),
 		Media:               buildMediaWorkflow(ctx),
@@ -182,6 +186,7 @@ func buildAccountsWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.Accou
 		DomainBlocksRepo:      in.ModerationRepo,
 		IDGenerator:           ctx.idGenerator,
 		RemoteResolver:        ctx.remoteResolver,
+		ProfileCacheNotifier:  in.ProfileCacheNotifier,
 		CreateFollowingUC:     ctx.createFollowingUC,
 		UndoFollowingUC:       ctx.undoFollowingUC,
 		FollowDecisionUC:      ctx.followDecisionUC,
@@ -216,20 +221,21 @@ func buildStatusesWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.Statu
 func buildTimelinesWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.Timelines {
 	in := ctx.in
 	return clientapiUsecases.NewTimelines(clientapiUsecases.TimelinesConfig{
-		CommonConfig:       ctx.common,
-		NotesRepo:          in.NotesRepo,
-		AccountsRepo:       in.AccountsRepo,
-		FollowsRepo:        in.FollowsRepo,
-		MediaRepo:          in.MediaRepo,
-		MediaStorage:       in.MediaStorage,
-		RemoteMediaFetcher: ctx.remoteMediaFetcher,
-		SocialRepo:         in.SocialRepo,
-		BoostsRepo:         in.BoostsRepo,
-		MentionsRepo:       in.MentionsRepo,
-		PollsRepo:          in.PollsRepo,
-		RemoteAccountsRepo: in.RemoteAccountsRepo,
-		DomainBlocksRepo:   in.ModerationRepo,
-		RemoteResolver:     ctx.remoteResolver,
+		CommonConfig:         ctx.common,
+		NotesRepo:            in.NotesRepo,
+		AccountsRepo:         in.AccountsRepo,
+		FollowsRepo:          in.FollowsRepo,
+		MediaRepo:            in.MediaRepo,
+		MediaStorage:         in.MediaStorage,
+		RemoteMediaFetcher:   ctx.remoteMediaFetcher,
+		SocialRepo:           in.SocialRepo,
+		BoostsRepo:           in.BoostsRepo,
+		MentionsRepo:         in.MentionsRepo,
+		PollsRepo:            in.PollsRepo,
+		RemoteAccountsRepo:   in.RemoteAccountsRepo,
+		DomainBlocksRepo:     in.ModerationRepo,
+		RemoteResolver:       ctx.remoteResolver,
+		ProfileCacheNotifier: in.ProfileCacheNotifier,
 	})
 }
 
@@ -251,6 +257,17 @@ func buildInteractionsWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.I
 		CreateInteractionUC: ctx.createInteractionUC,
 		UndoInteractionUC:   ctx.undoInteractionUC,
 		VotePollUC:          ctx.votePollUC,
+	})
+}
+
+func buildExternalInteractionWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.ExternalInteraction {
+	in := ctx.in
+	return clientapiUsecases.NewExternalInteraction(clientapiUsecases.ExternalInteractionConfig{
+		CommonConfig:       ctx.common,
+		AccountsRepo:       in.AccountsRepo,
+		RemoteAccountsRepo: in.RemoteAccountsRepo,
+		DomainBlocksRepo:   in.ModerationRepo,
+		RemoteResolver:     ctx.remoteResolver,
 	})
 }
 

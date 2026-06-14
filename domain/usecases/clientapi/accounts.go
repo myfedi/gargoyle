@@ -138,7 +138,7 @@ func (u Accounts) cacheRemoteProfileImages(ctx context.Context, signer *models.A
 	if signer == nil {
 		return
 	}
-	cacheRemoteAccountProfileImages(ctx, nil, u.deps.MediaRepo, u.deps.MediaStorage, u.deps.RemoteMediaFetcher, signer.ID, remote)
+	cacheRemoteAccountProfileImagesAsync(u.deps.MediaRepo, u.deps.MediaStorage, u.deps.RemoteMediaFetcher, u.deps.RemoteAccountsRepo, u.deps.ProfileCacheNotifier, signer.ID, remote)
 }
 
 func (u Accounts) filterBlockedAccounts(ctx context.Context, accounts []models.Account) []models.Account {

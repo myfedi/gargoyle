@@ -1,5 +1,5 @@
 import { ApiClient } from "@/lib/api";
-import type { ActivityPubObjectType, DomainBlock, MastodonAccount, MastodonAccountField, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonPushSubscription, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
+import type { ActivityPubObjectType, DomainBlock, ExternalInteractionResult, MastodonAccount, MastodonAccountField, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonPushSubscription, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
@@ -214,6 +214,10 @@ export function createMastodonApi(accessToken: string) {
     searchAccounts(query: string) {
       const params = new URLSearchParams({ q: query, type: "accounts", resolve: "true" });
       return client.request<MastodonSearchResults>(`/api/v2/search?${params.toString()}`);
+    },
+    externalInteraction(uri: string) {
+      const params = new URLSearchParams({ uri });
+      return client.request<ExternalInteractionResult>(`/api/v1/external_interaction?${params.toString()}`);
     },
     followRequests() {
       return client.request<MastodonAccount[]>("/api/v1/follow_requests");
