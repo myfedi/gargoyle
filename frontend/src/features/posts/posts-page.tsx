@@ -71,6 +71,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
   const { session } = useAuth();
   const timelineFromRoute = routeToTimeline(route);
   const anchorFromRoute = routeAnchor(route);
+  const initialShareText = shareTextFromRoute(route);
   const initialCache = validTimelineCache(timelineFromRoute);
   const [activeTimeline, setActiveTimeline] = useState<TimelineTab>(timelineFromRoute);
   const [statuses, setStatuses] = useState<MastodonStatus[]>(initialCache?.statuses ?? []);
@@ -442,6 +443,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
           placeholder="Write a post"
           isSubmitting={isPosting}
           error={publishError}
+          initialText={initialShareText}
           onSubmit={submitPost}
           onUploadMedia={api?.uploadMedia}
           onDeleteMedia={api?.deleteMedia}
@@ -532,6 +534,21 @@ function routeToTimeline(route: string): TimelineTab {
     return "global";
   }
   return "home";
+}
+
+function shareTextFromRoute(route: string) {
+  if (route.split("?")[0] !== "/share") {
+    return "";
+  }
+  const params = new URLSearchParams(route.split("?")[1] ?? "");
+  const title = params.get("title")?.trim() ?? "";
+  const text = params.get("text")?.trim() ?? "";
+  const url = params.get("url")?.trim() ?? "";
+  if (!title && !text && !url) {
+    return "";
+  }
+  const body = url && !text.includes(url) ? [text, url].filter(Boolean).join("\n") : text;
+  return [title, body].filter(Boolean).join("\n\n");
 }
 
 function routeAnchor(route: string) {

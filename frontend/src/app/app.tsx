@@ -299,6 +299,10 @@ function getHashRoute() {
     return uri ? `/external-interaction?uri=${encodeURIComponent(uri)}` : "/external-interaction";
   }
 
+  if (globalThis.location.pathname === "/share") {
+    return `/share${globalThis.location.search}`;
+  }
+
   const route = globalThis.location.hash.replace(/^#/, "") || "/";
   if (route.startsWith("/")) {
     return route;
@@ -308,5 +312,5 @@ function getHashRoute() {
 
 function isTimelineRoute(route: string) {
   const path = route.split("?")[0];
-  return path === "/" || path === "/home" || path === "/local" || path === "/global";
+  return path === "/" || path === "/home" || path === "/local" || path === "/global" || path === "/share";
 }

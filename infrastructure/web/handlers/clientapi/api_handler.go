@@ -68,6 +68,7 @@ func NewAPIHandler(cfg APIHandlerConfig) APIHandler {
 }
 
 func (h APIHandler) Setup(app *fiber.App) {
+	app.Get("/share", h.sharePageRedirect)
 	app.Get("/api/v1/instance", h.instanceV1)
 	app.Get("/api/v2/instance", h.instanceV2)
 	app.Get("/api/v2/search", h.search)
