@@ -88,12 +88,12 @@ func (u GetDereferenceUseCase) localDereferenceableNoteByURI(ctx context.Context
 	note, err := u.cfg.NotesRepo.GetNoteByURI(ctx, nil, uri)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, domainerrors.New(domainerrors.ErrNotFound, "object not found")
+			return nil, domainerrors.New(domainerrors.ErrNotFound, objectNotFoundMessage)
 		}
 		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 	}
 	if note.LocalAccountID != account.ID || note.AttributedTo != account.URI {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "object not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, objectNotFoundMessage)
 	}
 	if publiclyDereferenceable(note.Visibility) {
 		return note, nil
@@ -104,7 +104,7 @@ func (u GetDereferenceUseCase) localDereferenceableNoteByURI(ctx context.Context
 			return note, nil
 		}
 	}
-	return nil, domainerrors.New(domainerrors.ErrNotFound, "object not found")
+	return nil, domainerrors.New(domainerrors.ErrNotFound, objectNotFoundMessage)
 }
 
 func (u GetDereferenceUseCase) pollOptions(ctx context.Context, note *models.Note) ([]string, *domainerrors.DomainError) {

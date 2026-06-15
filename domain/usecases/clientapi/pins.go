@@ -21,7 +21,7 @@ func (u Interactions) setStatusPin(ctx context.Context, account *models.Account,
 	}
 	note, err := u.deps.NotesRepo.GetNoteByID(ctx, nil, statusID)
 	if err != nil || note.LocalAccountID != account.ID || note.AttributedTo != account.URI {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, statusNotFoundMessage)
 	}
 	if note.Visibility == "direct" {
 		return nil, domainerrors.New(domainerrors.ErrBadRequest, "direct statuses cannot be pinned")

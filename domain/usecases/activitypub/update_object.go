@@ -45,7 +45,7 @@ func (u *UpdateObjectUseCase) UpdateObject(ctx context.Context, input UpdateObje
 	}
 	current, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, input.ObjectID)
 	if err != nil || current.LocalAccountID != account.ID || current.AttributedTo != account.URI {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "object not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, objectNotFoundMessage)
 	}
 	updated := input.UpdatedNote
 	updated.ID = current.ID

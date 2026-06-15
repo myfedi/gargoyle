@@ -33,7 +33,7 @@ func (l statusLoader) getStatus(ctx context.Context, localAccount *models.Accoun
 	}
 	note, err := l.notesRepo.GetNoteByID(ctx, nil, statusID)
 	if err != nil || note.LocalAccountID != localAccount.ID {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, statusNotFoundMessage)
 	}
 	author, derr := l.timeline.noteAuthor(ctx, localAccount, *note)
 	if derr != nil {
@@ -45,7 +45,7 @@ func (l statusLoader) getStatus(ctx context.Context, localAccount *models.Accoun
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
 		if blocked {
-			return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
+			return nil, domainerrors.New(domainerrors.ErrNotFound, statusNotFoundMessage)
 		}
 	}
 	media, err := l.mediaRepo.ListMediaForNote(ctx, nil, note.ID)

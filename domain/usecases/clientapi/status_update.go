@@ -109,7 +109,7 @@ func (u Statuses) prepareStatusEdit(ctx context.Context, account *models.Account
 func (u Statuses) editableStatus(ctx context.Context, account *models.Account, statusID string) (*models.Note, *domainerrors.DomainError) {
 	note, err := u.deps.NotesRepo.GetNoteByID(ctx, nil, statusID)
 	if err != nil || note.LocalAccountID != account.ID || note.AttributedTo != account.URI {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, statusNotFoundMessage)
 	}
 	return note, nil
 }

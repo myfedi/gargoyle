@@ -55,7 +55,7 @@ func mustNoResponseError(t testing.TB, err *shared.ResponseError) {
 	}
 }
 
-func TestGoToSocialFederation(t *testing.T) {
+func TestGoToSocialFederation(t *testing.T) { // NOSONAR - end-to-end federation scenario is intentionally sequential
 	requireIntegration(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -737,22 +737,25 @@ func TestBoostVisibilityMatrix(t *testing.T) {
 			remote := waitForStatus(t, s.ctx, s.gts, s.gtsToken, "/api/v1/timelines/home?limit=100", marker)
 			var result shared.Status
 			resp, body, err := s.gts.PostForm(s.ctx, "/api/v1/statuses/"+url.PathEscape(remote.ID)+"/reblog", s.gtsToken, url.Values{}, &result)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if tc.wantReblog {
-				if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-					t.Fatalf("expected reblog 2xx, got %d: %s", resp.StatusCode, body)
-				}
-				if !result.Reblogged {
-					t.Fatalf("expected reblogged=true for %s", tc.visibility)
-				}
-				return
-			}
-			if resp.StatusCode >= 200 && resp.StatusCode < 300 && result.Reblogged {
-				t.Fatalf("expected %s boost to be rejected or not reblogged; got %d %+v", tc.visibility, resp.StatusCode, result)
-			}
+			requireBoostVisibilityResult(t, tc.visibility, tc.wantReblog, resp, body, err, result)
 		})
+	}
+}
+
+func requireBoostVisibilityResult(t testing.TB, visibility string, wantReblog bool, resp *http.Response, body string, err error, result shared.Status) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wantReblog {
+		shared.Require2xx(t, resp, body, nil)
+		if !result.Reblogged {
+			t.Fatalf("expected reblogged=true for %s", visibility)
+		}
+		return
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && result.Reblogged {
+		t.Fatalf("expected %s boost to be rejected or not reblogged; got %d %+v", visibility, resp.StatusCode, result)
 	}
 }
 

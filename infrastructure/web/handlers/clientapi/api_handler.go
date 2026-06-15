@@ -16,6 +16,8 @@ import (
 // and mobile clients after OAuth login.
 type DeliveryQueue func(body []byte, inbox string, account models.Account) *domainerrors.DomainError
 
+const pushSubscriptionRoute = "/api/v1/push/subscription"
+
 type APIHandler struct {
 	oauth                 oauth.UseCase
 	instanceWorkflow      clientapiUC.Instance
@@ -90,10 +92,10 @@ func (h APIHandler) Setup(app *fiber.App) {
 	app.Delete("/api/v1/conversations/:id", h.deleteConversation)
 	app.Post("/api/v1/conversations/:id/read", h.readConversation)
 	app.Get("/api/v1/custom_emojis", h.customEmojis)
-	app.Post("/api/v1/push/subscription", h.createPushSubscription)
-	app.Get("/api/v1/push/subscription", h.getPushSubscription)
-	app.Put("/api/v1/push/subscription", h.updatePushSubscription)
-	app.Delete("/api/v1/push/subscription", h.deletePushSubscription)
+	app.Post(pushSubscriptionRoute, h.createPushSubscription)
+	app.Get(pushSubscriptionRoute, h.getPushSubscription)
+	app.Put(pushSubscriptionRoute, h.updatePushSubscription)
+	app.Delete(pushSubscriptionRoute, h.deletePushSubscription)
 	app.Get("/api/v1/announcements", h.emptyList)
 	app.Get("/api/v1/trends/tags", h.emptyList)
 	app.Get("/api/v1/trends/statuses", h.emptyList)

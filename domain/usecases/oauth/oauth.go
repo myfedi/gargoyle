@@ -32,6 +32,8 @@ type Config struct {
 
 const accessTokenTTL = 30 * 24 * time.Hour
 const defaultScopes = "read write follow"
+const invalidClientIDMessage = "invalid client_id"
+const invalidClientCredentialsMessage = "invalid client credentials"
 
 var supportedScopes = map[string]bool{
 	"read":                true,
@@ -247,27 +249,27 @@ func (u UseCase) Authorize(ctx context.Context, input AuthorizeInput) (string, *
 func (u UseCase) IssueToken(ctx context.Context, input IssueTokenInput) (*IssuedToken, *derrors.DomainError) {
 	app, err := u.cfg.OAuthRepo.GetApplicationByClientID(ctx, nil, input.ClientID)
 	if err != nil {
-		return nil, derrors.New(derrors.ErrUnauthorized, "invalid client_id")
+		return nil, derrors.New(derrors.ErrUnauthorized, invalidClientIDMessage)
 	}
 	if input.GrantType == "password" {
 		if !u.cfg.AllowPasswordGrant {
 			return nil, derrors.New(derrors.ErrBadRequest, "password grant is disabled")
 		}
 		if !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
-			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+			return nil, derrors.New(derrors.ErrUnauthorized, invalidClientCredentialsMessage)
 		}
 		return u.issuePasswordToken(ctx, app, input)
 	}
 	if input.GrantType == "authorization_code" {
 		clientSecretProvided := input.ClientSecret != ""
 		if clientSecretProvided && !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
-			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+			return nil, derrors.New(derrors.ErrUnauthorized, invalidClientCredentialsMessage)
 		}
 		return u.issueAuthorizationCodeToken(ctx, app, input, clientSecretProvided)
 	}
 	if input.GrantType == "client_credentials" {
 		if !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
-			return nil, derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+			return nil, derrors.New(derrors.ErrUnauthorized, invalidClientCredentialsMessage)
 		}
 		return u.issueClientCredentialsToken(ctx, app, input)
 	}
@@ -280,10 +282,10 @@ func (u UseCase) RevokeToken(ctx context.Context, input RevokeTokenInput) *derro
 	}
 	app, err := u.cfg.OAuthRepo.GetApplicationByClientID(ctx, nil, input.ClientID)
 	if err != nil {
-		return derrors.New(derrors.ErrUnauthorized, "invalid client_id")
+		return derrors.New(derrors.ErrUnauthorized, invalidClientIDMessage)
 	}
 	if input.ClientSecret != "" && !constantTimeStringEqual(app.ClientSecret, input.ClientSecret) {
-		return derrors.New(derrors.ErrUnauthorized, "invalid client credentials")
+		return derrors.New(derrors.ErrUnauthorized, invalidClientCredentialsMessage)
 	}
 	tokenHash := TokenHash(input.Token)
 	token, err := u.cfg.OAuthRepo.GetAccessTokenByHash(ctx, nil, tokenHash)
@@ -449,7 +451,7 @@ func (u UseCase) userByLogin(ctx context.Context, login string) (*models.User, e
 func (u UseCase) validatedApplication(ctx context.Context, clientID, redirectURI string) (*models.OAuthApplication, *derrors.DomainError) {
 	app, err := u.cfg.OAuthRepo.GetApplicationByClientID(ctx, nil, clientID)
 	if err != nil {
-		return nil, derrors.New(derrors.ErrUnauthorized, "invalid client_id")
+		return nil, derrors.New(derrors.ErrUnauthorized, invalidClientIDMessage)
 	}
 	if !redirectURIMatches(app.RedirectURI, redirectURI) {
 		return nil, derrors.New(derrors.ErrBadRequest, "redirect_uri is not registered")

@@ -131,9 +131,13 @@ func (h OAuthHandler) issueToken(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
+	setNoStoreHeaders(c)
+	return c.JSON(tokenResponse{AccessToken: token.AccessToken, TokenType: token.TokenType, Scope: token.Scope, CreatedAt: token.CreatedAt, ExpiresIn: token.ExpiresIn})
+}
+
+func setNoStoreHeaders(c *fiber.Ctx) {
 	c.Set(fiber.HeaderCacheControl, "no-store")
 	c.Set(fiber.HeaderPragma, "no-cache")
-	return c.JSON(tokenResponse{AccessToken: token.AccessToken, TokenType: token.TokenType, Scope: token.Scope, CreatedAt: token.CreatedAt, ExpiresIn: token.ExpiresIn})
 }
 
 func applyBasicClientCredentials(c *fiber.Ctx, clientID, clientSecret *string) {
@@ -166,8 +170,7 @@ func (h OAuthHandler) revokeToken(c *fiber.Ctx) error {
 	if derr := h.uc.RevokeToken(c.UserContext(), oauth.RevokeTokenInput{ClientID: req.ClientID, ClientSecret: req.ClientSecret, Token: req.Token}); derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	c.Set(fiber.HeaderCacheControl, "no-store")
-	c.Set(fiber.HeaderPragma, "no-cache")
+	setNoStoreHeaders(c)
 	return c.JSON(fiber.Map{})
 }
 
@@ -288,8 +291,7 @@ func (h OAuthHandler) renderAuthorizePage(c *fiber.Ctx, req authorizeRequest, fo
 		errorHTML = `<p class="error" role="alert">` + htmlEscape(formError) + `</p>`
 	}
 	c.Set(fiber.HeaderContentType, fiber.MIMETextHTMLCharsetUTF8)
-	c.Set(fiber.HeaderCacheControl, "no-store")
-	c.Set(fiber.HeaderPragma, "no-cache")
+	setNoStoreHeaders(c)
 	return c.SendString(`<!doctype html>
 <html lang="en">
 <head>

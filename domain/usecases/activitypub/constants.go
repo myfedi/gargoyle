@@ -5,5 +5,6 @@ const (
 	activityStreamsContextKey = "@context"
 	activityStreamsContextURI = "https://www.w3.org/ns/activitystreams"
 	activityStreamsPublicURI  = "https://www.w3.org/ns/activitystreams#Public"
+	objectNotFoundMessage     = "object not found"
 	remoteAccountIDPrefix     = "remote:"
 )

@@ -41,7 +41,7 @@ func (u *DeleteObjectUseCase) DeleteObject(ctx context.Context, input DeleteObje
 	}
 	note, err := u.cfg.NotesRepo.GetNoteByID(ctx, nil, input.ObjectID)
 	if err != nil || note.LocalAccountID != account.ID || note.AttributedTo != account.URI {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "object not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, objectNotFoundMessage)
 	}
 	media, err := u.cfg.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
 	if err != nil {

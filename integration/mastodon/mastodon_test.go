@@ -244,7 +244,7 @@ func TestMastodonDirectMessages(t *testing.T) {
 	assertStatusAbsent(t, s.ctx, s.gargoyle, s.gargoyleToken, "/api/v1/timelines/public?limit=80", mastodonMarker, 4*time.Second)
 }
 
-func TestMastodonReplyContextMediaEditPolls(t *testing.T) {
+func TestMastodonReplyContextMediaEditPolls(t *testing.T) { // NOSONAR - end-to-end federation scenario is intentionally sequential
 	s := setupSuite(t)
 	ensureMastodonFollowsGargoyle(t, s)
 	ensureGargoyleFollowsMastodon(t, s)
@@ -379,7 +379,7 @@ func TestMastodonUnfavouriteUnboostAndBoostVisibility(t *testing.T) {
 	}
 }
 
-func TestMastodonNonLeakRetryHardeningAndFollowerDelivery(t *testing.T) {
+func TestMastodonNonLeakRetryHardeningAndFollowerDelivery(t *testing.T) { // NOSONAR - end-to-end federation scenario is intentionally sequential
 	s := setupSuite(t)
 	ensureMastodonFollowsGargoyle(t, s)
 	ensureGargoyleFollowsMastodon(t, s)

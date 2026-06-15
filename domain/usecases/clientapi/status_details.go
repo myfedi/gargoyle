@@ -39,7 +39,7 @@ func (u Statuses) getStatus(ctx context.Context, localAccount *models.Account, s
 	}
 	note, err := u.deps.NotesRepo.GetNoteByID(ctx, nil, statusID)
 	if err != nil || note.LocalAccountID != localAccount.ID {
-		return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
+		return nil, domainerrors.New(domainerrors.ErrNotFound, statusNotFoundMessage)
 	}
 	author, derr := u.noteAuthor(ctx, localAccount, *note)
 	if derr != nil {
@@ -51,7 +51,7 @@ func (u Statuses) getStatus(ctx context.Context, localAccount *models.Account, s
 			return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
 		}
 		if blocked {
-			return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
+			return nil, domainerrors.New(domainerrors.ErrNotFound, statusNotFoundMessage)
 		}
 	}
 	media, err := u.deps.MediaRepo.ListMediaForNote(ctx, nil, note.ID)
@@ -72,7 +72,7 @@ func (u Statuses) DeleteStatus(ctx context.Context, localAccount *models.Account
 	res, derr := u.deps.DeleteObjectUC.DeleteObject(ctx, apUsecases.DeleteObjectInput{Username: localAccount.Username, ObjectID: statusID, DeleteID: deleteID})
 	if derr != nil {
 		if derr.Code == domainerrors.ErrNotFound {
-			return nil, domainerrors.New(domainerrors.ErrNotFound, "status not found")
+			return nil, domainerrors.New(domainerrors.ErrNotFound, statusNotFoundMessage)
 		}
 		return nil, derr
 	}
