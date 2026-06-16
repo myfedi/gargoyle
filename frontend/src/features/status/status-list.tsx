@@ -17,7 +17,7 @@ import { ComposeForm, type ComposeValues } from "@/features/status/compose-form"
 import { StatusBody } from "@/features/status/status-body";
 import { accountHref, statusHref } from "@/lib/routes";
 import { formatDateTime, htmlToPlainText } from "@/lib/text";
-import type { ActivityPubObjectType, MastodonMediaAttachment, MastodonStatus } from "@/types/mastodon";
+import type { ActivityPubObjectType, MastodonAccount, MastodonMediaAttachment, MastodonStatus } from "@/types/mastodon";
 
 export type StatusAction = "bookmark" | "unbookmark" | "pin" | "unpin" | "favourite" | "unfavourite" | "reblog" | "unreblog";
 
@@ -35,6 +35,7 @@ type StatusListProps = {
   onForward?: (status: MastodonStatus) => void;
   onAction?: (action: StatusAction, status: MastodonStatus) => Promise<void> | void;
   onVotePoll?: (status: MastodonStatus, choices: number[]) => Promise<void> | void;
+  searchKnownAccounts?: (query: string) => Promise<MastodonAccount[]>;
   renderAfterStatus?: (status: MastodonStatus) => ReactNode;
   isLoading?: boolean;
   loadingLabel?: string;
@@ -54,6 +55,7 @@ export function StatusList({
   onForward,
   onAction,
   onVotePoll,
+  searchKnownAccounts,
   renderAfterStatus,
   isLoading = false,
   loadingLabel = "Loading posts",
@@ -210,6 +212,7 @@ export function StatusList({
               initialPollOptions={statusBeingEdited.poll?.options.map((option) => option.title)}
               initialPollMultiple={statusBeingEdited.poll?.multiple}
               resetAfterSubmit={false}
+              searchKnownAccounts={searchKnownAccounts}
               onSubmit={async (values) => {
                 setIsEditingStatus(true);
                 setEditError(null);

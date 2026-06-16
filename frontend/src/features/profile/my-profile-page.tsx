@@ -589,6 +589,7 @@ export function MyProfilePage() {
           onEdit={editStatus}
           onAction={runAction}
           onVotePoll={votePoll}
+          searchKnownAccounts={searchKnownAccounts}
           onForward={setForwardingStatus}
           onReply={reply}
           renderAfterStatus={renderReplyComposer}
@@ -613,6 +614,7 @@ export function MyProfilePage() {
                 onEdit={editStatus}
                 onAction={runAction}
                 onVotePoll={votePoll}
+                searchKnownAccounts={searchKnownAccounts}
                 onForward={setForwardingStatus}
                 onReply={reply}
                 renderAfterStatus={renderReplyComposer}
@@ -654,6 +656,7 @@ export function MyProfilePage() {
               onEdit={editStatus}
               onAction={runAction}
               onVotePoll={votePoll}
+              searchKnownAccounts={searchKnownAccounts}
               onForward={setForwardingStatus}
               onReply={reply}
               renderAfterStatus={renderReplyComposer}

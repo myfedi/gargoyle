@@ -474,6 +474,7 @@ export function PostsPage({ route = "/" }: PostsPageProps) {
               actingStatusId={actingStatusId}
               onAction={runAction}
               onVotePoll={votePoll}
+              searchKnownAccounts={searchKnownAccounts}
               onForward={setForwardingStatus}
               onReply={(status) => {
                 setReplyingTo(status);
