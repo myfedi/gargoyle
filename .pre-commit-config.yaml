@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: trufflehog
         name: TruffleHog secrets scan
-        entry: trufflehog git file://. --since-commit HEAD --only-verified --fail
+        entry: trufflehog --no-update git file://. --since-commit HEAD --only-verified --fail
         language: system
         pass_filenames: false
         stages: [pre-commit]
