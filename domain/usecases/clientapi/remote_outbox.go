@@ -55,6 +55,12 @@ func (u Accounts) cacheRemoteOutboxUntilAsync(localAccount *models.Account, remo
 	}()
 }
 
+func (u Accounts) cacheRemoteOutboxUntilRequest(ctx context.Context, localAccount *models.Account, remote models.Account, enough func() (bool, error)) {
+	cacheCtx, cancel := context.WithTimeout(ctx, remoteOutboxCacheTimeout)
+	defer cancel()
+	_ = u.cacheRemoteOutboxUntil(cacheCtx, localAccount, remote, enough)
+}
+
 func (u Accounts) cacheRemoteOutboxUntil(ctx context.Context, localAccount *models.Account, remote models.Account, enough func() (bool, error)) *domainerrors.DomainError {
 	if remote.OutboxURI == nil || *remote.OutboxURI == "" || localAccount == nil {
 		return nil

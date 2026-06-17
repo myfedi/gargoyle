@@ -51,7 +51,8 @@ func (u Accounts) AccountStatuses(ctx context.Context, localAccount *models.Acco
 	if limit <= 0 || limit > 40 {
 		limit = 20
 	}
-	if account.ID != localAccount.ID && maxID == "" {
+	isRemoteAccount := account.ID != localAccount.ID
+	if isRemoteAccount && maxID == "" {
 		u.cacheRemoteOutboxFirstPageAsync(localAccount, *account)
 	}
 	notes, err := u.accountStatusNotes(ctx, localAccount, account, limit, maxID)
@@ -63,8 +64,23 @@ func (u Accounts) AccountStatuses(ctx context.Context, localAccount *models.Acco
 		return nil, derr
 	}
 	if excludeReblogs {
-		if account.ID != localAccount.ID && len(items) < limit {
-			u.cacheRemoteOutboxUntilAsync(localAccount, *account, limit, maxID)
+		if isRemoteAccount && len(items) < limit {
+			if maxID == "" {
+				u.cacheRemoteOutboxUntilAsync(localAccount, *account, limit, maxID)
+			} else {
+				u.cacheRemoteOutboxUntilRequest(ctx, localAccount, *account, func() (bool, error) {
+					notes, err := u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+					return err == nil && len(notes) >= limit, err
+				})
+				notes, err = u.accountStatusNotes(ctx, localAccount, account, limit, maxID)
+				if err != nil {
+					return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+				}
+				items, derr = u.accountStatusItems(ctx, localAccount, account, notes)
+				if derr != nil {
+					return nil, derr
+				}
+			}
 		}
 		return items, nil
 	}
@@ -77,8 +93,36 @@ func (u Accounts) AccountStatuses(ctx context.Context, localAccount *models.Acco
 		return nil, derr
 	}
 	merged := mergeTimelineItems(items, boostItems, limit)
-	if account.ID != localAccount.ID && len(merged) < limit {
-		u.cacheRemoteOutboxUntilAsync(localAccount, *account, limit, maxID)
+	if isRemoteAccount && len(merged) < limit {
+		if maxID == "" {
+			u.cacheRemoteOutboxUntilAsync(localAccount, *account, limit, maxID)
+		} else {
+			u.cacheRemoteOutboxUntilRequest(ctx, localAccount, *account, func() (bool, error) {
+				notes, err := u.deps.NotesRepo.ListAttributedNotesPaged(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+				if err != nil {
+					return false, err
+				}
+				boosts, err := u.deps.BoostsRepo.ListActorBoosts(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+				return err == nil && len(notes)+len(boosts) >= limit, err
+			})
+			notes, err = u.accountStatusNotes(ctx, localAccount, account, limit, maxID)
+			if err != nil {
+				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+			}
+			items, derr = u.accountStatusItems(ctx, localAccount, account, notes)
+			if derr != nil {
+				return nil, derr
+			}
+			boosts, err = u.deps.BoostsRepo.ListActorBoosts(ctx, nil, localAccount.ID, account.URI, limit, maxID)
+			if err != nil {
+				return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+			}
+			boostItems, derr = u.boostTimelineItems(ctx, localAccount, boosts)
+			if derr != nil {
+				return nil, derr
+			}
+			merged = mergeTimelineItems(items, boostItems, limit)
+		}
 	}
 	return merged, nil
 }
