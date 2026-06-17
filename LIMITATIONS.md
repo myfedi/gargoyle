@@ -43,6 +43,12 @@ This requires reverse proxies to route only the backend OAuth endpoints to Gargo
 
 Longer term, this should be made less fragile, either by serving the callback under an unambiguous frontend route, serving the first-party UI through backend-aware routing, or documenting/enforcing route ownership more explicitly.
 
+## ActivityPub relays
+
+Relay support is currently outbound-only: Gargoyle can subscribe to a relay, wait for its `Accept`, and fan out local public posts to accepted relays. Broad inbound relay firehose ingestion is intentionally not enabled yet because it needs separate moderation, pruning, and storage controls.
+
+Relay subscription activities are currently signed by the admin account that adds the relay. A future hardening pass should add a dedicated instance/Application actor for server-level relay subscriptions.
+
 ## Remote profile image cache scope
 
 Remote account avatars and headers are cached when a remote account is resolved, and stale profile visits refresh the remote actor document before updating the cached media IDs. The cache is keyed by the remote media URL and is pruned by the remote media cache cleanup policy.

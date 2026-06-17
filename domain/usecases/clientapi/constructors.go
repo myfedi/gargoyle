@@ -126,4 +126,7 @@ func validateModerationConfig(cfg ModerationConfig) {
 	if cfg.TxProvider == nil || cfg.DomainBlocksRepo == nil || cfg.ModerationJobsRepo == nil || cfg.DomainPurgeRepo == nil {
 		panic("client API moderation workflow missing repository or transaction dependency")
 	}
+	if cfg.RelaysEnabled && (cfg.RelaysRepo == nil || cfg.ActorFetcher == nil) {
+		panic("client API moderation workflow missing relay dependency")
+	}
 }

@@ -47,6 +47,17 @@ export type ModerationJob = {
   status: string;
 };
 
+export type RelaySubscription = {
+  id: string;
+  actor_uri: string;
+  inbox_uri: string;
+  status: "pending" | "accepted" | "disabled" | string;
+  accepted_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  last_error?: string | null;
+};
+
 export type MastodonRelationship = {
   id: string;
   following: boolean;

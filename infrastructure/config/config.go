@@ -18,9 +18,14 @@ type ActivityPubRemoteURLException struct {
 	AllowPrivateIP bool   `mapstructure:"allow_private_ip"`
 }
 
+type ActivityPubRelayConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 type ActivityPubConfig struct {
 	BodyLimitBytes      int                             `mapstructure:"body_limit_bytes"`
 	RemoteURLExceptions []ActivityPubRemoteURLException `mapstructure:"remote_url_exceptions"`
+	Relays              ActivityPubRelayConfig          `mapstructure:"relays"`
 }
 
 type CORSConfig struct {
@@ -116,6 +121,7 @@ func NewConfig(configFile string) (*Config, error) {
 	// defaults
 	viper.SetDefault("debug", false)
 	viper.SetDefault("activitypub.body_limit_bytes", 1<<20)
+	viper.SetDefault("activitypub.relays.enabled", false)
 	viper.SetDefault("web.cors.allowed_methods", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 	viper.SetDefault("web.cors.allowed_headers", []string{"Authorization", "Content-Type"})
 	viper.SetDefault("web.cors.allow_credentials", false)

@@ -37,6 +37,8 @@ type ActivityPubFlowConfig struct {
 	PollsRepo          repos.PollsRepository
 	MediaRepo          repos.MediaRepository
 	MentionsRepo       repos.MentionsRepository
+	RelaysRepo         repos.RelaySubscriptionsRepository
+	RelaysEnabled      bool
 	ActorFetcher       apPorts.ActorFetcher
 	ActorSerializer    apPorts.ActorSerializer
 	ContentSanitizer   ports.ContentSanitizer

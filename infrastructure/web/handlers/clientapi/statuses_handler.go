@@ -84,7 +84,7 @@ func (h APIHandler) createStatus(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	for _, inbox := range uniqueInboxes(append(res.FollowerInboxes, res.MentionInboxes...)) {
+	for _, inbox := range uniqueInboxes(append(append(res.FollowerInboxes, res.MentionInboxes...), res.RelayInboxes...)) {
 		if err := h.queueDelivery(res.RawJSON, inbox, res.Account); err != nil {
 			return web.HandleDomainError(c, err)
 		}
@@ -111,7 +111,7 @@ func (h APIHandler) updateStatus(c *fiber.Ctx) error {
 	if derr != nil {
 		return web.HandleDomainError(c, derr)
 	}
-	for _, inbox := range uniqueInboxes(append(res.FollowerInboxes, res.MentionInboxes...)) {
+	for _, inbox := range uniqueInboxes(append(append(res.FollowerInboxes, res.MentionInboxes...), res.RelayInboxes...)) {
 		if err := h.queueDelivery(res.RawJSON, inbox, res.Account); err != nil {
 			return web.HandleDomainError(c, err)
 		}

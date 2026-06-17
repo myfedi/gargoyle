@@ -1,5 +1,5 @@
 import { ApiClient } from "@/lib/api";
-import type { ActivityPubObjectType, DomainBlock, ExternalInteractionResult, MastodonAccount, MastodonAccountField, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonPushSubscription, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob } from "@/types/mastodon";
+import type { ActivityPubObjectType, DomainBlock, ExternalInteractionResult, MastodonAccount, MastodonAccountField, MastodonConversation, MastodonInstance, MastodonMediaAttachment, MastodonNotification, MastodonPoll, MastodonPushSubscription, MastodonRelationship, MastodonSearchResults, MastodonStatus, ModerationJob, RelaySubscription } from "@/types/mastodon";
 
 export type CreateStatusInput = {
   status: string;
@@ -41,6 +41,18 @@ export function createMastodonApi(accessToken: string) {
     },
     purgeDomain(domain: string) {
       return client.request<ModerationJob>(`/api/v1/admin/domain_blocks/${encodeURIComponent(domain)}/purge`, { method: "POST" });
+    },
+    relays() {
+      return client.request<RelaySubscription[]>("/api/v1/admin/relays");
+    },
+    createRelay(actorURI: string) {
+      return client.request<RelaySubscription>("/api/v1/admin/relays", { method: "POST", body: JSON.stringify({ actor_uri: actorURI }) });
+    },
+    disableRelay(id: string) {
+      return client.request<RelaySubscription>(`/api/v1/admin/relays/${encodeURIComponent(id)}/disable`, { method: "POST" });
+    },
+    deleteRelay(id: string) {
+      return client.request<void>(`/api/v1/admin/relays/${encodeURIComponent(id)}`, { method: "DELETE" });
     },
     updateCredentials(input: UpdateCredentialsInput) {
       const body = new FormData();

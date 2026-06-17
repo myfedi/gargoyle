@@ -25,6 +25,7 @@ type runtimeRepos struct {
 	Mentions       *repos.MentionsRepo
 	RemoteAccounts *repos.RemoteAccountsRepo
 	Moderation     *repos.ModerationRepo
+	Relays         *repos.RelaysRepo
 }
 
 type clientAPIWorkflowInputs struct {
@@ -46,6 +47,7 @@ type clientAPIWorkflowInputs struct {
 	MentionsRepo          *repos.MentionsRepo
 	RemoteAccountsRepo    *repos.RemoteAccountsRepo
 	ModerationRepo        *repos.ModerationRepo
+	RelaysRepo            *repos.RelaysRepo
 	ActivityPubFlowConfig apUsecases.ActivityPubFlowConfig
 	URLExceptions         []clientapiHandlers.RemoteURLException
 	ProfileCacheNotifier  clientapiUsecases.RemoteProfileCacheNotifier
@@ -106,6 +108,7 @@ func clientAPIWorkflowInputsFromRuntime(host, domain string, txProvider domainDB
 		MentionsRepo:          repos.Mentions,
 		RemoteAccountsRepo:    repos.RemoteAccounts,
 		ModerationRepo:        repos.Moderation,
+		RelaysRepo:            repos.Relays,
 		ActivityPubFlowConfig: flowCfg,
 		URLExceptions:         exceptions,
 		ProfileCacheNotifier:  profileCacheNotifier,
@@ -336,5 +339,8 @@ func buildModerationWorkflow(ctx clientAPIWorkflowContext) clientapiUsecases.Mod
 		DomainBlocksRepo:   ctx.in.ModerationRepo,
 		ModerationJobsRepo: ctx.in.ModerationRepo,
 		DomainPurgeRepo:    ctx.in.ModerationRepo,
+		RelaysRepo:         ctx.in.RelaysRepo,
+		RelaysEnabled:      ctx.in.ActivityPubFlowConfig.RelaysEnabled,
+		ActorFetcher:       ctx.in.ActivityPubFlowConfig.ActorFetcher,
 	})
 }

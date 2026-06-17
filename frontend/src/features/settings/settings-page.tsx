@@ -47,10 +47,15 @@ export function SettingsPage() {
 
         <PushNotificationsPanel />
 
-        <Panel title="Admin" description="Moderation tools are available to instance admins.">
-          <Button asChild variant="outline">
-            <a href="/#/admin/moderation/domains">Domain moderation</a>
-          </Button>
+        <Panel title="Admin" description="Moderation and federation tools are available to instance admins.">
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <a href="/#/admin/moderation/domains">Domain moderation</a>
+            </Button>
+            <Button asChild variant="outline">
+              <a href="/#/admin/federation/relays">Federation relays</a>
+            </Button>
+          </div>
         </Panel>
       </div>
     </FeaturePage>

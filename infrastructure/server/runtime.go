@@ -153,6 +153,7 @@ func BuildDeps(cfg *config.Config) *Deps {
 	conversationsRepo := repos.NewConversationsRepo(sqlite.Bun)
 	mentionsRepo := repos.NewMentionsRepo(sqlite.Bun)
 	remoteAccountsRepo := repos.NewRemoteAccountsRepo(sqlite.Bun)
+	relaysRepo := repos.NewRelaysRepo(sqlite.Bun)
 	moderationRepo := repos.NewModerationRepo(sqlite.Bun)
 	oauthRepo := repos.NewOAuthRepo(sqlite.Bun)
 	pushRepo := repos.NewPushRepo(sqlite.Bun)
@@ -181,6 +182,8 @@ func BuildDeps(cfg *config.Config) *Deps {
 		DeliveryJobsRepo:    jobsRepo,
 		FetchJobsRepo:       jobsRepo,
 		MediaRepo:           mediaRepo,
+		RelaysRepo:          relaysRepo,
+		RelaysEnabled:       cfg.ActivityPub.Relays.Enabled,
 		Serializer:          actorSerializer,
 		ContentSanitizer:    contentSanitizer,
 		BodyLimitBytes:      cfg.ActivityPub.BodyLimitBytes,
@@ -215,6 +218,9 @@ func BuildDeps(cfg *config.Config) *Deps {
 		PollsRepo:          pollsRepo,
 		MediaRepo:          mediaRepo,
 		MentionsRepo:       mentionsRepo,
+		RelaysRepo:         relaysRepo,
+		RelaysEnabled:      cfg.ActivityPub.Relays.Enabled,
+		ActorFetcher:       userProfileHandler.ActorFetcher(),
 		ActorSerializer:    actorSerializer,
 		ContentSanitizer:   contentSanitizer,
 		Host:               host,
@@ -236,6 +242,7 @@ func BuildDeps(cfg *config.Config) *Deps {
 			Mentions:       mentionsRepo,
 			RemoteAccounts: remoteAccountsRepo,
 			Moderation:     moderationRepo,
+			Relays:         relaysRepo,
 		},
 		mediaStorage,
 		contentSanitizer,

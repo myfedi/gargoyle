@@ -96,6 +96,7 @@ func (u Statuses) CreateStatus(ctx context.Context, account *models.Account, inp
 		RawJSON:         res.RawJSON,
 		FollowerInboxes: res.FollowerInboxes,
 		MentionInboxes:  res.MentionInboxes,
+		RelayInboxes:    res.RelayInboxes,
 	}, nil
 }
 

@@ -38,6 +38,8 @@ type HandlerConfig struct {
 	DeliveryJobsRepo    repos.DeliveryJobsRepository
 	FetchJobsRepo       repos.FetchJobsRepository
 	MediaRepo           repos.MediaRepository
+	RelaysRepo          repos.RelaySubscriptionsRepository
+	RelaysEnabled       bool
 	Serializer          activitypub.ActorSerializer
 	ActorFetcher        activitypub.ActorFetcher
 	Deliverer           activitypub.ActivityDeliverer
@@ -130,6 +132,10 @@ func (h *Handler) ActivityDeliverer() activitypub.ActivityDeliverer {
 	return h.cfg.Deliverer
 }
 
+func (h *Handler) ActorFetcher() activitypub.ActorFetcher {
+	return h.cfg.ActorFetcher
+}
+
 // QueueDelivery enqueues a committed ActivityPub payload for asynchronous
 // delivery. Other HTTP adapters use this to keep network I/O out of use cases
 // while preserving the shared delivery worker and backpressure behavior.
@@ -174,6 +180,8 @@ func NewHandler(cfg HandlerConfig) *Handler {
 		BoostsRepo:         cfg.BoostsRepo,
 		PollsRepo:          cfg.PollsRepo,
 		MediaRepo:          cfg.MediaRepo,
+		RelaysRepo:         cfg.RelaysRepo,
+		RelaysEnabled:      cfg.RelaysEnabled,
 		ActorFetcher:       cfg.ActorFetcher,
 		ContentSanitizer:   cfg.ContentSanitizer,
 		Host:               cfg.Host,

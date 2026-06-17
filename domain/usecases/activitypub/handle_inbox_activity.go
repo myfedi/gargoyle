@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
@@ -240,6 +241,9 @@ func (u *HandleInboxActivityUseCase) HandleInboxActivity(ctx context.Context, in
 			}
 			return u.createInteractionNotification(ctx, &tx, *account, activity, "reblog")
 		case "Accept":
+			if u.cfg.RelaysEnabled && u.cfg.RelaysRepo != nil && isRelayFollowAccept(input.RawJSON, account.URI) {
+				return u.cfg.RelaysRepo.MarkRelaySubscriptionAccepted(ctx, &tx, activity.Actor, time.Now().UTC())
+			}
 			if u.cfg.FollowsRepo != nil && activity.Actor != "" {
 				if err := validateFollowResponseObject(input.RawJSON, account.URI, activity.Actor); err != nil {
 					return err
@@ -475,6 +479,20 @@ func (u *HandleInboxActivityUseCase) ensureRemoteNoteOwner(ctx context.Context, 
 		return domainerrors.New(domainerrors.ErrUnauthorized, "activity actor does not own note")
 	}
 	return nil
+}
+
+func isRelayFollowAccept(raw []byte, localActor string) bool {
+	var envelope struct {
+		Object struct {
+			Type   string `json:"type"`
+			Actor  string `json:"actor"`
+			Object string `json:"object"`
+		} `json:"object"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return false
+	}
+	return envelope.Object.Type == "Follow" && envelope.Object.Actor == localActor && envelope.Object.Object == activityStreamsPublicURI
 }
 
 func validateFollowResponseObject(raw []byte, localActor, remoteActor string) error {

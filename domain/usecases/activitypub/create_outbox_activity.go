@@ -30,6 +30,7 @@ type CreateOutboxActivityResult struct {
 	Mentions        []models.Mention
 	FollowerInboxes []string
 	MentionInboxes  []string
+	RelayInboxes    []string
 }
 
 // CreateOutboxActivity normalizes and persists a local outbox activity, creating
@@ -72,7 +73,11 @@ func (u *CreateOutboxActivityUseCase) CreateOutboxActivity(ctx context.Context, 
 	if derr != nil {
 		return nil, derr
 	}
-	return &CreateOutboxActivityResult{Account: *account, RawJSON: raw, Note: createdNote, Mentions: storedMentions, FollowerInboxes: inboxes, MentionInboxes: mentionInboxes(input.Mentions)}, nil
+	relayInboxes, derr := u.relayInboxes(ctx, createdNote)
+	if derr != nil {
+		return nil, derr
+	}
+	return &CreateOutboxActivityResult{Account: *account, RawJSON: raw, Note: createdNote, Mentions: storedMentions, FollowerInboxes: inboxes, MentionInboxes: mentionInboxes(input.Mentions), RelayInboxes: relayInboxes}, nil
 }
 
 // persistOutboxActivity writes the activity and any derived Note inside the
@@ -202,6 +207,23 @@ func mentionInboxes(mentions []models.Account) []string {
 		inboxes = append(inboxes, mention.InboxURI)
 	}
 	return inboxes
+}
+
+func (u *CreateOutboxActivityUseCase) relayInboxes(ctx context.Context, note *models.Note) ([]string, *domainerrors.DomainError) {
+	if !u.cfg.RelaysEnabled || u.cfg.RelaysRepo == nil || note == nil || note.Visibility != "public" {
+		return nil, nil
+	}
+	relays, err := u.cfg.RelaysRepo.ListAcceptedRelaySubscriptions(ctx, nil)
+	if err != nil {
+		return nil, domainerrors.NewErr(domainerrors.ErrInternal, err)
+	}
+	inboxes := make([]string, 0, len(relays))
+	for _, relay := range relays {
+		if relay.InboxURI != "" {
+			inboxes = append(inboxes, relay.InboxURI)
+		}
+	}
+	return inboxes, nil
 }
 
 func (u *CreateOutboxActivityUseCase) followerInboxes(ctx context.Context, accountID string) ([]string, *domainerrors.DomainError) {

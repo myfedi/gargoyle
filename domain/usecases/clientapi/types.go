@@ -35,6 +35,7 @@ type CreateStatusResult struct {
 	RawJSON         []byte
 	FollowerInboxes []string
 	MentionInboxes  []string
+	RelayInboxes    []string
 }
 
 type UpdateStatusInput struct {
@@ -57,6 +58,7 @@ type UpdateStatusResult struct {
 	RawJSON         []byte
 	FollowerInboxes []string
 	MentionInboxes  []string
+	RelayInboxes    []string
 }
 
 type TimelineItem struct {

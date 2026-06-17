@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/app/auth-context";
 import { PoweredByFooter } from "@/components/powered-by-footer";
 import { Button } from "@/components/ui/button";
 import { DomainModerationPage } from "@/features/admin/domain-moderation-page";
+import { RelaysPage } from "@/features/admin/relays-page";
 import { LoginPage } from "@/features/auth/login-page";
 import { AccountPage } from "@/features/accounts/account-page";
 import { DirectMessagesPage } from "@/features/direct/direct-messages-page";
@@ -29,6 +30,7 @@ const routes = {
   "/direct": DirectMessagesPage,
   "/settings": SettingsPage,
   "/admin/moderation/domains": DomainModerationPage,
+  "/admin/federation/relays": RelaysPage,
 } satisfies Record<string, React.ComponentType>;
 
 export function App() {

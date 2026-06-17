@@ -5,6 +5,7 @@ import (
 
 	"github.com/myfedi/gargoyle/domain/models"
 	"github.com/myfedi/gargoyle/domain/ports"
+	apPorts "github.com/myfedi/gargoyle/domain/ports/activitypub"
 	"github.com/myfedi/gargoyle/domain/ports/db"
 	"github.com/myfedi/gargoyle/domain/ports/repos"
 	apUsecases "github.com/myfedi/gargoyle/domain/usecases/activitypub"
@@ -167,4 +168,7 @@ type ModerationConfig struct {
 	DomainBlocksRepo   repos.DomainBlocksRepository
 	ModerationJobsRepo repos.ModerationJobsRepository
 	DomainPurgeRepo    repos.DomainPurgeRepository
+	RelaysRepo         repos.RelaySubscriptionsRepository
+	RelaysEnabled      bool
+	ActorFetcher       apPorts.ActorFetcher
 }
