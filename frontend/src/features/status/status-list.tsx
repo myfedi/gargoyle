@@ -324,6 +324,20 @@ function StatusActionBar({
 
   return (
     <div className="mt-3 flex items-center gap-1 text-muted-foreground" aria-label="Post quick actions">
+      {canInteract ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className={status.favourited ? "h-8 px-2.5 text-[hsl(var(--destructive))] hover:text-[hsl(var(--destructive))]" : "h-8 px-2.5 text-muted-foreground hover:text-foreground"}
+          aria-pressed={Boolean(status.favourited)}
+          aria-label={status.favourited ? "Remove favourite" : "Favourite"}
+          onClick={() => onAction?.(favouriteAction, status)}
+          disabled={isActing}
+        >
+          <Heart className={status.favourited ? "size-4 fill-current" : "size-4"} aria-hidden="true" />
+          <span className="text-xs tabular-nums" aria-hidden="true">{status.favourites_count > 0 ? status.favourites_count : ""}</span>
+        </Button>
+      ) : null}
       {canReply ? (
         <Button variant="ghost" size="sm" className="h-8 px-2.5 text-muted-foreground hover:text-foreground" onClick={() => onReply?.(status)} disabled={isActing}>
           <MessageCircle className="size-4" aria-hidden="true" />
@@ -332,32 +346,18 @@ function StatusActionBar({
         </Button>
       ) : null}
       {canInteract ? (
-        <>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={status.favourited ? "h-8 px-2.5 text-[hsl(var(--destructive))] hover:text-[hsl(var(--destructive))]" : "h-8 px-2.5 text-muted-foreground hover:text-foreground"}
-            aria-pressed={Boolean(status.favourited)}
-            aria-label={status.favourited ? "Remove favourite" : "Favourite"}
-            onClick={() => onAction?.(favouriteAction, status)}
-            disabled={isActing}
-          >
-            <Heart className={status.favourited ? "size-4 fill-current" : "size-4"} aria-hidden="true" />
-            <span className="text-xs tabular-nums" aria-hidden="true">{status.favourites_count > 0 ? status.favourites_count : ""}</span>
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={status.reblogged ? "h-8 px-2.5 text-sky-600 hover:text-sky-600 dark:text-sky-400 dark:hover:text-sky-400" : "h-8 px-2.5 text-muted-foreground hover:text-foreground"}
-            aria-pressed={Boolean(status.reblogged)}
-            aria-label={status.reblogged ? "Unboost" : "Boost"}
-            onClick={() => onAction?.(boostAction, status)}
-            disabled={isActing}
-          >
-            <Repeat2 className="size-4" aria-hidden="true" />
-            <span className="text-xs tabular-nums" aria-hidden="true">{status.reblogs_count > 0 ? status.reblogs_count : ""}</span>
-          </Button>
-        </>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={status.reblogged ? "h-8 px-2.5 text-sky-600 hover:text-sky-600 dark:text-sky-400 dark:hover:text-sky-400" : "h-8 px-2.5 text-muted-foreground hover:text-foreground"}
+          aria-pressed={Boolean(status.reblogged)}
+          aria-label={status.reblogged ? "Unboost" : "Boost"}
+          onClick={() => onAction?.(boostAction, status)}
+          disabled={isActing}
+        >
+          <Repeat2 className="size-4" aria-hidden="true" />
+          <span className="text-xs tabular-nums" aria-hidden="true">{status.reblogs_count > 0 ? status.reblogs_count : ""}</span>
+        </Button>
       ) : null}
     </div>
   );
